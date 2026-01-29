@@ -1,0 +1,284 @@
+import { getTelegramClient } from './client'
+import type { Message as TgMessage } from '@mtcute/web'
+
+export interface Message {
+  id: number
+  channelId: number
+  text: string
+  date: Date
+  views?: number
+  forwards?: number
+  replies?: number
+  editDate?: Date
+  author?: {
+    id: number
+    name: string
+    photo?: string
+  }
+  media?: MessageMedia
+  entities?: MessageEntity[]
+  replyTo?: number
+  groupedId?: bigint
+}
+
+export interface MessageMedia {
+  type: 'photo' | 'video' | 'document' | 'audio' | 'sticker' | 'animation'
+  url?: string
+  thumbnailUrl?: string
+  width?: number
+  height?: number
+  duration?: number
+  fileName?: string
+  mimeType?: string
+  size?: number
+}
+
+export interface MessageEntity {
+  type:
+    | 'bold'
+    | 'italic'
+    | 'underline'
+    | 'strikethrough'
+    | 'code'
+    | 'pre'
+    | 'link'
+    | 'mention'
+    | 'hashtag'
+    | 'email'
+    | 'phone'
+    | 'spoiler'
+  offset: number
+  length: number
+  url?: string
+  language?: string
+}
+
+export interface FetchMessagesOptions {
+  limit?: number
+  offsetId?: number
+  minId?: number
+  maxId?: number
+}
+
+/**
+ * Fetch messages from a channel
+ */
+export async function fetchMessages(
+  channelId: number,
+  options: FetchMessagesOptions = {}
+): Promise<Message[]> {
+  const client = getTelegramClient()
+  const messages: Message[] = []
+  const limit = options.limit ?? 20
+
+  // Use iterHistory which is the standard method for getting messages
+  for await (const msg of client.iterHistory(channelId, { limit })) {
+    if (msg) {
+      const mapped = mapMessage(msg, channelId)
+      if (mapped) {
+        messages.push(mapped)
+      }
+    }
+    if (messages.length >= limit) break
+  }
+
+  return messages
+}
+
+/**
+ * Fetch a single message by ID
+ */
+export async function getMessage(
+  channelId: number,
+  messageId: number
+): Promise<Message | null> {
+  const client = getTelegramClient()
+
+  try {
+    // getMessages takes peer and array of message IDs
+    const messages = await client.getMessages(channelId, [messageId])
+    if (Array.isArray(messages) && messages.length > 0 && messages[0]) {
+      return mapMessage(messages[0], channelId)
+    }
+    return null
+  } catch {
+    // Fallback to iteration
+    for await (const msg of client.iterHistory(channelId, { limit: 50 })) {
+      if (msg.id === messageId) {
+        return mapMessage(msg, channelId)
+      }
+    }
+    return null
+  }
+}
+
+/**
+ * Fetch unified timeline from multiple channels
+ *
+ * Optimized for speed:
+ * - Fetches channels in parallel
+ * - Limited posts to reduce media load
+ */
+export async function fetchTimeline(
+  channelIds: number[],
+  options: FetchMessagesOptions = {}
+): Promise<Message[]> {
+  const limit = options.limit ?? 30 // Reduced from 50
+
+  // Limit channels to reduce concurrent requests
+  const selectedChannels = channelIds.slice(0, 10) // Reduced from 15
+
+  // Fetch all channels in parallel
+  const results = await Promise.allSettled(
+    selectedChannels.map((id) =>
+      fetchMessages(id, { limit: 5 }) // 5 messages per channel
+    )
+  )
+
+  const allMessages: Message[] = []
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      allMessages.push(...result.value)
+    }
+  }
+
+  allMessages.sort((a, b) => b.date.getTime() - a.date.getTime())
+  return allMessages.slice(0, limit)
+}
+
+// Helpers
+
+function mapMessage(msg: TgMessage, channelId: number): Message | null {
+  if (!msg.text && !msg.media) {
+    return null
+  }
+
+  const anyMsg = msg as any
+
+  return {
+    id: msg.id,
+    channelId,
+    text: msg.text ?? '',
+    date: msg.date,
+    views: anyMsg.views ?? undefined,
+    forwards: anyMsg.forwards ?? undefined,
+    replies: anyMsg.replies?.count ?? undefined,
+    editDate: anyMsg.editDate ?? undefined,
+    author: msg.sender
+      ? {
+          id: msg.sender.id,
+          name: msg.sender.displayName,
+        }
+      : undefined,
+    media: mapMedia(msg),
+    entities: mapEntities(msg),
+    replyTo: msg.replyToMessage?.id ?? undefined,
+    groupedId: anyMsg.groupedId ? BigInt(anyMsg.groupedId.toString()) : undefined,
+  }
+}
+
+function mapMedia(msg: TgMessage): MessageMedia | undefined {
+  if (!msg.media) return undefined
+
+  const anyMedia = msg.media as any
+
+  if (msg.media.type === 'photo') {
+    return {
+      type: 'photo',
+      width: anyMedia.width,
+      height: anyMedia.height,
+    }
+  }
+
+  if (msg.media.type === 'video') {
+    return {
+      type: 'video',
+      width: anyMedia.width,
+      height: anyMedia.height,
+      duration: anyMedia.duration,
+      mimeType: anyMedia.mimeType,
+    }
+  }
+
+  if (msg.media.type === 'document') {
+    return {
+      type: 'document',
+      fileName: anyMedia.fileName,
+      mimeType: anyMedia.mimeType,
+      size: anyMedia.fileSize,
+    }
+  }
+
+  if (msg.media.type === 'sticker') {
+    return {
+      type: 'sticker',
+      width: anyMedia.width,
+      height: anyMedia.height,
+    }
+  }
+
+  return undefined
+}
+
+function mapEntities(msg: TgMessage): MessageEntity[] | undefined {
+  if (!msg.entities || msg.entities.length === 0) return undefined
+
+  return msg.entities.map((entity) => {
+    const base = {
+      offset: entity.offset,
+      length: entity.length,
+    }
+
+    const anyEntity = entity as any
+    const entityType = anyEntity.type ?? anyEntity._
+
+    switch (entityType) {
+      case 'bold':
+      case 'messageEntityBold':
+        return { ...base, type: 'bold' as const }
+      case 'italic':
+      case 'messageEntityItalic':
+        return { ...base, type: 'italic' as const }
+      case 'underline':
+      case 'messageEntityUnderline':
+        return { ...base, type: 'underline' as const }
+      case 'strikethrough':
+      case 'messageEntityStrike':
+        return { ...base, type: 'strikethrough' as const }
+      case 'code':
+      case 'messageEntityCode':
+        return { ...base, type: 'code' as const }
+      case 'pre':
+      case 'messageEntityPre':
+        return {
+          ...base,
+          type: 'pre' as const,
+          language: anyEntity.language ?? undefined,
+        }
+      case 'text_link':
+      case 'messageEntityTextUrl':
+        return {
+          ...base,
+          type: 'link' as const,
+          url: anyEntity.url ?? undefined,
+        }
+      case 'mention':
+      case 'messageEntityMention':
+        return { ...base, type: 'mention' as const }
+      case 'hashtag':
+      case 'messageEntityHashtag':
+        return { ...base, type: 'hashtag' as const }
+      case 'email':
+      case 'messageEntityEmail':
+        return { ...base, type: 'email' as const }
+      case 'phone':
+      case 'messageEntityPhone':
+        return { ...base, type: 'phone' as const }
+      case 'spoiler':
+      case 'messageEntitySpoiler':
+        return { ...base, type: 'spoiler' as const }
+      default:
+        return { ...base, type: 'bold' as const }
+    }
+  })
+}

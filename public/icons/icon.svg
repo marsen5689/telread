@@ -1,0 +1,27 @@
+<svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0ea5e9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0.05" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="url(#bg)"/>
+
+  <!-- Glass overlay -->
+  <circle cx="256" cy="256" r="220" fill="url(#glass)"/>
+
+  <!-- T letter stylized -->
+  <path d="M160 160 H352 V200 H276 V352 H236 V200 H160 V160 Z" fill="white" fill-opacity="0.95"/>
+
+  <!-- Paper/channel icon accent -->
+  <rect x="296" y="240" width="80" height="112" rx="8" fill="white" fill-opacity="0.3"/>
+  <rect x="310" y="260" width="52" height="6" rx="3" fill="white" fill-opacity="0.6"/>
+  <rect x="310" y="280" width="40" height="6" rx="3" fill="white" fill-opacity="0.6"/>
+  <rect x="310" y="300" width="52" height="6" rx="3" fill="white" fill-opacity="0.6"/>
+</svg>
