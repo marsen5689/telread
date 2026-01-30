@@ -122,31 +122,20 @@ export function CommentItem(props: CommentItemProps) {
           </div>
         </Show>
 
-        {/* Actions */}
-        <div class="mt-2">
-          <button
-            type="button"
-            onClick={() => props.onReply?.(props.comment.id)}
-            aria-label={`Reply to ${props.comment.author.name}`}
-            class={`
-              inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
-              transition-all active:scale-95
-              ${props.isReplying 
-                ? 'bg-[var(--accent)] text-white' 
-                : 'bg-[var(--glass-bg)] text-tertiary hover:text-primary hover:bg-[var(--glass-bg-elevated)]'}
-            `}
-          >
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
-              />
-            </svg>
-            Reply
-          </button>
-        </div>
+        {/* Reply action - simple, no background until active */}
+        <button
+          type="button"
+          onClick={() => props.onReply?.(props.comment.id)}
+          class={`
+            mt-1 -ml-1 px-2 py-1.5 rounded-lg text-xs font-medium
+            transition-colors duration-150
+            ${props.isReplying 
+              ? 'text-accent' 
+              : 'text-tertiary active:text-accent'}
+          `}
+        >
+          Reply
+        </button>
       </div>
     </div>
   )

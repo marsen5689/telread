@@ -58,8 +58,9 @@ export function CommentComposer(props: CommentComposerProps) {
           value={text()}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
+          placeholder="Add comment..."
           rows={1}
-          class="w-full bg-transparent resize-none outline-none text-primary text-sm min-h-[24px] max-h-[200px]"
+          class="w-full bg-transparent resize-none outline-none text-primary text-sm min-h-[24px] max-h-[200px] placeholder:text-tertiary"
         />
 
         <Show when={text().trim().length > 0}>

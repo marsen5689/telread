@@ -68,16 +68,13 @@ export function CommentThread(props: CommentThreadProps) {
         </Motion.div>
       </Show>
 
-      {/* Show replies button - when collapsed */}
+      {/* Show replies - simple text link */}
       <Show when={hasReplies() && !showReplies()}>
         <button
           onClick={() => setShowReplies(true)}
-          class="ml-10 py-2 text-sm text-accent hover:text-accent/80 transition-colors flex items-center gap-1.5"
+          class="ml-10 py-1 text-sm text-accent active:opacity-70 transition-opacity duration-150"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-          </svg>
-          {replyCount()} {replyCount() === 1 ? 'reply' : 'replies'}
+          View {replyCount()} {replyCount() === 1 ? 'reply' : 'replies'}
         </button>
       </Show>
 

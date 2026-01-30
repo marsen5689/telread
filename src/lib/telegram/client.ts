@@ -56,6 +56,12 @@ function setupClientLogging(client: TelegramClient): void {
       fmt: string,
       args: unknown[]
     ) => {
+      // Suppress non-critical mtcute warnings
+      // CHANNEL_INVALID = user left channel or it was deleted
+      if (fmt.includes('CHANNEL_INVALID') || fmt.includes('CHAT_FORBIDDEN')) {
+        return // Silently ignore - these are expected for channels user left
+      }
+
       const timestamp = new Date().toISOString().split('T')[1].slice(0, 12)
       const levelNames = ['OFF', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'VERBOSE']
       const levelName = levelNames[level] ?? 'UNKNOWN'
