@@ -1,7 +1,7 @@
-import { Show } from 'solid-js'
+import { Show, createSignal } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { Motion } from 'solid-motionone'
-import { GlassCard, GlassButton, UserAvatar } from '@/components/ui'
+import { GlassCard, GlassButton, UserAvatar, ConfirmDialog } from '@/components/ui'
 import { themeStore, authStore, type Theme } from '@/lib/store'
 import { logout } from '@/lib/telegram'
 import { Send, ChevronRight } from 'lucide-solid'
@@ -11,19 +11,18 @@ import { Send, ChevronRight } from 'lucide-solid'
  */
 function Settings() {
   const navigate = useNavigate()
+  const [showLogoutConfirm, setShowLogoutConfirm] = createSignal(false)
 
   const handleLogout = async () => {
-    if (confirm('Are you sure you want to log out?')) {
-      try {
-        await logout()
-      } catch (error) {
-        console.error('Logout failed:', error)
-        // Continue with logout anyway - user wants to leave
-      }
-      // Clear auth state (also clears auth hint for optimistic loading)
-      authStore.setUser(null)
-      navigate('/login')
+    try {
+      await logout()
+    } catch (error) {
+      console.error('Logout failed:', error)
+      // Continue with logout anyway - user wants to leave
     }
+    // Clear auth state (also clears auth hint for optimistic loading)
+    authStore.setUser(null)
+    navigate('/login')
   }
 
   const themeOptions: { value: Theme; label: string }[] = [
@@ -71,13 +70,24 @@ function Settings() {
           <div class="mt-4 pt-4 border-t border-[var(--glass-border)]">
             <GlassButton
               variant="danger"
-              onClick={handleLogout}
+              onClick={() => setShowLogoutConfirm(true)}
               class="w-full"
             >
               Log Out
             </GlassButton>
           </div>
         </GlassCard>
+
+        {/* Logout confirmation */}
+        <ConfirmDialog
+          open={showLogoutConfirm()}
+          onClose={() => setShowLogoutConfirm(false)}
+          onConfirm={handleLogout}
+          title="Log out?"
+          description="You'll need to sign in again to access your channels."
+          confirmText="Log Out"
+          variant="danger"
+        />
       </Motion.div>
 
       {/* Appearance section */}

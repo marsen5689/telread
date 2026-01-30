@@ -83,7 +83,7 @@ export function CodeInput(props: CodeInputProps) {
 
       <div class="space-y-4">
         {/* Code input boxes */}
-        <div class="flex justify-center gap-3">
+        <div class="flex justify-center gap-3" role="group" aria-label="Verification code">
           <For each={Array(CODE_LENGTH).fill(0)}>
             {(_, index) => (
               <input
@@ -91,6 +91,8 @@ export function CodeInput(props: CodeInputProps) {
                 type="text"
                 inputMode="numeric"
                 maxLength={1}
+                autocomplete="one-time-code"
+                aria-label={`Digit ${index() + 1} of ${CODE_LENGTH}`}
                 value={code()[index()]}
                 onInput={(e) => handleInput(index(), e.currentTarget.value)}
                 onKeyDown={(e) => handleKeyDown(index(), e)}
@@ -114,15 +116,15 @@ export function CodeInput(props: CodeInputProps) {
           </div>
         )}
 
-        {/* Resend code */}
-        <p class="text-sm text-center text-secondary">
-          Didn't receive a code?{' '}
+        {/* Help text */}
+        <p class="text-sm text-center text-tertiary">
+          Code not received?{' '}
           <button
             type="button"
-            class="text-accent hover:underline"
+            class="text-[#0088cc] hover:underline"
             onClick={props.onBack}
           >
-            Try again
+            Send again
           </button>
         </p>
       </div>

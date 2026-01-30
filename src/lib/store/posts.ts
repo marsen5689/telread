@@ -71,13 +71,27 @@ function insertSorted(keys: PostKey[], key: PostKey, byId: Record<PostKey, Messa
 }
 
 /**
- * Trim to MAX_POSTS
+ * Trim to MAX_POSTS without cutting media groups
+ * May slightly exceed MAX_POSTS to keep groups intact (up to +9 for albums)
  */
 function trimToMaxPosts(s: PostsState): void {
   if (s.sortedKeys.length <= MAX_POSTS) return
   
-  const keysToRemove = s.sortedKeys.slice(MAX_POSTS)
-  s.sortedKeys = s.sortedKeys.slice(0, MAX_POSTS)
+  let cutIndex = MAX_POSTS
+  const postAtBoundary = s.byId[s.sortedKeys[MAX_POSTS - 1]]
+  
+  // If post at boundary is part of a group, extend to include full group
+  if (postAtBoundary?.groupedId) {
+    const groupId = postAtBoundary.groupedId.toString()
+    while (cutIndex < s.sortedKeys.length) {
+      const post = s.byId[s.sortedKeys[cutIndex]]
+      if (!post?.groupedId || post.groupedId.toString() !== groupId) break
+      cutIndex++
+    }
+  }
+  
+  const keysToRemove = s.sortedKeys.slice(cutIndex)
+  s.sortedKeys = s.sortedKeys.slice(0, cutIndex)
   
   for (const key of keysToRemove) {
     delete s.byId[key]

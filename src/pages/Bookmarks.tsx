@@ -1,7 +1,7 @@
-import { For, Show } from 'solid-js'
+import { For, Show, createSignal } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { Motion } from 'solid-motionone'
-import { GlassCard, GlassButton } from '@/components/ui'
+import { GlassCard, GlassButton, ConfirmDialog } from '@/components/ui'
 import { bookmarksStore } from '@/lib/store'
 import { formatRelativeTime } from '@/lib/utils'
 import { Bookmark, X } from 'lucide-solid'
@@ -11,6 +11,7 @@ import { Bookmark, X } from 'lucide-solid'
  */
 function Bookmarks() {
   const navigate = useNavigate()
+  const [showClearConfirm, setShowClearConfirm] = createSignal(false)
 
   const handlePostClick = (channelId: number, messageId: number) => {
     navigate(`/post/${channelId}/${messageId}`)
@@ -22,9 +23,7 @@ function Bookmarks() {
   }
 
   const handleClearAll = () => {
-    if (confirm('Are you sure you want to remove all bookmarks?')) {
-      bookmarksStore.clearAll()
-    }
+    bookmarksStore.clearAll()
   }
 
   return (
@@ -38,11 +37,22 @@ function Bookmarks() {
           <GlassButton
             variant="ghost"
             size="sm"
-            onClick={handleClearAll}
+            onClick={() => setShowClearConfirm(true)}
           >
             Clear All
           </GlassButton>
         </Show>
+
+        {/* Clear all confirmation */}
+        <ConfirmDialog
+          open={showClearConfirm()}
+          onClose={() => setShowClearConfirm(false)}
+          onConfirm={handleClearAll}
+          title="Clear all bookmarks?"
+          description="This will remove all your saved posts. This action cannot be undone."
+          confirmText="Clear All"
+          variant="danger"
+        />
       </div>
 
       {/* Empty state */}
@@ -52,8 +62,8 @@ function Bookmarks() {
             <Bookmark size={32} class="text-accent" />
           </div>
           <h3 class="text-lg font-semibold text-primary mb-1">No bookmarks yet</h3>
-          <p class="text-secondary text-sm">
-            Save posts to read them later
+          <p class="text-secondary text-sm max-w-xs mx-auto">
+            Tap the bookmark icon on any post to save it for later
           </p>
         </div>
       </Show>
@@ -86,9 +96,11 @@ function Bookmarks() {
                       </p>
                     </div>
                     <button
+                      type="button"
+                      aria-label="Remove bookmark"
                       onClick={(e) => handleRemove(e, bookmark.channelId, bookmark.messageId)}
                       class="p-2 rounded-full text-tertiary hover:text-[var(--danger)] hover:bg-[var(--danger)]/10
-                             opacity-0 group-hover:opacity-100 transition-all"
+                             opacity-60 hover:opacity-100 transition-all flex-shrink-0"
                     >
                       <X size={16} />
                     </button>
