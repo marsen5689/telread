@@ -16,7 +16,6 @@ interface CommentComposerProps {
  */
 export function CommentComposer(props: CommentComposerProps) {
   const [text, setText] = createSignal('')
-  const [isFocused, setIsFocused] = createSignal(false)
   let textareaRef: HTMLTextAreaElement | undefined
 
   const handleSubmit = () => {
@@ -55,8 +54,7 @@ export function CommentComposer(props: CommentComposerProps) {
   })
 
   return (
-    <div class="glass rounded-2xl p-4">
-      <div class="flex gap-3">
+    <div class="flex gap-3 items-start">
         {/* User avatar */}
         <UserAvatar
           userId={authStore.user?.id ?? 0}
@@ -70,32 +68,18 @@ export function CommentComposer(props: CommentComposerProps) {
             ref={textareaRef}
             value={text()}
             onInput={handleInput}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
             onKeyDown={handleKeyDown}
-            placeholder={props.placeholder ?? "What's on your mind?"}
             rows={1}
             class={`
               w-full bg-transparent resize-none outline-none
               text-primary placeholder:text-tertiary
-              min-h-[24px] max-h-[200px]
+              min-h-[44px] max-h-[200px] py-2
             `}
           />
 
-          {/* Actions - show when focused or has content */}
-          <Show when={isFocused() || text().length > 0}>
-            <div class="flex items-center justify-between mt-3 pt-3 border-t border-[var(--glass-border)]">
-              <p class="text-xs text-tertiary">
-                <kbd class="px-1.5 py-0.5 rounded bg-[var(--glass-bg)] font-mono">
-                  Ctrl
-                </kbd>
-                {' + '}
-                <kbd class="px-1.5 py-0.5 rounded bg-[var(--glass-bg)] font-mono">
-                  Enter
-                </kbd>
-                {' to send'}
-              </p>
-
+          {/* Send button - show when has content */}
+          <Show when={text().trim().length > 0}>
+            <div class="flex items-center justify-end mt-2">
               <GlassButton
                 variant="primary"
                 size="sm"
@@ -108,7 +92,6 @@ export function CommentComposer(props: CommentComposerProps) {
             </div>
           </Show>
         </div>
-      </div>
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { useNavigate } from '@solidjs/router'
 import { Motion } from 'solid-motionone'
 import { GlassCard, GlassButton, GlassInput, ChannelAvatar, Skeleton } from '@/components/ui'
 import { useChannels, useJoinChannel } from '@/lib/query'
+import { formatCount } from '@/lib/utils'
 
 /**
  * Channels list page
@@ -200,9 +201,4 @@ function Channels() {
   )
 }
 
-function formatCount(count: number): string {
-  if (count < 1000) return count.toString()
-  if (count < 1000000) return `${(count / 1000).toFixed(1)}K`
-  return `${(count / 1000000).toFixed(1)}M`
-}
 export default Channels

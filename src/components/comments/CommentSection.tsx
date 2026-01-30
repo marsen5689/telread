@@ -1,5 +1,4 @@
-import { For, Show, createSignal } from 'solid-js'
-import { Motion } from 'solid-motionone'
+import { For, Show } from 'solid-js'
 import { CommentThread } from './CommentThread'
 import { CommentComposer } from './CommentComposer'
 import { CommentSkeleton } from '@/components/ui'
@@ -8,21 +7,18 @@ import { useComments, useSendComment } from '@/lib/query'
 interface CommentSectionProps {
   channelId: number
   messageId: number
-  initialExpanded?: boolean
 }
 
 /**
- * Complete comment section for a post
+ * Comment section for a post
  *
- * Includes comment count, threaded comments, and composer.
+ * Always visible with comment count, threaded comments, and composer.
  */
 export function CommentSection(props: CommentSectionProps) {
-  const [isExpanded, setIsExpanded] = createSignal(props.initialExpanded ?? false)
-
   const commentsQuery = useComments(
     () => props.channelId,
     () => props.messageId,
-    () => isExpanded()
+    () => true // Always load comments
   )
 
   const sendMutation = useSendComment(
@@ -38,24 +34,8 @@ export function CommentSection(props: CommentSectionProps) {
 
   return (
     <div class="space-y-4">
-      {/* Toggle header */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded())}
-        class="flex items-center gap-2 text-sm text-secondary hover:text-primary transition-colors w-full"
-      >
-        <svg
-          class={`w-4 h-4 transition-transform ${isExpanded() ? 'rotate-90' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M9 5l7 7-7 7"
-          />
-        </svg>
+      {/* Header with comment count */}
+      <div class="flex items-center gap-2 text-sm text-secondary">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
@@ -67,67 +47,55 @@ export function CommentSection(props: CommentSectionProps) {
         <span class="font-medium">
           {totalComments()} {totalComments() === 1 ? 'comment' : 'comments'}
         </span>
-      </button>
+      </div>
 
-      {/* Expanded content */}
-      <Show when={isExpanded()}>
-        <Motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          class="space-y-4"
-        >
-          {/* Comment composer */}
-          <CommentComposer
-            onSubmit={(text) => handleSendComment(text)}
-            isSending={sendMutation.isPending}
-          />
+      {/* Comment composer */}
+      <CommentComposer
+        onSubmit={(text) => handleSendComment(text)}
+        isSending={sendMutation.isPending}
+      />
 
-          {/* Loading state */}
-          <Show when={commentsQuery.isLoading}>
-            <div class="space-y-2">
-              <CommentSkeleton />
-              <CommentSkeleton depth={1} />
-              <CommentSkeleton />
-            </div>
-          </Show>
+      {/* Loading state */}
+      <Show when={commentsQuery.isLoading}>
+        <div class="space-y-2">
+          <CommentSkeleton />
+          <CommentSkeleton depth={1} />
+          <CommentSkeleton />
+        </div>
+      </Show>
 
-          {/* Error state */}
-          <Show when={commentsQuery.isError}>
-            <div class="text-center py-4">
-              <p class="text-sm text-[var(--danger)]">Failed to load comments</p>
-              <button
-                onClick={() => commentsQuery.refetch()}
-                class="mt-2 text-sm text-accent hover:underline"
-              >
-                Try again
-              </button>
-            </div>
-          </Show>
+      {/* Error state */}
+      <Show when={commentsQuery.isError}>
+        <div class="text-center py-4">
+          <p class="text-sm text-[var(--danger)]">Failed to load comments</p>
+          <button
+            onClick={() => commentsQuery.refetch()}
+            class="mt-2 text-sm text-accent hover:underline"
+          >
+            Try again
+          </button>
+        </div>
+      </Show>
 
-          {/* Empty state */}
-          <Show when={!commentsQuery.isLoading && totalComments() === 0}>
-            <div class="text-center py-8">
-              <p class="text-secondary text-sm">No comments yet</p>
-              <p class="text-tertiary text-xs mt-1">Be the first to comment!</p>
-            </div>
-          </Show>
+      {/* Empty state */}
+      <Show when={!commentsQuery.isLoading && !commentsQuery.isError && totalComments() === 0}>
+        <p class="text-tertiary text-sm text-center py-4">No comments yet</p>
+      </Show>
 
-          {/* Comments list */}
-          <Show when={commentsQuery.data && commentsQuery.data.comments.length > 0}>
-            <div class="space-y-1">
-              <For each={commentsQuery.data!.comments}>
-                {(comment) => (
-                  <CommentThread
-                    comment={comment}
-                    discussionChatId={commentsQuery.data!.discussionChatId}
-                    onReply={handleSendComment}
-                    isSending={sendMutation.isPending}
-                  />
-                )}
-              </For>
-            </div>
-          </Show>
-        </Motion.div>
+      {/* Comments list */}
+      <Show when={commentsQuery.data && commentsQuery.data.comments.length > 0}>
+        <div class="space-y-1">
+          <For each={commentsQuery.data!.comments}>
+            {(comment) => (
+              <CommentThread
+                comment={comment}
+                discussionChatId={commentsQuery.data!.discussionChatId}
+                onReply={handleSendComment}
+                isSending={sendMutation.isPending}
+              />
+            )}
+          </For>
+        </div>
       </Show>
     </div>
   )

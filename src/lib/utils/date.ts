@@ -105,3 +105,13 @@ export function formatTimeAgo(date: Date | string): string {
 
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
+
+/**
+ * Format large numbers compactly (e.g., 1500 -> "1.5K", 1500000 -> "1.5M")
+ * Used for views, subscribers, etc.
+ */
+export function formatCount(count: number): string {
+  if (count < 1000) return count.toString()
+  if (count < 1000000) return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`
+  return `${(count / 1000000).toFixed(1).replace(/\.0$/, '')}M`
+}

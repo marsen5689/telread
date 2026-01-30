@@ -2,7 +2,6 @@ import { createSignal, createEffect } from 'solid-js'
 import { GlassButton } from '@/components/ui'
 
 interface ReplyComposerProps {
-  placeholder?: string
   onSubmit: (text: string) => void
   onCancel: () => void
   isSending?: boolean
@@ -52,12 +51,11 @@ export function ReplyComposer(props: ReplyComposerProps) {
         value={text()}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
-        placeholder={props.placeholder ?? 'Write a reply...'}
         rows={1}
         class={`
           w-full bg-transparent resize-none outline-none text-sm
-          text-primary placeholder:text-tertiary
-          min-h-[24px] max-h-[120px]
+          text-primary
+          min-h-[36px] max-h-[120px]
         `}
       />
 

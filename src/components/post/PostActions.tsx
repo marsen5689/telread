@@ -1,6 +1,7 @@
 import { Show, For } from 'solid-js'
 import { bookmarksStore } from '@/lib/store'
 import { useSendReaction } from '@/lib/query'
+import { formatCount } from '@/lib/utils'
 import type { MessageReaction } from '@/lib/telegram'
 
 interface PostActionsProps {
@@ -140,8 +141,4 @@ export function PostActions(props: PostActionsProps) {
   )
 }
 
-function formatCount(count: number): string {
-  if (count < 1000) return count.toString()
-  if (count < 1000000) return `${(count / 1000).toFixed(1)}K`
-  return `${(count / 1000000).toFixed(1)}M`
-}
+

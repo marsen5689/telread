@@ -10,28 +10,36 @@ interface CommentItemProps {
   discussionChatId?: number
   onReply?: (commentId: number) => void
   isReplying?: boolean
+  /** Show thread line below avatar */
+  showThreadLine?: boolean
 }
 
 /**
- * Individual comment display
+ * Individual comment display - Twitter/Threads style
  *
- * Shows author avatar, name, time, content (with entities),
- * media, forward indicator, and reply action.
+ * Avatar on left with optional thread line extending below.
+ * Content on right with author, time, text, media, reactions.
  */
 export function CommentItem(props: CommentItemProps) {
   const timeAgo = () => formatRelativeTime(props.comment.date)
 
   return (
-    <div class="flex gap-3 py-3">
-      {/* Avatar */}
-      <UserAvatar
-        userId={props.comment.author.id}
-        name={props.comment.author.name}
-        size="sm"
-      />
+    <div class="flex gap-3">
+      {/* Avatar column with optional thread line */}
+      <div class="flex flex-col items-center">
+        <UserAvatar
+          userId={props.comment.author.id}
+          name={props.comment.author.name}
+          size="sm"
+        />
+        {/* Thread line extending below avatar */}
+        <Show when={props.showThreadLine}>
+          <div class="w-0.5 flex-1 min-h-[12px] bg-[var(--nav-border)] mt-2" />
+        </Show>
+      </div>
 
       {/* Content */}
-      <div class="flex-1 min-w-0">
+      <div class="flex-1 min-w-0 pb-3">
         {/* Forward indicator */}
         <Show when={props.comment.forward}>
           {(forward) => (

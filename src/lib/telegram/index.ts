@@ -36,8 +36,6 @@ export {
 export {
   fetchMessages,
   getMessage,
-  fetchTimeline,
-  fetchMoreHistory,
   mapMessage,
   sendReaction,
   getAvailableReactions,
@@ -46,7 +44,6 @@ export {
   type MessageEntity,
   type MessageReaction,
   type FetchMessagesOptions,
-  type HistoryResult,
 } from './messages'
 export {
   fetchComments,

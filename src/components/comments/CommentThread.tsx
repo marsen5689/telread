@@ -12,15 +12,17 @@ interface CommentThreadProps {
   maxDepth?: number
   onReply?: (text: string, replyToId?: number) => void
   isSending?: boolean
+  /** Is this the last item in the parent's replies list */
+  isLast?: boolean
 }
 
 const MAX_VISIBLE_DEPTH = 4
 
 /**
- * Twitter-style threaded comment display
+ * Twitter/Threads style threaded comment display
  *
- * Recursively renders nested replies with connecting lines
- * and depth limits for readability.
+ * Uses vertical lines from avatars to connect replies.
+ * Clean mobile-friendly layout without excessive indentation.
  */
 export function CommentThread(props: CommentThreadProps) {
   const [isReplying, setIsReplying] = createSignal(false)
@@ -48,29 +50,23 @@ export function CommentThread(props: CommentThreadProps) {
     setIsReplying(false)
   }
 
+  // Show thread line if this comment has replies (to connect to children)
+  const showThreadLine = () => hasReplies() && depth() < maxDepth()
+
   return (
     <Motion.div
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: depth() * 0.03 }}
-      class="relative"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: depth() * 0.02 }}
     >
-      {/* Thread line connecting to parent */}
-      <Show when={depth() > 0}>
-        <div
-          class="thread-line-solid left-4 -top-3 h-3"
-          style={{ "margin-left": `${(depth() - 1) * 44}px` }}
-        />
-      </Show>
-
-      {/* Comment container with indent */}
-      <div style={{ "margin-left": `${depth() * 44}px` }}>
-        {/* The comment itself */}
+      {/* Comment with indent based on depth */}
+      <div style={{ "padding-left": `${depth() * 24}px` }}>
         <CommentItem
           comment={props.comment}
           discussionChatId={props.discussionChatId}
           onReply={() => setIsReplying(!isReplying())}
           isReplying={isReplying()}
+          showThreadLine={showThreadLine()}
         />
 
         {/* Reply composer */}
@@ -79,10 +75,9 @@ export function CommentThread(props: CommentThreadProps) {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            class="ml-11 mb-3"
+            class="ml-10 mb-3"
           >
             <ReplyComposer
-              placeholder={`Reply to ${props.comment.author.name}...`}
               onSubmit={handleReply}
               onCancel={() => setIsReplying(false)}
               isSending={props.isSending}
@@ -93,55 +88,45 @@ export function CommentThread(props: CommentThreadProps) {
 
       {/* Nested replies */}
       <Show when={hasReplies() && depth() < maxDepth()}>
-        <div class="relative">
-          {/* Vertical connecting line for this thread */}
-          <div
-            class="thread-line-solid top-0 bottom-4"
-            style={{
-              left: `${depth() * 44 + 16}px`,
-            }}
-          />
+        <For each={visibleReplies()}>
+          {(reply, index) => (
+            <CommentThread
+              comment={reply}
+              discussionChatId={props.discussionChatId}
+              depth={depth() + 1}
+              maxDepth={maxDepth()}
+              onReply={props.onReply}
+              isSending={props.isSending}
+              isLast={index() === visibleReplies().length - 1}
+            />
+          )}
+        </For>
 
-          {/* Render visible replies */}
-          <For each={visibleReplies()}>
-            {(reply) => (
-              <CommentThread
-                comment={reply}
-                discussionChatId={props.discussionChatId}
-                depth={depth() + 1}
-                maxDepth={maxDepth()}
-                onReply={props.onReply}
-                isSending={props.isSending}
+        {/* Show more replies button */}
+        <Show when={hiddenRepliesCount() > 0}>
+          <button
+            onClick={() => setShowAllReplies(true)}
+            class="py-2 text-sm text-accent hover:text-accent/80 transition-colors flex items-center gap-1"
+            style={{ "padding-left": `${(depth() + 1) * 24 + 40}px` }}
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 9l-7 7-7-7"
               />
-            )}
-          </For>
-
-          {/* Show more replies button */}
-          <Show when={hiddenRepliesCount() > 0}>
-            <button
-              onClick={() => setShowAllReplies(true)}
-              class="ml-[60px] py-2 text-sm text-accent hover:text-accent/80 transition-colors flex items-center gap-1"
-              style={{ "margin-left": `${(depth() + 1) * 44}px` }}
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-              Show {hiddenRepliesCount()} more {hiddenRepliesCount() === 1 ? 'reply' : 'replies'}
-            </button>
-          </Show>
-        </div>
+            </svg>
+            Show {hiddenRepliesCount()} more {hiddenRepliesCount() === 1 ? 'reply' : 'replies'}
+          </button>
+        </Show>
       </Show>
 
       {/* Show "Continue thread" for deep nesting */}
       <Show when={hasReplies() && depth() >= maxDepth()}>
         <button
           class="text-sm text-accent hover:text-accent/80 transition-colors py-2"
-          style={{ "margin-left": `${(depth() + 1) * 44}px` }}
+          style={{ "padding-left": `${(depth() + 1) * 24 + 40}px` }}
         >
           Continue thread ({props.comment.replies!.length} {props.comment.replies!.length === 1 ? 'reply' : 'replies'})
         </button>
