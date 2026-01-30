@@ -16,6 +16,13 @@ interface CommentThreadProps {
   isNested?: boolean
 }
 
+export interface CommentActionsContext {
+  hasReplies: boolean
+  replyCount: number
+  showReplies: boolean
+  onShowReplies: () => void
+}
+
 /**
  * Threads-style comment display
  *
@@ -50,6 +57,12 @@ export function CommentThread(props: CommentThreadProps) {
         onReply={() => setIsReplying(!isReplying())}
         isReplying={isReplying()}
         showThreadLine={showLine()}
+        repliesContext={hasReplies() && !showReplies() ? {
+          hasReplies: hasReplies(),
+          replyCount: replyCount(),
+          showReplies: showReplies(),
+          onShowReplies: () => setShowReplies(true),
+        } : undefined}
       />
 
       {/* Reply composer */}
@@ -68,15 +81,7 @@ export function CommentThread(props: CommentThreadProps) {
         </Motion.div>
       </Show>
 
-      {/* Show replies - simple text link */}
-      <Show when={hasReplies() && !showReplies()}>
-        <button
-          onClick={() => setShowReplies(true)}
-          class="ml-10 py-1 text-sm text-accent active:opacity-70 transition-opacity duration-150"
-        >
-          View {replyCount()} {replyCount() === 1 ? 'reply' : 'replies'}
-        </button>
-      </Show>
+
 
       {/* Expanded replies */}
       <Show when={hasReplies() && showReplies()}>

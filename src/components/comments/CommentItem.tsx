@@ -3,7 +3,8 @@ import { UserAvatar } from '@/components/ui'
 import { PostContent, PostMedia } from '@/components/post'
 import { formatRelativeTime, globalNow } from '@/lib/utils'
 import type { Comment } from '@/lib/telegram'
-import { CornerDownRight } from 'lucide-solid'
+import { CornerDownRight, ChevronDown } from 'lucide-solid'
+import type { CommentActionsContext } from './CommentThread'
 
 interface CommentItemProps {
   comment: Comment
@@ -13,6 +14,8 @@ interface CommentItemProps {
   isReplying?: boolean
   /** Show thread line below avatar */
   showThreadLine?: boolean
+  /** Context for showing/expanding replies */
+  repliesContext?: CommentActionsContext
 }
 
 /**
@@ -125,20 +128,39 @@ export function CommentItem(props: CommentItemProps) {
           </div>
         </Show>
 
-        {/* Reply action - simple, no background until active */}
-        <button
-          type="button"
-          onClick={() => props.onReply?.(props.comment.id)}
-          class={`
-            mt-1 -ml-1 px-2 py-1.5 rounded-lg text-xs font-medium
-            transition-colors duration-150
-            ${props.isReplying 
-              ? 'text-accent' 
-              : 'text-tertiary active:text-accent'}
-          `}
-        >
-          Reply
-        </button>
+        {/* Actions row */}
+        <div class="flex items-center gap-1 mt-1 -ml-1">
+          {/* Reply action */}
+          <button
+            type="button"
+            onClick={() => props.onReply?.(props.comment.id)}
+            class={`
+              px-2 py-1 rounded-lg text-xs font-medium
+              transition-colors duration-150
+              ${props.isReplying 
+                ? 'text-accent' 
+                : 'text-tertiary active:text-accent'}
+            `}
+          >
+            Reply
+          </button>
+
+          {/* View replies button - inline with Reply */}
+          <Show when={props.repliesContext}>
+            {(ctx) => (
+              <button
+                type="button"
+                onClick={() => ctx().onShowReplies()}
+                class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-accent active:opacity-70 transition-opacity duration-150"
+              >
+                <ChevronDown size={14} />
+                <span>
+                  {ctx().replyCount} {ctx().replyCount === 1 ? 'reply' : 'replies'}
+                </span>
+              </button>
+            )}
+          </Show>
+        </div>
       </div>
     </div>
   )
