@@ -299,22 +299,34 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
-     NEW POSTS BUTTON - Sticky notification pill
+     NEW POSTS BUTTON - Liquid glass pill
      ═══════════════════════════════════════════════════════════════════════ */
 
   .new-posts-btn {
-    @apply px-4 py-2 text-sm font-medium rounded-full;
-    background: var(--accent);
-    color: white;
+    @apply px-4 py-2.5 text-sm font-semibold rounded-full;
+
+    /* Liquid glass - light theme */
+    background: hsl(0 0% 100% / 70%);
+    -webkit-backdrop-filter: blur(16px) brightness(110%) saturate(150%);
+    backdrop-filter: blur(16px) brightness(110%) saturate(150%);
+    border: 1px solid hsl(0 0% 100% / 40%);
     box-shadow:
-      0 4px 12px rgba(0, 122, 255, 0.3),
-      0 1px 3px rgba(0, 0, 0, 0.1);
-    transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-                box-shadow 0.15s ease;
+      0 4px 24px rgba(0, 0, 0, 0.08),
+      inset 0 1px 0 hsl(0 0% 100% / 50%);
+
+    /* Text - accent color for contrast */
+    color: var(--accent);
 
     /* GPU acceleration */
     transform: translateZ(0);
     -webkit-transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    contain: layout style paint;
+
+    transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                background 0.15s ease,
+                box-shadow 0.15s ease;
 
     /* Touch optimization */
     -webkit-tap-highlight-color: transparent;
@@ -324,20 +336,31 @@
   }
 
   .new-posts-btn:hover {
-    transform: translateZ(0) scale(1.05);
+    background: hsl(0 0% 100% / 85%);
+    transform: translateZ(0) scale(1.03);
     box-shadow:
-      0 6px 16px rgba(0, 122, 255, 0.4),
-      0 2px 4px rgba(0, 0, 0, 0.1);
+      0 6px 28px rgba(0, 0, 0, 0.1),
+      inset 0 1px 0 hsl(0 0% 100% / 60%);
   }
 
   .new-posts-btn:active {
-    transform: translateZ(0) scale(0.95);
+    transform: translateZ(0) scale(0.97);
   }
 
+  /* Dark theme */
   .dark .new-posts-btn {
+    background: hsl(0 0% 0% / 50%);
+    border: 1px solid hsl(0 0% 100% / 15%);
     box-shadow:
-      0 4px 12px rgba(0, 122, 255, 0.25),
-      0 1px 3px rgba(0, 0, 0, 0.3);
+      0 4px 24px rgba(0, 0, 0, 0.25),
+      inset 0 1px 0 hsl(0 0% 100% / 12%);
+  }
+
+  .dark .new-posts-btn:hover {
+    background: hsl(0 0% 0% / 65%);
+    box-shadow:
+      0 6px 28px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 hsl(0 0% 100% / 15%);
   }
 
   /* ═══════════════════════════════════════════════════════════════════════

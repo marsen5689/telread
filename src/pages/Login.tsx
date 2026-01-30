@@ -6,7 +6,7 @@ import { getCurrentUser } from '@/lib/telegram'
 /**
  * Login page wrapper
  */
-export function Login() {
+function Login() {
   const navigate = useNavigate()
 
   const handleSuccess = async () => {
@@ -20,3 +20,5 @@ export function Login() {
 
   return <AuthFlow onSuccess={handleSuccess} />
 }
+
+export default Login

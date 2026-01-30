@@ -1,6 +1,6 @@
 import { Router, Route, Navigate } from '@solidjs/router'
 import { QueryClientProvider } from '@tanstack/solid-query'
-import { Show, onMount, onCleanup, createEffect, on, type ParentProps } from 'solid-js'
+import { Show, lazy, onMount, onCleanup, createEffect, on, type ParentProps } from 'solid-js'
 import { queryClient } from '@/lib/query'
 import { authStore } from '@/lib/store'
 import {
@@ -12,15 +12,15 @@ import {
 } from '@/lib/telegram'
 import { validateConfig } from '@/config/telegram'
 import { MainLayout } from '@/layouts'
-import {
-  Home,
-  Channel,
-  Channels,
-  Post,
-  Bookmarks,
-  Settings,
-  Login,
-} from '@/pages'
+
+// Lazy load pages for code splitting
+const Home = lazy(() => import('@/pages/Home'))
+const Channel = lazy(() => import('@/pages/Channel'))
+const Channels = lazy(() => import('@/pages/Channels'))
+const Post = lazy(() => import('@/pages/Post'))
+const Bookmarks = lazy(() => import('@/pages/Bookmarks'))
+const Settings = lazy(() => import('@/pages/Settings'))
+const Login = lazy(() => import('@/pages/Login'))
 
 /**
  * Protected route wrapper - redirects to login if not authenticated

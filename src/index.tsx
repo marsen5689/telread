@@ -10,6 +10,12 @@ if (!root) {
   throw new Error('Root element not found')
 }
 
+// Remove splash screen before rendering
+const splash = document.getElementById('splash')
+if (splash) {
+  splash.remove()
+}
+
 render(() => <App />, root)
 
 // Register service worker with auto-update

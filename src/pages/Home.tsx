@@ -9,7 +9,7 @@ import { useOptimizedTimeline } from '@/lib/query'
  * - Timeline: handles scroll detection and rendering
  * - No manual throttling needed - query handles deduplication
  */
-export function Home() {
+function Home() {
   const timeline = useOptimizedTimeline()
 
   return (
@@ -28,3 +28,4 @@ export function Home() {
     </div>
   )
 }
+export default Home

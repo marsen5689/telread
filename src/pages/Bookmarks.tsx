@@ -8,7 +8,7 @@ import { formatRelativeTime } from '@/lib/utils'
 /**
  * Bookmarks page - Shows all saved posts
  */
-export function Bookmarks() {
+function Bookmarks() {
   const navigate = useNavigate()
 
   const handlePostClick = (channelId: number, messageId: number) => {
@@ -121,3 +121,5 @@ export function Bookmarks() {
   )
 }
 
+
+export default Bookmarks

@@ -8,7 +8,7 @@ import { logout } from '@/lib/telegram'
 /**
  * Settings page
  */
-export function Settings() {
+function Settings() {
   const navigate = useNavigate()
 
   const handleLogout = async () => {
@@ -145,3 +145,5 @@ export function Settings() {
     </div>
   )
 }
+
+export default Settings

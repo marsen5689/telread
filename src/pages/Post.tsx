@@ -13,7 +13,7 @@ import type { Message } from '@/lib/telegram'
  *
  * Uses same layout as timeline - no card wrappers
  */
-export function Post() {
+function Post() {
   const params = useParams()
   const navigate = useNavigate()
 
@@ -215,3 +215,5 @@ function formatDate(date: Date | string): string {
     minute: '2-digit',
   })
 }
+
+export default Post

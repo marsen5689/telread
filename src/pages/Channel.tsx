@@ -9,7 +9,7 @@ import { groupPostsByMediaGroup } from '@/lib/utils'
 /**
  * Channel page - Shows all posts from a single channel
  */
-export function Channel() {
+function Channel() {
   const params = useParams()
   const navigate = useNavigate()
 
@@ -103,3 +103,4 @@ function formatCount(count: number): string {
   if (count < 1000000) return `${(count / 1000).toFixed(1)}K`
   return `${(count / 1000000).toFixed(1)}M`
 }
+export default Channel

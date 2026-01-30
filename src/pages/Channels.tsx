@@ -7,7 +7,7 @@ import { useChannels, useJoinChannel } from '@/lib/query'
 /**
  * Channels list page
  */
-export function Channels() {
+function Channels() {
   const navigate = useNavigate()
   const [joinInput, setJoinInput] = createSignal('')
   const [showJoinModal, setShowJoinModal] = createSignal(false)
@@ -205,3 +205,4 @@ function formatCount(count: number): string {
   if (count < 1000000) return `${(count / 1000).toFixed(1)}K`
   return `${(count / 1000000).toFixed(1)}M`
 }
+export default Channels
