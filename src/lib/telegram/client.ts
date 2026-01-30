@@ -1,6 +1,7 @@
 import { TelegramClient } from '@mtcute/web'
 import { createSignal } from 'solid-js'
 import { TELEGRAM_CONFIG, validateConfig } from '@/config/telegram'
+import { logIfNotIgnorable } from './errors'
 
 let clientInstance: TelegramClient | null = null
 
@@ -128,24 +129,9 @@ export function getTelegramClient(): TelegramClient {
   setupClientLogging(clientInstance)
 
   // Global error handler - catches all mtcute/mtproto errors
+  // Uses centralized error handling from errors.ts
   clientInstance.onError.add((error) => {
-    // Only log in development, and skip common ignorable errors
-    if (import.meta.env.DEV) {
-      const message = error instanceof Error ? error.message : String(error)
-
-      // Skip known ignorable errors
-      const ignorable = [
-        'CHANNEL_INVALID',
-        'CHANNEL_PRIVATE',
-        'MSG_ID_INVALID',
-        'FILE_REFERENCE',
-      ]
-      if (ignorable.some(e => message.includes(e))) {
-        return
-      }
-
-      console.error('[mtcute] Error:', error)
-    }
+    logIfNotIgnorable(error, 'mtcute')
   })
 
   // Increment version for new client instance

@@ -4,6 +4,7 @@ import { MAX_COMMENT_LENGTH } from '@/config/constants'
 import type { Message as TgMessage } from '@mtcute/web'
 import type { MessageMedia, MessageEntity, MessageForward } from './messages'
 import { mapMessage } from './messages'
+import { isChannelInvalid, isMessageNotFound, isFloodWait, getErrorMessage } from './errors'
 import Long from 'long'
 
 // ============================================================================
@@ -190,14 +191,13 @@ export async function fetchComments(
 
     return processCommentsResponse(result, messageId, limit)
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-
-    if (errorMessage.includes('MSG_ID_INVALID') || errorMessage.includes('CHANNEL_INVALID')) {
+    // Use typed error checks from errors.ts
+    if (isMessageNotFound(error) || isChannelInvalid(error)) {
       throw new CommentError('Post not found or comments disabled', 'NOT_FOUND')
     }
 
-    if (errorMessage.includes('FLOOD')) {
-      throw new CommentError('Too many requests, please try again later', 'NETWORK')
+    if (isFloodWait(error)) {
+      throw new CommentError(getErrorMessage(error), 'NETWORK')
     }
 
     // Fallback to getDiscussionMessage + iterHistory
@@ -414,14 +414,13 @@ export async function sendComment(
       throw error
     }
 
-    const errorMessage = error instanceof Error ? error.message : String(error)
-
     if (import.meta.env.DEV) {
-      console.error('Failed to send comment:', errorMessage)
+      console.error('Failed to send comment:', error)
     }
 
-    if (errorMessage.includes('FLOOD')) {
-      throw new CommentError('Too many requests, please wait', 'NETWORK')
+    // Use typed error checks from errors.ts
+    if (isFloodWait(error)) {
+      throw new CommentError(getErrorMessage(error), 'NETWORK')
     }
 
     throw new CommentError('Failed to send comment', 'UNKNOWN')

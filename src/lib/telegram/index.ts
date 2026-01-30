@@ -70,10 +70,34 @@ export {
   getCachedMedia,
   removeFromMediaCache,
   getMediaCacheStats,
-  parseFloodWait,
-  withFloodRetry,
   cleanupExpiredCache,
 } from './media'
+// MTProto error handling utilities
+export {
+  // Type guards for specific errors
+  isRpcError,
+  isFloodWait,
+  isChannelInvalid,
+  isMessageNotFound,
+  is2FARequired,
+  isInvalidPhoneCode,
+  isInvalidPassword,
+  isSignUpRequired,
+  isFileReferenceExpired,
+  isUserDeactivated,
+  isPeerNotFound,
+  isIgnorableError,
+  // Error utilities
+  categorizeError,
+  getErrorMessage,
+  withFloodWaitRetry,
+  logIfNotIgnorable,
+  // Constants
+  FLOOD_WAIT_THRESHOLD,
+  MAX_FLOOD_WAIT,
+  // Types
+  type ErrorCategory,
+} from './errors'
 export {
   startUpdatesListener,
   stopUpdatesListener,

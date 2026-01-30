@@ -2,6 +2,7 @@ import { getTelegramClient, isClientReady } from './client'
 import { MEDIA_CACHE_MAX_SIZE } from '@/config/constants'
 import { get, set, del, keys } from 'idb-keyval'
 import type { Photo, Video, Document, Sticker, Audio, Voice } from '@mtcute/web'
+import { isChannelInvalid, isFileReferenceExpired } from './errors'
 
 // Union type for media that supports thumbnails
 type MediaWithThumbnails = Photo | Video | Document | Sticker | Audio | Voice
@@ -483,10 +484,8 @@ export async function downloadMedia(
         return null
       }
 
-      const errorMessage = downloadError instanceof Error ? downloadError.message : String(downloadError)
-
       // Check for FILE_REFERENCE_EXPIRED - try refetching message
-      if (errorMessage.includes('FILE_REFERENCE') || errorMessage.includes('400')) {
+      if (isFileReferenceExpired(downloadError)) {
         debugWarn(`File reference expired, refetching: channel=${channelId}, msg=${messageId}`)
 
         try {
@@ -555,8 +554,7 @@ export async function downloadMedia(
     if (!signal?.aborted) {
       // Silently ignore "channel is invalid" errors - user likely left the channel
       // or channel was deleted, but posts remain in cache
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      if (errorMessage.includes('channel is invalid') || errorMessage.includes('CHANNEL_INVALID')) {
+      if (isChannelInvalid(error)) {
         // Don't log - this is expected for cached posts from left channels
         return null
       }
@@ -800,59 +798,6 @@ function getMimeType(media: { type: string; mimeType?: string }): string {
     default:
       return 'application/octet-stream'
   }
-}
-
-// ============================================================================
-// FLOOD_WAIT Error Handling
-// ============================================================================
-
-/**
- * Parse FLOOD_WAIT error and extract wait time
- * Returns wait time in ms, or null if not a FLOOD_WAIT error
- */
-export function parseFloodWait(error: unknown): number | null {
-  const message = error instanceof Error ? error.message : String(error)
-
-  // Match patterns like "FLOOD_WAIT_123" or "FLOOD_WAIT (123)"
-  const match = message.match(/FLOOD_WAIT[_\s(]+(\d+)/i)
-  if (match) {
-    const seconds = parseInt(match[1], 10)
-    // Cap at 60 seconds to prevent extremely long waits
-    return Math.min(seconds, 60) * 1000
-  }
-
-  return null
-}
-
-/**
- * Execute an async operation with FLOOD_WAIT retry
- */
-export async function withFloodRetry<T>(
-  operation: () => Promise<T>,
-  maxRetries = 2
-): Promise<T> {
-  let lastError: unknown
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await operation()
-    } catch (error) {
-      lastError = error
-      const waitMs = parseFloodWait(error)
-
-      if (waitMs !== null && attempt < maxRetries) {
-        if (import.meta.env.DEV) {
-          console.log(`[Media] FLOOD_WAIT: waiting ${waitMs}ms before retry`)
-        }
-        await new Promise((resolve) => setTimeout(resolve, waitMs))
-        continue
-      }
-
-      throw error
-    }
-  }
-
-  throw lastError
 }
 
 // ============================================================================

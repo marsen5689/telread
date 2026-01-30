@@ -1,5 +1,12 @@
 import { getTelegramClient } from './client'
 import { TELEGRAM_CONFIG } from '@/config/telegram'
+import {
+  is2FARequired,
+  isInvalidPhoneCode,
+  isInvalidPassword,
+  isSignUpRequired,
+  getErrorMessage,
+} from './errors'
 
 export type AuthState =
   | { step: 'idle' }
@@ -12,25 +19,6 @@ export type AuthState =
 
 export interface AuthCallbacks {
   onStateChange: (state: AuthState) => void
-}
-
-/**
- * Check if error indicates 2FA is required
- */
-function is2FAError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-
-  const message = error.message.toLowerCase()
-  const name = error.name?.toLowerCase() ?? ''
-
-  // Check various possible 2FA error indicators
-  return (
-    message.includes('session_password_needed') ||
-    message.includes('2fa') ||
-    message.includes('two-factor') ||
-    message.includes('password') && message.includes('login') ||
-    name.includes('session_password_needed')
-  )
 }
 
 /**
@@ -92,8 +80,8 @@ export async function submitCode(
 
     callbacks.onStateChange({ step: 'done' })
   } catch (error: unknown) {
-    // Check if 2FA is required
-    if (is2FAError(error)) {
+    // Check if 2FA is required (typed error check)
+    if (is2FARequired(error)) {
       try {
         const passwordInfo = await client.call({ _: 'account.getPassword' })
         callbacks.onStateChange({
@@ -109,6 +97,20 @@ export async function submitCode(
         })
         return
       }
+    }
+
+    // Use typed error checks for better error messages
+    if (isInvalidPhoneCode(error)) {
+      callbacks.onStateChange({ step: 'error', message: getErrorMessage(error) })
+      return
+    }
+
+    if (isSignUpRequired(error)) {
+      callbacks.onStateChange({
+        step: 'error',
+        message: 'Account not found. Please use an existing Telegram account.',
+      })
+      return
     }
 
     const message = error instanceof Error ? error.message : 'Invalid code'
@@ -129,6 +131,11 @@ export async function submit2FA(
     await client.checkPassword(password)
     callbacks.onStateChange({ step: 'done' })
   } catch (error: unknown) {
+    // Use typed error check for better error messages
+    if (isInvalidPassword(error)) {
+      callbacks.onStateChange({ step: 'error', message: getErrorMessage(error) })
+      return
+    }
     const message = error instanceof Error ? error.message : 'Invalid password'
     callbacks.onStateChange({ step: 'error', message })
   }
@@ -236,7 +243,8 @@ function pollQRLogin(
     } catch (error: unknown) {
       if (cancelled) return
       
-      if (is2FAError(error)) {
+      // Use typed error check for 2FA
+      if (is2FARequired(error)) {
         cancelQRPolling = null
         try {
           const passwordInfo = await client.call({ _: 'account.getPassword' })
