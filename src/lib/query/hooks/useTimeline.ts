@@ -427,6 +427,8 @@ export function useOptimizedTimeline() {
   // Reactive timeline from centralized store
   // Direct access to postsState ensures SolidJS tracks the dependency
   const timeline = createMemo(() => {
+    // Track lastUpdated to react to in-place updates (reactions, views, etc.)
+    void postsState.lastUpdated
     const keys = postsState.sortedKeys
     const posts = keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
     // Group posts by groupedId for albums

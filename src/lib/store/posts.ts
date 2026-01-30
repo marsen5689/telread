@@ -226,7 +226,14 @@ export function updatePostViews(channelId: number, messageId: number, views: num
   const post = state.byId[key]
   if (!post || post.views === views) return
 
-  setState('byId', key, 'views', views)
+  setState(
+    produce((s) => {
+      // Double-check post still exists (could be deleted between check and setState)
+      if (!s.byId[key]) return
+      s.byId[key].views = views
+      s.lastUpdated = Date.now()
+    })
+  )
 }
 
 /**
@@ -241,7 +248,14 @@ export function updatePostReactions(
   const post = state.byId[key]
   if (!post) return
 
-  setState('byId', key, 'reactions', reactions)
+  setState(
+    produce((s) => {
+      // Double-check post still exists (could be deleted between check and setState)
+      if (!s.byId[key]) return
+      s.byId[key].reactions = reactions ?? []
+      s.lastUpdated = Date.now()
+    })
+  )
 }
 
 /**

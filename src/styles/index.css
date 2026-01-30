@@ -182,23 +182,19 @@
     font-size: 0.8125rem;
   }
 
-  /* Paid reaction special styling */
-  .reaction-paid {
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 165, 0, 0.1));
-    border-color: rgba(255, 215, 0, 0.3);
+  /* Chosen reaction - user has reacted with this emoji */
+  .reaction-chosen {
+    background: rgba(0, 122, 255, 0.15);
+    border-color: rgba(0, 122, 255, 0.4);
   }
 
-  .reaction-paid:hover {
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.25), rgba(255, 165, 0, 0.15));
+  .reaction-chosen .reaction-count {
+    color: var(--accent);
+    font-weight: 600;
   }
 
-  .dark .reaction-paid {
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 165, 0, 0.08));
-    border-color: rgba(255, 215, 0, 0.2);
-  }
-
-  .dark .reaction-paid:hover {
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.18), rgba(255, 165, 0, 0.12));
+  .reaction-chosen:hover {
+    background: rgba(0, 122, 255, 0.25);
   }
 
   /* ═══════════════════════════════════════════════════════════════════════

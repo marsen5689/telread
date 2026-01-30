@@ -20,7 +20,7 @@ import type {
 export interface MessageReaction {
   emoji: string
   count: number
-  isPaid?: boolean
+  chosen?: boolean
 }
 
 export interface MessageForward {
@@ -369,24 +369,25 @@ function mapReactions(msg: TgMessage): MessageReaction[] | undefined {
   const reactionCounts = reactions.reactions
   if (!reactionCounts || reactionCounts.length === 0) return undefined
 
-  return reactionCounts.map((rc) => {
-    const emoji = rc.emoji
-    // emoji can be string (unicode) or tl.Long (custom emoji ID)
-    // For custom emoji, we display a placeholder or the paid star
-    let emojiStr: string
-    if (typeof emoji === 'string') {
-      emojiStr = emoji
-    } else {
-      // Custom emoji - use star as fallback (could be extended to load custom emoji)
-      emojiStr = '⭐'
-    }
+  const mapped: MessageReaction[] = []
 
-    return {
-      emoji: emojiStr,
+  for (const rc of reactionCounts) {
+    // Skip paid reactions (stars) - not supported
+    if (rc.isPaid) continue
+
+    const emoji = rc.emoji
+    // Skip custom emojis (non-string) - can't display them properly
+    if (typeof emoji !== 'string') continue
+
+    mapped.push({
+      emoji,
       count: rc.count,
-      isPaid: rc.isPaid,
-    }
-  })
+      // order !== null means current user has reacted with this emoji
+      chosen: rc.order !== null,
+    })
+  }
+
+  return mapped.length > 0 ? mapped : undefined
 }
 
 function mapMedia(msg: TgMessage): MessageMedia | undefined {
@@ -631,20 +632,44 @@ let cachedGlobalReactions: string[] | null = null
  * @param emoji - Emoji reaction (or null to remove reaction)
  * @returns Updated reactions array or null on error
  */
+/**
+ * Toggle a reaction on a message
+ * Supports multiple reactions per user - toggles the clicked emoji while preserving others
+ *
+ * @param channelId - Channel ID
+ * @param messageId - Message ID
+ * @param emoji - Emoji to toggle
+ * @param currentChosenEmojis - Array of currently chosen emojis by the user
+ */
 export async function sendReaction(
   channelId: number,
   messageId: number,
-  emoji: string | null
+  emoji: string,
+  currentChosenEmojis: string[]
 ): Promise<MessageReaction[] | null> {
   const client = getTelegramClient()
 
   try {
-    // Use mtcute's built-in sendReaction method
-    // InputReaction can be a simple string (emoji)
+    // Defensive: ensure array is valid
+    const safeChosenEmojis = currentChosenEmojis ?? []
+
+    // Toggle the emoji: remove if already chosen, add if not
+    const isChosen = safeChosenEmojis.includes(emoji)
+    let newEmojis: string[]
+
+    if (isChosen) {
+      // Remove this emoji from chosen list
+      newEmojis = safeChosenEmojis.filter((e) => e !== emoji)
+    } else {
+      // Add this emoji to chosen list
+      newEmojis = [...safeChosenEmojis, emoji]
+    }
+
+    // Send the full array of reactions (or undefined to clear all)
     const result = await client.sendReaction({
       chatId: channelId,
       message: messageId,
-      emoji: emoji ?? undefined, // null removes reaction
+      emoji: newEmojis.length > 0 ? newEmojis : undefined,
     })
 
     if (result) {

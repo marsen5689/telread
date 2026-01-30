@@ -1,11 +1,12 @@
 import { getTelegramClient, getClientVersion } from './client'
-import { mapMessage, type MessageReaction } from './messages'
+import { mapMessage, type MessageReaction, type Message } from './messages'
 import {
-  upsertPost,
+  upsertPostsToPending,
   removePosts,
   updatePostViews,
   updatePostReactions,
   isStoreReady,
+  getPost,
 } from '@/lib/store'
 import { addPostToCache, removePostsFromCache } from '@/lib/query/hooks'
 import type { Message as TgMessage, RawUpdateInfo, Chat } from '@mtcute/web'
@@ -15,10 +16,119 @@ export type UpdatesCleanup = () => void
 let isListenerActive = false
 let activeCleanup: UpdatesCleanup | null = null
 let listenerClientVersion = 0
+let isPaused = false
 
 // Queue for messages that arrive before store is ready
 // No limit - we need to capture all messages from catchUp/getDifference
 const pendingMessages: TgMessage[] = []
+
+// ============================================================================
+// Batched Updates Processing
+// ============================================================================
+
+const BATCH_INTERVAL_MS = 300
+
+interface UpdateBatch {
+  messages: TgMessage[]
+}
+
+const pendingBatch: UpdateBatch = {
+  messages: [],
+}
+
+let batchTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleBatchProcessing(): void {
+  if (batchTimer || isPaused) return
+
+  batchTimer = setTimeout(() => {
+    batchTimer = null
+    processBatch()
+  }, BATCH_INTERVAL_MS)
+}
+
+function processBatch(): void {
+  const { messages } = pendingBatch
+  pendingBatch.messages = []
+
+  if (messages.length === 0) return
+
+  // Deduplicate - keep latest version of each message
+  const uniqueByKey = new Map<string, TgMessage>()
+  for (const msg of messages) {
+    const key = `${msg.chat?.id}:${msg.id}`
+    uniqueByKey.set(key, msg)
+  }
+
+  // Filter to channel messages and map
+  const mapped: Message[] = []
+  for (const msg of uniqueByKey.values()) {
+    const peer = msg.chat
+    if (!peer || peer.type !== 'chat') continue
+    if ((peer as Chat).chatType !== 'channel') continue
+
+    const post = mapMessage(msg, peer.id)
+    if (post) mapped.push(post)
+  }
+
+  if (mapped.length === 0) return
+
+  // Batch update store
+  upsertPostsToPending(mapped)
+
+  // Update TanStack Query cache
+  for (const post of mapped) {
+    addPostToCache(post)
+  }
+
+  if (import.meta.env.DEV && mapped.length > 1) {
+    console.log(`[Updates] Batched ${mapped.length} messages`)
+  }
+}
+
+function queueMessage(message: TgMessage): void {
+  pendingBatch.messages.push(message)
+  scheduleBatchProcessing()
+}
+
+// ============================================================================
+// Visibility Change Handler
+// ============================================================================
+
+function handleVisibilityChange(): void {
+  if (document.visibilityState === 'hidden') {
+    // Pause processing when tab is hidden
+    isPaused = true
+
+    // Process any pending batch immediately before pausing
+    if (batchTimer) {
+      clearTimeout(batchTimer)
+      batchTimer = null
+      processBatch()
+    }
+
+    if (import.meta.env.DEV) {
+      console.log('[Updates] Paused (tab hidden)')
+    }
+  } else {
+    // Resume when tab is visible
+    isPaused = false
+
+    // Process any messages that arrived while paused
+    if (pendingBatch.messages.length > 0) {
+      scheduleBatchProcessing()
+    }
+
+    if (import.meta.env.DEV) {
+      console.log('[Updates] Resumed (tab visible)')
+    }
+  }
+}
+
+// Register visibility handler once
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+}
 
 /**
  * Process pending messages that were queued before store was ready
@@ -29,6 +139,8 @@ function processPendingMessages(): void {
   const messages = [...pendingMessages]
   pendingMessages.length = 0 // Clear queue
 
+  // Filter to channel messages and map
+  const mapped: Message[] = []
   for (const message of messages) {
     const peer = message.chat
     const chatId = peer?.id
@@ -39,11 +151,16 @@ function processPendingMessages(): void {
     const chat = peer as Chat
     if (chat.chatType !== 'channel') continue
 
-    const mapped = mapMessage(message, chatId)
-    if (mapped) {
-      upsertPost(mapped)
-      addPostToCache(mapped)
-    }
+    const post = mapMessage(message, chatId)
+    if (post) mapped.push(post)
+  }
+
+  if (mapped.length === 0) return
+
+  // Batch update
+  upsertPostsToPending(mapped)
+  for (const post of mapped) {
+    addPostToCache(post)
   }
 }
 
@@ -84,11 +201,8 @@ export function startUpdatesListener(): UpdatesCleanup {
       const chat = peer as Chat
       if (chat.chatType !== 'channel') return
 
-      const mapped = mapMessage(message, chatId)
-      if (mapped) {
-        upsertPost(mapped)
-        addPostToCache(mapped)
-      }
+      // Add to batch for efficient processing
+      queueMessage(message)
     } catch (error) {
       console.error('[Updates] Error handling new message:', error)
     }
@@ -112,11 +226,8 @@ export function startUpdatesListener(): UpdatesCleanup {
       const chat = peer as Chat
       if (chat.chatType !== 'channel') return
 
-      const mapped = mapMessage(message, chatId)
-      if (mapped) {
-        upsertPost(mapped)
-        addPostToCache(mapped)
-      }
+      // Add to batch for efficient processing
+      queueMessage(message)
     } catch (error) {
       console.error('[Updates] Error handling edit message:', error)
     }
@@ -142,17 +253,6 @@ export function startUpdatesListener(): UpdatesCleanup {
   const toMarkedChannelId = (rawId: number): number => -1000000000000 - rawId
 
   /**
-   * Extract emoji from reaction object
-   */
-  const getReactionEmoji = (reaction: any): string => {
-    if (!reaction) return '👍'
-    if (reaction._ === 'reactionEmoji') return reaction.emoticon ?? '👍'
-    if (reaction._ === 'reactionCustomEmoji') return '⭐'
-    if (reaction._ === 'reactionPaid') return '⭐'
-    return '👍'
-  }
-
-  /**
    * Handle raw updates for views, reactions, etc.
    */
   const handleRawUpdate = (info: RawUpdateInfo) => {
@@ -175,13 +275,31 @@ export function startUpdatesListener(): UpdatesCleanup {
         const peer = update.peer
         if (peer?._ === 'peerChannel' && update.reactions?.results) {
           const channelId = toMarkedChannelId(peer.channelId)
-          const reactions: MessageReaction[] = update.reactions.results
-            .filter((r: any) => r.count > 0)
-            .map((r: any) => ({
-              emoji: getReactionEmoji(r.reaction),
+
+          // Get existing post to preserve chosen state
+          // Raw updates don't include whether current user chose the reaction
+          const existingPost = getPost(channelId, update.msgId)
+          const existingReactions = existingPost?.reactions ?? []
+          const chosenMap = new Map(
+            existingReactions.filter((r) => r.chosen).map((r) => [r.emoji, true])
+          )
+
+          const reactions: MessageReaction[] = []
+          for (const r of update.reactions.results as any[]) {
+            if (r.count <= 0) continue
+            // Skip paid reactions (stars)
+            if (r.reaction?._ === 'reactionPaid') continue
+            // Skip custom emojis - only support standard emoji
+            if (r.reaction?._ !== 'reactionEmoji') continue
+
+            const emoji = r.reaction.emoticon ?? '👍'
+            reactions.push({
+              emoji,
               count: r.count ?? 0,
-              isPaid: r.reaction?._ === 'reactionPaid',
-            }))
+              // Preserve chosen state from existing reactions
+              chosen: chosenMap.get(emoji) ?? false,
+            })
+          }
           updatePostReactions(channelId, update.msgId, reactions)
         }
         return
@@ -224,6 +342,17 @@ export function startUpdatesListener(): UpdatesCleanup {
 }
 
 export function stopUpdatesListener(): void {
+  // Clear batch timer
+  if (batchTimer) {
+    clearTimeout(batchTimer)
+    batchTimer = null
+  }
+
+  // Process any remaining messages
+  if (pendingBatch.messages.length > 0) {
+    processBatch()
+  }
+
   if (activeCleanup) {
     activeCleanup()
     activeCleanup = null

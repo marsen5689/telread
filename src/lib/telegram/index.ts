@@ -10,6 +10,8 @@ export {
   setLogLevel,
   getLogLevel,
   LogLevel,
+  getIsOnline,
+  onNetworkOnline,
   type LogLevelType,
 } from './client'
 export {
@@ -67,6 +69,9 @@ export {
   getCachedMedia,
   removeFromMediaCache,
   getMediaCacheStats,
+  parseFloodWait,
+  withFloodRetry,
+  cleanupExpiredCache,
 } from './media'
 export {
   startUpdatesListener,

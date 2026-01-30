@@ -275,3 +275,64 @@ export function resetClient(): void {
     console.log('[TelRead] Client reset (version:', clientVersion, ')')
   }
 }
+
+// ============================================================================
+// Network State Management
+// ============================================================================
+
+const [isOnline, setIsOnline] = createSignal(
+  typeof navigator !== 'undefined' ? navigator.onLine : true
+)
+
+/**
+ * Check if the browser is online
+ */
+export function getIsOnline(): boolean {
+  return isOnline()
+}
+
+/**
+ * Callbacks to run when coming back online
+ */
+const onlineCallbacks: Array<() => void> = []
+
+/**
+ * Register a callback to run when network comes back online
+ */
+export function onNetworkOnline(callback: () => void): () => void {
+  onlineCallbacks.push(callback)
+  return () => {
+    const index = onlineCallbacks.indexOf(callback)
+    if (index >= 0) onlineCallbacks.splice(index, 1)
+  }
+}
+
+// Setup network event listeners
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    setIsOnline(true)
+
+    if (import.meta.env.DEV) {
+      console.log('[TelRead] Network online')
+    }
+
+    // Run registered callbacks
+    for (const callback of onlineCallbacks) {
+      try {
+        callback()
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.error('[TelRead] Online callback error:', error)
+        }
+      }
+    }
+  })
+
+  window.addEventListener('offline', () => {
+    setIsOnline(false)
+
+    if (import.meta.env.DEV) {
+      console.log('[TelRead] Network offline')
+    }
+  })
+}

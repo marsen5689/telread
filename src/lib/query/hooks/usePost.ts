@@ -46,7 +46,8 @@ export function useAvailableReactions(channelId: () => number) {
 }
 
 /**
- * Mutation hook to send a reaction to a message
+ * Mutation hook to toggle a reaction on a message
+ * Supports multiple reactions per user
  */
 export function useSendReaction() {
   const queryClient = useQueryClient()
@@ -56,12 +57,14 @@ export function useSendReaction() {
       channelId,
       messageId,
       emoji,
+      currentChosenEmojis,
     }: {
       channelId: number
       messageId: number
-      emoji: string | null
+      emoji: string
+      currentChosenEmojis: string[]
     }) => {
-      const result = await sendReaction(channelId, messageId, emoji)
+      const result = await sendReaction(channelId, messageId, emoji, currentChosenEmojis)
       return { channelId, messageId, reactions: result }
     },
     onSuccess: ({ channelId, messageId, reactions }) => {

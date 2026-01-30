@@ -1,6 +1,6 @@
 import { getTelegramClient, isClientReady } from './client'
 import { MEDIA_CACHE_MAX_SIZE } from '@/config/constants'
-import { get, set } from 'idb-keyval'
+import { get, set, del, keys } from 'idb-keyval'
 import type { Photo, Video, Document, Sticker, Audio, Voice } from '@mtcute/web'
 
 // Union type for media that supports thumbnails
@@ -765,4 +765,121 @@ function getMimeType(media: { type: string; mimeType?: string }): string {
     default:
       return 'application/octet-stream'
   }
+}
+
+// ============================================================================
+// FLOOD_WAIT Error Handling
+// ============================================================================
+
+/**
+ * Parse FLOOD_WAIT error and extract wait time
+ * Returns wait time in ms, or null if not a FLOOD_WAIT error
+ */
+export function parseFloodWait(error: unknown): number | null {
+  const message = error instanceof Error ? error.message : String(error)
+
+  // Match patterns like "FLOOD_WAIT_123" or "FLOOD_WAIT (123)"
+  const match = message.match(/FLOOD_WAIT[_\s(]+(\d+)/i)
+  if (match) {
+    const seconds = parseInt(match[1], 10)
+    // Cap at 60 seconds to prevent extremely long waits
+    return Math.min(seconds, 60) * 1000
+  }
+
+  return null
+}
+
+/**
+ * Execute an async operation with FLOOD_WAIT retry
+ */
+export async function withFloodRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries = 2
+): Promise<T> {
+  let lastError: unknown
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error
+      const waitMs = parseFloodWait(error)
+
+      if (waitMs !== null && attempt < maxRetries) {
+        if (import.meta.env.DEV) {
+          console.log(`[Media] FLOOD_WAIT: waiting ${waitMs}ms before retry`)
+        }
+        await new Promise((resolve) => setTimeout(resolve, waitMs))
+        continue
+      }
+
+      throw error
+    }
+  }
+
+  throw lastError
+}
+
+// ============================================================================
+// IndexedDB Cache Cleanup
+// ============================================================================
+
+const CLEANUP_INTERVAL_MS = 1000 * 60 * 60 // 1 hour
+let lastCleanupTime = 0
+
+/**
+ * Clean up expired entries from IndexedDB cache
+ * Runs automatically, at most once per hour
+ */
+export async function cleanupExpiredCache(): Promise<{ deleted: number }> {
+  const now = Date.now()
+
+  // Throttle cleanup to run at most once per hour
+  if (now - lastCleanupTime < CLEANUP_INTERVAL_MS) {
+    return { deleted: 0 }
+  }
+  lastCleanupTime = now
+
+  let deleted = 0
+
+  try {
+    const allKeys = await keys()
+
+    for (const key of allKeys) {
+      if (typeof key !== 'string') continue
+
+      // Check media cache entries
+      if (key.startsWith(MEDIA_CACHE_PREFIX)) {
+        const cached = await get<CachedMedia>(key)
+        if (cached && (now - cached.timestamp > MEDIA_CACHE_TTL || cached.version !== MEDIA_CACHE_VERSION)) {
+          await del(key)
+          deleted++
+        }
+      }
+
+      // Check profile photo cache entries
+      if (key.startsWith(PROFILE_CACHE_PREFIX)) {
+        const cached = await get<CachedProfilePhoto>(key)
+        if (cached && (now - cached.timestamp > PROFILE_CACHE_TTL || cached.version !== PROFILE_CACHE_VERSION)) {
+          await del(key)
+          deleted++
+        }
+      }
+    }
+
+    if (import.meta.env.DEV && deleted > 0) {
+      console.log(`[Media] Cleaned up ${deleted} expired cache entries`)
+    }
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn('[Media] Cache cleanup failed:', error)
+    }
+  }
+
+  return { deleted }
+}
+
+// Run cleanup on page load (after a delay to not block startup)
+if (typeof window !== 'undefined') {
+  setTimeout(cleanupExpiredCache, 10000)
 }
