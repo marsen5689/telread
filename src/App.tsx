@@ -205,9 +205,17 @@ export function App() {
       fallback={(err) => {
         console.error('[App] Error caught by boundary:', err)
         // On cleanNode errors during navigation, just redirect to home
-        if (err?.message?.includes("reading '24'") || err?.stack?.includes('cleanNode')) {
+        // Check for various manifestations of this SolidJS cleanup error
+        const isCleanNodeError =
+          err?.message?.includes("reading '24'") ||
+          err?.message?.includes("reading '") && err?.message?.includes("'") ||
+          err?.stack?.includes('cleanNode')
+
+        if (isCleanNodeError) {
+          // Redirect immediately - no flash
           window.location.replace('/')
-          return <></>
+          // Return minimal element to prevent further rendering
+          return <div style={{ display: 'none' }} />
         }
         // For other errors, show error state
         return (

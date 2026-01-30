@@ -1,4 +1,4 @@
-import { Index, Show, Switch, Match, createMemo, onCleanup, onMount } from 'solid-js'
+import { For, Show, createMemo, onCleanup, onMount } from 'solid-js'
 import { TimelinePost } from './TimelinePost'
 import { TimelineGroup } from './TimelineGroup'
 import { PostSkeleton } from '@/components/ui'
@@ -210,7 +210,7 @@ export function Timeline(props: TimelineProps) {
 
       {/* Loading skeleton - minimal for faster render */}
       <Show when={showSkeleton()}>
-        <Index each={[1, 2, 3]}>{() => <PostSkeleton />}</Index>
+        <For each={[1, 2, 3]}>{() => <PostSkeleton />}</For>
       </Show>
 
       {/* New posts button */}
@@ -227,18 +227,25 @@ export function Timeline(props: TimelineProps) {
       </Show>
 
       {/* Items list - handles both single posts and groups */}
-      <Index each={props.items ?? []}>
+      {/* Using For (tracks by reference) instead of Index (tracks by position) for stable cleanup */}
+      <For each={props.items ?? []}>
         {(item) => (
-          <Switch fallback={<></>}>
-            <Match when={item().type === 'single'}>
-              <SinglePostItem item={item() as { type: 'single'; post: any }} getChannel={getChannel} />
-            </Match>
-            <Match when={item().type === 'group'}>
-              <GroupPostItem item={item() as { type: 'group'; posts: any[]; groupedId: bigint }} getChannel={getChannel} />
-            </Match>
-          </Switch>
+          <Show
+            when={item.type === 'single'}
+            fallback={
+              <GroupPostItem
+                item={item as { type: 'group'; posts: any[]; groupedId: bigint }}
+                getChannel={getChannel}
+              />
+            }
+          >
+            <SinglePostItem
+              item={item as { type: 'single'; post: any }}
+              getChannel={getChannel}
+            />
+          </Show>
         )}
-      </Index>
+      </For>
 
       {/* Load more indicator */}
       <Show when={props.isLoadingMore}>
