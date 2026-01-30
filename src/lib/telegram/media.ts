@@ -152,39 +152,20 @@ export async function downloadProfilePhoto(
   const client = getTelegramClient()
 
   try {
-    let peer: { photo?: { small: unknown; big: unknown } | null } | null = null
+    // Resolve peer - could be channel/chat or user
+    const peer = await resolvePeerWithPhoto(client, peerId)
 
-    // Try to get as channel/chat first
-    try {
-      peer = await client.getChat(peerId)
-    } catch {
-      // Not a chat/channel, try as user
-      try {
-        const users = await client.getUsers([peerId])
-        if (users && users.length > 0) {
-          peer = users[0] as typeof peer
-        }
-      } catch {
-        // Failed to resolve peer
-        return null
-      }
-    }
-
-    if (!peer || !peer.photo) {
+    if (!peer?.photo) {
       return null
     }
 
-    // photo.small and photo.big return ChatPhotoSize (extends FileLocation)
     const photoLocation = size === 'big' ? peer.photo.big : peer.photo.small
-
     if (!photoLocation) {
       return null
     }
 
-    // Download the file location using downloadAsBuffer
-    const buffer = await client.downloadAsBuffer(photoLocation as Parameters<typeof client.downloadAsBuffer>[0])
-
-    if (!buffer || buffer.length === 0) {
+    const buffer = await client.downloadAsBuffer(photoLocation)
+    if (!buffer?.length) {
       return null
     }
 
@@ -192,10 +173,31 @@ export async function downloadProfilePhoto(
     const url = URL.createObjectURL(blob)
 
     mediaCache.set(cacheKey, url)
-
     return url
-  } catch (error) {
-    console.warn(`Failed to download profile photo for ${peerId}:`, error)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Resolve peer by ID - tries chat first, then user
+ */
+async function resolvePeerWithPhoto(
+  client: ReturnType<typeof getTelegramClient>,
+  peerId: number
+) {
+  // Try as channel/chat
+  try {
+    return await client.getChat(peerId)
+  } catch {
+    // Ignore - not a chat
+  }
+
+  // Try as user
+  try {
+    const users = await client.getUsers([peerId])
+    return users?.[0] ?? null
+  } catch {
     return null
   }
 }

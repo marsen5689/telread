@@ -136,11 +136,13 @@
      ═══════════════════════════════════════════════════════════════════════ */
 
   .actions-divider {
-    width: 1px;
-    height: 20px;
-    background: var(--nav-border);
-    margin: 0 4px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--color-text-tertiary);
+    margin: 0 6px;
     flex-shrink: 0;
+    opacity: 0.6;
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
