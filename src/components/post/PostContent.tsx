@@ -1,5 +1,4 @@
 import { For, createMemo } from 'solid-js'
-import type { JSX } from 'solid-js'
 import type { MessageEntity } from '@/lib/telegram'
 
 interface PostContentProps {
@@ -11,9 +10,120 @@ interface PostContentProps {
 }
 
 interface TextSegment {
-  start: number
-  end: number
+  text: string
   entities: MessageEntity[]
+}
+
+// Priority order for nesting (lower = outer)
+const PRIORITY: Record<string, number> = {
+  link: 0, mention: 1, hashtag: 2, email: 3, phone: 4,
+  spoiler: 5, pre: 6, code: 7, bold: 8, italic: 9,
+  underline: 10, strikethrough: 11,
+}
+
+/**
+ * Wrap text with a single entity type
+ * Uses plain JS switch instead of SolidJS Switch/Match for stability
+ */
+function EntityTag(props: { type: string; url?: string; text: string; children: any }) {
+  const { type, url, text, children } = props
+
+  switch (type) {
+    case 'bold':
+      return <strong class="font-semibold">{children}</strong>
+    case 'italic':
+      return <em class="italic">{children}</em>
+    case 'underline':
+      return <span class="underline">{children}</span>
+    case 'strikethrough':
+      return <span class="line-through">{children}</span>
+    case 'code':
+      return (
+        <code class="px-1.5 py-0.5 rounded bg-[var(--glass-bg)] font-mono text-sm text-accent">
+          {children}
+        </code>
+      )
+    case 'pre':
+      return (
+        <pre class="my-2 p-3 rounded-lg bg-[var(--glass-bg)] overflow-x-auto max-w-full">
+          <code class="font-mono text-sm">{children}</code>
+        </pre>
+      )
+    case 'link':
+      return (
+        <a href={url || '#'} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline transition-colors">
+          {children}
+        </a>
+      )
+    case 'mention':
+    case 'hashtag':
+      return <span class="text-accent cursor-pointer hover:underline">{children}</span>
+    case 'email':
+      return <a href={`mailto:${text}`} class="text-accent hover:underline">{children}</a>
+    case 'phone':
+      return <a href={`tel:${text}`} class="text-accent hover:underline">{children}</a>
+    case 'spoiler':
+      return (
+        <span
+          class="spoiler-hidden"
+          onClick={(e) => {
+            e.currentTarget.classList.remove('spoiler-hidden')
+            e.currentTarget.classList.add('spoiler-revealed')
+          }}
+        >
+          {children}
+        </span>
+      )
+    default:
+      return <>{children}</>
+  }
+}
+
+/**
+ * Renders a segment with entities applied
+ * Simple implementation without Switch/Match to avoid cleanup issues
+ */
+function SegmentRenderer(props: { segment: TextSegment }) {
+  const text = props.segment.text
+  const entities = props.segment.entities
+
+  // No entities - just text
+  if (entities.length === 0) {
+    return <>{text}</>
+  }
+
+  // Sort by priority
+  const sorted = [...entities].sort((a, b) => (PRIORITY[a.type] ?? 99) - (PRIORITY[b.type] ?? 99))
+
+  // Build nested structure based on count
+  if (sorted.length === 1) {
+    return (
+      <EntityTag type={sorted[0].type} url={sorted[0].url} text={text}>
+        {text}
+      </EntityTag>
+    )
+  }
+
+  if (sorted.length === 2) {
+    return (
+      <EntityTag type={sorted[0].type} url={sorted[0].url} text={text}>
+        <EntityTag type={sorted[1].type} url={sorted[1].url} text={text}>
+          {text}
+        </EntityTag>
+      </EntityTag>
+    )
+  }
+
+  // 3+ entities
+  return (
+    <EntityTag type={sorted[0].type} url={sorted[0].url} text={text}>
+      <EntityTag type={sorted[1].type} url={sorted[1].url} text={text}>
+        <EntityTag type={sorted[2].type} url={sorted[2].url} text={text}>
+          {text}
+        </EntityTag>
+      </EntityTag>
+    </EntityTag>
+  )
 }
 
 /**
@@ -23,161 +133,46 @@ interface TextSegment {
  * Uses interval-based algorithm to handle multiple formatting on same characters.
  */
 export function PostContent(props: PostContentProps) {
-  const segments = createMemo(() => {
-    if (!props.text) return []
-    if (!props.entities || props.entities.length === 0) {
-      return [{ start: 0, end: props.text.length, entities: [] as MessageEntity[] }]
+  const segments = createMemo((): TextSegment[] => {
+    const text = props.text
+    if (!text) return []
+
+    const entities = props.entities
+    if (!entities || entities.length === 0) {
+      return [{ text, entities: [] }]
     }
 
     // Collect all unique boundary points
-    const points = new Set<number>([0, props.text.length])
-    for (const entity of props.entities) {
-      points.add(entity.offset)
-      points.add(entity.offset + entity.length)
+    const points = new Set<number>([0, text.length])
+    for (const entity of entities) {
+      const start = Math.max(0, entity.offset)
+      const end = Math.min(text.length, entity.offset + entity.length)
+      if (start < end) {
+        points.add(start)
+        points.add(end)
+      }
     }
 
-    // Sort points
     const sortedPoints = [...points].sort((a, b) => a - b)
-
-    // Create segments between consecutive points
     const result: TextSegment[] = []
+
     for (let i = 0; i < sortedPoints.length - 1; i++) {
       const start = sortedPoints[i]
       const end = sortedPoints[i + 1]
-
       if (start >= end) continue
 
-      // Find all entities that cover this segment
-      const activeEntities = props.entities.filter(
-        (e) => e.offset <= start && e.offset + e.length >= end
-      )
+      const activeEntities = entities.filter((e) => {
+        const eStart = Math.max(0, e.offset)
+        const eEnd = Math.min(text.length, e.offset + e.length)
+        return eStart <= start && eEnd >= end
+      })
 
-      result.push({ start, end, entities: activeEntities })
+      result.push({ text: text.slice(start, end), entities: activeEntities })
     }
 
     return result
   })
 
-  // Wrap content with entity formatting (supports nesting)
-  const wrapWithEntities = (content: string, entities: MessageEntity[]): JSX.Element => {
-    if (entities.length === 0) {
-      return <>{content}</>
-    }
-
-    // Sort entities by priority for consistent nesting order
-    // Links should be outermost, then text styles
-    const priorityOrder: Record<string, number> = {
-      link: 0,
-      mention: 1,
-      hashtag: 2,
-      email: 3,
-      phone: 4,
-      spoiler: 5,
-      pre: 6,
-      code: 7,
-      bold: 8,
-      italic: 9,
-      underline: 10,
-      strikethrough: 11,
-    }
-
-    const sorted = [...entities].sort(
-      (a, b) => (priorityOrder[a.type] ?? 99) - (priorityOrder[b.type] ?? 99)
-    )
-
-    // Build nested structure from outside in
-    let result: JSX.Element = <>{content}</>
-
-    // Apply entities from innermost to outermost (reverse order)
-    for (let i = sorted.length - 1; i >= 0; i--) {
-      const entity = sorted[i]
-      result = wrapSingle(result, entity)
-    }
-
-    return result
-  }
-
-  const wrapSingle = (children: JSX.Element, entity: MessageEntity): JSX.Element => {
-    switch (entity.type) {
-      case 'bold':
-        return <strong class="font-semibold">{children}</strong>
-      case 'italic':
-        return <em class="italic">{children}</em>
-      case 'underline':
-        return <span class="underline">{children}</span>
-      case 'strikethrough':
-        return <span class="line-through">{children}</span>
-      case 'code':
-        return (
-          <code class="px-1.5 py-0.5 rounded bg-[var(--glass-bg)] font-mono text-sm text-accent">
-            {children}
-          </code>
-        )
-      case 'pre':
-        return (
-          <pre class="my-2 p-3 rounded-lg bg-[var(--glass-bg)] overflow-x-auto max-w-full">
-            <code class="font-mono text-sm">{children}</code>
-          </pre>
-        )
-      case 'link':
-        return (
-          <a
-            href={entity.url || '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-accent hover:underline transition-colors"
-          >
-            {children}
-          </a>
-        )
-      case 'mention':
-        return (
-          <span class="text-accent cursor-pointer hover:underline">
-            {children}
-          </span>
-        )
-      case 'hashtag':
-        return (
-          <span class="text-accent cursor-pointer hover:underline">
-            {children}
-          </span>
-        )
-      case 'email':
-        return (
-          <a
-            href={`mailto:${typeof children === 'string' ? children : ''}`}
-            class="text-accent hover:underline"
-          >
-            {children}
-          </a>
-        )
-      case 'phone':
-        return (
-          <a
-            href={`tel:${typeof children === 'string' ? children : ''}`}
-            class="text-accent hover:underline"
-          >
-            {children}
-          </a>
-        )
-      case 'spoiler':
-        return (
-          <span
-            class="spoiler-hidden"
-            onClick={(e) => {
-              e.currentTarget.classList.remove('spoiler-hidden')
-              e.currentTarget.classList.add('spoiler-revealed')
-            }}
-          >
-            {children}
-          </span>
-        )
-      default:
-        return <>{children}</>
-    }
-  }
-
-  // Use fixed line-clamp classes for Tailwind to generate
   const lineClampClass = () => {
     if (!props.truncate) return ''
     const lines = props.maxLines ?? 4
@@ -190,18 +185,9 @@ export function PostContent(props: PostContentProps) {
 
   return (
     <div
-      class={`
-        whitespace-pre-wrap break-words text-primary leading-relaxed
-        ${lineClampClass()}
-        ${props.class ?? ''}
-      `}
+      class={`whitespace-pre-wrap break-words text-primary leading-relaxed ${lineClampClass()} ${props.class ?? ''}`}
     >
-      <For each={segments()}>
-        {(segment) => {
-          const text = props.text.slice(segment.start, segment.end)
-          return wrapWithEntities(text, segment.entities)
-        }}
-      </For>
+      <For each={segments()}>{(segment) => <SegmentRenderer segment={segment} />}</For>
     </div>
   )
 }

@@ -1,8 +1,8 @@
 import { Router, Route, Navigate } from '@solidjs/router'
 import { QueryClientProvider } from '@tanstack/solid-query'
-import { Show, onMount, onCleanup, createEffect, on, type ParentProps } from 'solid-js'
+import { Show, onMount, onCleanup, createEffect, on, ErrorBoundary, type ParentProps } from 'solid-js'
 import { queryClient } from '@/lib/query'
-import { authStore } from '@/lib/store'
+import { authStore, clearPosts } from '@/lib/store'
 import {
   getTelegramClient,
   setClientReady,
@@ -94,7 +94,23 @@ function ChannelPage() {
   )
 }
 
+function ChannelByUsernamePage() {
+  return (
+    <ProtectedRoute>
+      <Channel />
+    </ProtectedRoute>
+  )
+}
+
 function PostPage() {
+  return (
+    <ProtectedRoute>
+      <Post />
+    </ProtectedRoute>
+  )
+}
+
+function PostByUsernamePage() {
   return (
     <ProtectedRoute>
       <Post />
@@ -173,6 +189,8 @@ export function App() {
           }
         } else {
           stopUpdatesListener()
+          // Clear posts store on logout to prevent stale data
+          clearPosts()
         }
       }
     )
@@ -183,18 +201,43 @@ export function App() {
   })
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Router>
-        <Route path="/login" component={Login} />
-        <Route path="/" component={HomePage} />
-        <Route path="/channels" component={ChannelsPage} />
-        <Route path="/channel/:id" component={ChannelPage} />
-        <Route path="/post/:channelId/:messageId" component={PostPage} />
-        <Route path="/bookmarks" component={BookmarksPage} />
-        <Route path="/settings" component={SettingsPage} />
-        <Route path="*" component={NotFound} />
-      </Router>
-    </QueryClientProvider>
+    <ErrorBoundary
+      fallback={(err) => {
+        console.error('[App] Error caught by boundary:', err)
+        // On cleanNode errors during navigation, just redirect to home
+        if (err?.message?.includes("reading '24'") || err?.stack?.includes('cleanNode')) {
+          window.location.replace('/')
+          return <></>
+        }
+        // For other errors, show error state
+        return (
+          <div class="min-h-screen flex flex-col items-center justify-center gap-4">
+            <p class="text-red-500">Something went wrong</p>
+            <button
+              class="px-4 py-2 bg-blue-500 text-white rounded"
+              onClick={() => window.location.replace('/')}
+            >
+              Go Home
+            </button>
+          </div>
+        )
+      }}
+    >
+      <QueryClientProvider client={queryClient}>
+        <Router>
+          <Route path="/login" component={Login} />
+          <Route path="/" component={HomePage} />
+          <Route path="/channels" component={ChannelsPage} />
+          <Route path="/channel/:id" component={ChannelPage} />
+          <Route path="/c/:username/:messageId" component={PostByUsernamePage} />
+          <Route path="/c/:username" component={ChannelByUsernamePage} />
+          <Route path="/post/:channelId/:messageId" component={PostPage} />
+          <Route path="/bookmarks" component={BookmarksPage} />
+          <Route path="/settings" component={SettingsPage} />
+          <Route path="*" component={NotFound} />
+        </Router>
+      </QueryClientProvider>
+    </ErrorBoundary>
   )
 }
 

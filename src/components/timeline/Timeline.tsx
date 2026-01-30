@@ -22,6 +22,49 @@ interface TimelineProps {
 }
 
 /**
+ * Helper component for single posts - avoids returning null directly
+ */
+function SinglePostItem(props: {
+  item: { type: 'single'; post: any }
+  getChannel: (id: number) => Channel | undefined
+}) {
+  const channel = () => props.getChannel(props.item.post.channelId)
+
+  return (
+    <Show when={channel()}>
+      <TimelinePost
+        post={props.item.post}
+        channelId={props.item.post.channelId}
+        channelTitle={channel()?.title ?? ''}
+        channelUsername={channel()?.username}
+      />
+    </Show>
+  )
+}
+
+/**
+ * Helper component for grouped posts - avoids returning null directly
+ */
+function GroupPostItem(props: {
+  item: { type: 'group'; posts: any[]; groupedId: bigint }
+  getChannel: (id: number) => Channel | undefined
+}) {
+  const primaryPost = () => props.item.posts.find((p: any) => p.text) || props.item.posts[0]
+  const channel = () => props.getChannel(primaryPost().channelId)
+
+  return (
+    <Show when={channel()}>
+      <TimelineGroup
+        posts={props.item.posts}
+        channelId={primaryPost().channelId}
+        channelTitle={channel()?.title ?? ''}
+        channelUsername={channel()?.username}
+      />
+    </Show>
+  )
+}
+
+/**
  * Find the nearest scrollable parent element
  */
 function getScrollParent(element: HTMLElement | null): HTMLElement | null {
@@ -186,37 +229,12 @@ export function Timeline(props: TimelineProps) {
       {/* Items list - handles both single posts and groups */}
       <Index each={props.items ?? []}>
         {(item) => (
-          <Switch>
-            <Match when={item().type === 'single' && item() as { type: 'single'; post: any }}>
-              {(singleItem) => {
-                const post = () => singleItem().post
-                const channel = () => getChannel(post().channelId)
-                return (
-                  <Show when={channel()}>
-                    <TimelinePost
-                      post={post()}
-                      channelId={post().channelId}
-                      channelTitle={channel()!.title}
-                    />
-                  </Show>
-                )
-              }}
+          <Switch fallback={<></>}>
+            <Match when={item().type === 'single'}>
+              <SinglePostItem item={item() as { type: 'single'; post: any }} getChannel={getChannel} />
             </Match>
-            <Match when={item().type === 'group' && item() as { type: 'group'; posts: any[]; groupedId: bigint }}>
-              {(groupItem) => {
-                const posts = () => groupItem().posts
-                const primaryPost = () => posts().find((p: any) => p.text) || posts()[0]
-                const channel = () => getChannel(primaryPost().channelId)
-                return (
-                  <Show when={channel()}>
-                    <TimelineGroup
-                      posts={posts()}
-                      channelId={primaryPost().channelId}
-                      channelTitle={channel()!.title}
-                    />
-                  </Show>
-                )
-              }}
+            <Match when={item().type === 'group'}>
+              <GroupPostItem item={item() as { type: 'group'; posts: any[]; groupedId: bigint }} getChannel={getChannel} />
             </Match>
           </Switch>
         )}

@@ -4,12 +4,16 @@ import { Motion } from 'solid-motionone'
 import { ChannelAvatar, PostSkeleton } from '@/components/ui'
 import { PostContent, PostMedia, PostActions, MediaGallery } from '@/components/post'
 import { CommentSection } from '@/components/comments'
-import { usePost, useChannel } from '@/lib/query'
+import { usePost, useChannel, useChannels } from '@/lib/query'
 import { postsState } from '@/lib/store'
 import type { Message } from '@/lib/telegram'
 
 /**
  * Post detail page with full content and comments
+ *
+ * Supports two URL formats:
+ * - /post/:channelId/:messageId - by numeric ID
+ * - /@:username/:messageId - by username
  *
  * Uses same layout as timeline - no card wrappers
  */
@@ -17,7 +21,25 @@ function Post() {
   const params = useParams()
   const navigate = useNavigate()
 
-  const channelId = () => parseInt(params.channelId ?? '0', 10)
+  const channelsQuery = useChannels()
+
+  // Resolve channel ID from either :channelId or :username param
+  const channelId = createMemo(() => {
+    // Direct ID from /post/:channelId/:messageId route
+    if (params.channelId) {
+      return parseInt(params.channelId, 10)
+    }
+    // Username from /@:username/:messageId route - look up in channels list
+    const username = params.username
+    if (username && channelsQuery.data) {
+      const found = channelsQuery.data.find(
+        (c) => c.username?.toLowerCase() === username.toLowerCase()
+      )
+      return found?.id ?? 0
+    }
+    return 0
+  })
+
   const messageId = () => parseInt(params.messageId ?? '0', 10)
 
   const postQuery = usePost(channelId, messageId)
@@ -68,7 +90,12 @@ function Post() {
   }
 
   const handleChannelClick = () => {
-    navigate(`/channel/${channelId()}`)
+    const channel = channelQuery.data
+    if (channel?.username) {
+      navigate(`/c/${channel.username}`)
+    } else {
+      navigate(`/channel/${channelId()}`)
+    }
   }
 
   return (

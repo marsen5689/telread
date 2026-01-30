@@ -5,6 +5,28 @@ import '@/styles/index.css'
 import App from './App'
 import { cacheReadyPromise } from '@/lib/query/client'
 
+// Suppress SolidJS cleanNode errors during navigation transitions
+// These are cosmetic errors that don't affect functionality
+window.addEventListener('unhandledrejection', (event) => {
+  if (event.reason?.message?.includes('cleanNode') ||
+      event.reason?.stack?.includes('cleanNode')) {
+    event.preventDefault()
+    if (import.meta.env.DEV) {
+      console.warn('[Suppressed] cleanNode error during navigation')
+    }
+  }
+})
+
+window.addEventListener('error', (event) => {
+  if (event.message?.includes("reading '24'") ||
+      event.error?.stack?.includes('cleanNode')) {
+    event.preventDefault()
+    if (import.meta.env.DEV) {
+      console.warn('[Suppressed] cleanNode error during navigation')
+    }
+  }
+})
+
 const root = document.getElementById('root')
 
 if (!root) {

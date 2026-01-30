@@ -336,6 +336,7 @@ export function usePostsStore() {
 
 /**
  * Clear all posts (for logout)
+ * Also resets isInitialized so updates will be queued until timeline loads again
  */
 export function clearPosts(): void {
   setState({
@@ -343,5 +344,6 @@ export function clearPosts(): void {
     sortedKeys: [],
     pendingKeys: [],
     lastUpdated: Date.now(),
+    isInitialized: false,
   })
 }

@@ -1,7 +1,7 @@
 import { useNavigate } from '@solidjs/router'
 import { AuthFlow } from '@/components/auth'
 import { authStore } from '@/lib/store'
-import { getTelegramClient, setClientReady } from '@/lib/telegram'
+import { getTelegramClient, setClientReady, startUpdatesListener } from '@/lib/telegram'
 
 /**
  * Login page wrapper
@@ -18,6 +18,10 @@ function Login() {
 
     // Mark client as ready for API calls
     setClientReady(true)
+
+    // IMPORTANT: Register handlers BEFORE starting updates loop
+    // This ensures we don't miss any updates that arrive immediately
+    startUpdatesListener()
 
     // Start updates loop (non-blocking)
     client.startUpdatesLoop().catch(console.error)

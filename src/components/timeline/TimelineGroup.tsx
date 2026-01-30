@@ -9,6 +9,8 @@ interface TimelineGroupProps {
   posts: Message[]
   channelTitle: string
   channelId: number
+  /** Channel username for pretty URLs (e.g., /@username) */
+  channelUsername?: string
 }
 
 /**
@@ -34,14 +36,24 @@ export function TimelineGroup(props: TimelineGroupProps) {
       }))
   )
 
-  const handlePostClick = () => {
+  // Generate URLs - prefer username for pretty URLs
+  const channelUrl = () =>
+    props.channelUsername ? `/c/${props.channelUsername}` : `/channel/${props.channelId}`
+
+  const postUrl = () => {
     const post = primaryPost()
-    navigate(`/post/${post.channelId}/${post.id}`)
+    return props.channelUsername
+      ? `/c/${props.channelUsername}/${post.id}`
+      : `/post/${post.channelId}/${post.id}`
+  }
+
+  const handlePostClick = () => {
+    navigate(postUrl())
   }
 
   const handleChannelClick = (e: Event) => {
     e.stopPropagation()
-    navigate(`/channel/${props.channelId}`)
+    navigate(channelUrl())
   }
 
   const timeAgo = () => formatTimeAgo(primaryPost().date)

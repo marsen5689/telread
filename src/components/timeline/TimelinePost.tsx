@@ -9,6 +9,8 @@ interface TimelinePostProps {
   post: Message
   channelTitle: string
   channelId: number
+  /** Channel username for pretty URLs (e.g., /@username) */
+  channelUsername?: string
   style?: Record<string, string>
   onCommentClick?: () => void
 }
@@ -25,13 +27,22 @@ const TRUNCATE_THRESHOLD = 280
 export function TimelinePost(props: TimelinePostProps) {
   const navigate = useNavigate()
 
+  // Generate URLs - prefer username for pretty URLs
+  const channelUrl = () =>
+    props.channelUsername ? `/c/${props.channelUsername}` : `/channel/${props.channelId}`
+
+  const postUrl = () =>
+    props.channelUsername
+      ? `/c/${props.channelUsername}/${props.post.id}`
+      : `/post/${props.post.channelId}/${props.post.id}`
+
   const handlePostClick = () => {
-    navigate(`/post/${props.post.channelId}/${props.post.id}`)
+    navigate(postUrl())
   }
 
   const handleChannelClick = (e: Event) => {
     e.stopPropagation()
-    navigate(`/channel/${props.post.channelId}`)
+    navigate(channelUrl())
   }
 
   const timeAgo = () => formatTimeAgo(props.post.date)

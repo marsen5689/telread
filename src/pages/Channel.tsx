@@ -9,6 +9,10 @@ import { groupPostsByMediaGroup } from '@/lib/utils'
 /**
  * Channel page - Shows all posts from a single channel
  *
+ * Supports two URL formats:
+ * - /channel/:id - by numeric ID
+ * - /@:username - by username
+ *
  * Features a Twitter-style profile card with glassmorphism design
  * showing full channel info (description, stats, badges).
  */
@@ -16,9 +20,25 @@ function Channel() {
   const params = useParams()
   const navigate = useNavigate()
 
-  const channelId = () => parseInt(params.id ?? '0', 10)
-
   const channelsQuery = useChannels()
+
+  // Resolve channel ID from either :id or :username param
+  const channelId = createMemo(() => {
+    // Direct ID from /channel/:id route
+    if (params.id) {
+      return parseInt(params.id, 10)
+    }
+    // Username from /@:username route - look up in channels list
+    const username = params.username
+    if (username && channelsQuery.data) {
+      const found = channelsQuery.data.find(
+        (c) => c.username?.toLowerCase() === username.toLowerCase()
+      )
+      return found?.id ?? 0
+    }
+    return 0
+  })
+
   const channelInfoQuery = useChannelInfo(channelId)
   const messagesQuery = useMessages(channelId)
   const leaveMutation = useLeaveChannel()
