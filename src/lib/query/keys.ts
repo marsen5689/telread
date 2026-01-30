@@ -11,6 +11,7 @@ export const queryKeys = {
     list: () => [...queryKeys.channels.all, 'list'] as const,
     detail: (id: number) => [...queryKeys.channels.all, 'detail', id] as const,
     fullInfo: (id: number) => [...queryKeys.channels.all, 'fullInfo', id] as const,
+    resolve: (idOrUsername: string) => [...queryKeys.channels.all, 'resolve', idOrUsername] as const,
   },
 
   // Messages/Posts

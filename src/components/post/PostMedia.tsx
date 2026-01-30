@@ -1,6 +1,5 @@
-import { createSignal, Show, Match, Switch, For, onCleanup, onMount, createEffect, createMemo } from 'solid-js'
+import { createSignal, Show, Match, Switch, For, onCleanup, onMount, createMemo } from 'solid-js'
 import { Motion } from 'solid-motionone'
-import { downloadMedia, getCachedMedia, isClientReady } from '@/lib/telegram'
 import { DEFAULT_ASPECT_RATIO } from '@/config/constants'
 import type { MessageMedia } from '@/lib/telegram'
 import { useMedia } from '@/lib/query'
@@ -16,38 +15,26 @@ interface PostMediaProps {
 /**
  * Renders post media (photos, videos, documents)
  * Uses Intersection Observer for lazy loading - only loads when visible
+ * 
+ * Uses useMedia hook which handles:
+ * - Caching (RAM -> IndexedDB -> API)
+ * - Client readiness
+ * - Automatic cleanup on unmount
  */
 export function PostMedia(props: PostMediaProps) {
   const [isExpanded, setIsExpanded] = createSignal(false)
-  const [thumbnailUrl, setThumbnailUrl] = createSignal<string | null>(null)
-  const [hasStartedLoading, setHasStartedLoading] = createSignal(false)
-
+  const [isVisible, setIsVisible] = createSignal(false)
+  
   let observer: IntersectionObserver | undefined
-  let isMounted = true
-  let containerRef: HTMLDivElement | undefined
 
-  // Create a key that changes when post changes (for tracking)
-  const postKey = createMemo(() => `${props.channelId}:${props.messageId}`)
-
-  // Reset state when post changes (fixes Index keying issue)
-  createEffect(() => {
-    // Track the post key
-    postKey()
-
-    // Reset loading state
-    setThumbnailUrl(null)
-    setHasStartedLoading(false)
-
-    // Re-check if element is visible and should load
-    if (containerRef && isMounted) {
-      const rect = containerRef.getBoundingClientRect()
-      const isVisible = rect.top < window.innerHeight + 400
-      if (isVisible) {
-        setHasStartedLoading(true)
-        loadMedia()
-      }
-    }
-  })
+  // Use query hook - handles all async/cleanup automatically
+  // Only fetches when visible (enabled signal)
+  const mediaQuery = useMedia(
+    () => props.channelId,
+    () => props.messageId,
+    () => 'large',
+    isVisible
+  )
 
   // Memoized aspect ratio calculation
   const aspectRatio = createMemo(() => {
@@ -66,13 +53,13 @@ export function PostMedia(props: PostMediaProps) {
 
   // Setup Intersection Observer for lazy loading
   const setupObserver = (el: HTMLDivElement) => {
-    containerRef = el
     observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting && !hasStartedLoading()) {
-          setHasStartedLoading(true)
-          loadMedia()
-          observer?.disconnect()
+        // Check observer still exists (not cleaned up)
+        if (entries[0]?.isIntersecting && observer) {
+          observer.disconnect()
+          observer = undefined
+          setIsVisible(true)
         }
       },
       {
@@ -83,56 +70,6 @@ export function PostMedia(props: PostMediaProps) {
     observer.observe(el)
   }
 
-  // Track if we're waiting for client to become ready
-  const [waitingForClient, setWaitingForClient] = createSignal(false)
-
-  // Retry loading when client becomes ready
-  createEffect(() => {
-    if (isClientReady() && waitingForClient() && !thumbnailUrl()) {
-      setWaitingForClient(false)
-      loadMedia()
-    }
-  })
-
-  // Load media when visible (with unmount protection)
-  const loadMedia = async () => {
-    // Capture current props at call time
-    const channelId = props.channelId
-    const messageId = props.messageId
-
-    // Check cache first (works without client)
-    const cached = getCachedMedia(channelId, messageId, 'large')
-    if (cached) {
-      // Verify props haven't changed during async operation
-      if (isMounted && props.channelId === channelId && props.messageId === messageId) {
-        setThumbnailUrl(cached)
-      }
-      return
-    }
-
-    // Wait for client to be ready before downloading
-    if (!isClientReady()) {
-      // Verify props haven't changed before setting waiting state
-      if (isMounted && props.channelId === channelId && props.messageId === messageId) {
-        setWaitingForClient(true)
-      }
-      return
-    }
-
-    try {
-      const url = await downloadMedia(channelId, messageId, 'large')
-      // Verify props haven't changed during async operation
-      if (isMounted && props.channelId === channelId && props.messageId === messageId) {
-        setThumbnailUrl(url)
-      }
-    } catch (error) {
-      // Silently fail - skeleton will remain visible
-      if (import.meta.env.DEV) {
-        console.warn('[PostMedia] Failed to load:', messageId, error)
-      }
-    }
-  }
-
   // Handle keyboard interaction for accessibility
   const handleImageKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -141,10 +78,10 @@ export function PostMedia(props: PostMediaProps) {
     }
   }
 
-  // Cleanup
+  // Cleanup observer on unmount
   onCleanup(() => {
-    isMounted = false
     observer?.disconnect()
+    observer = undefined
   })
 
   return (
@@ -154,7 +91,7 @@ export function PostMedia(props: PostMediaProps) {
         <Match when={props.media.type === 'photo'}>
           <div class="relative w-full" style={containerStyle()}>
             <Show
-              when={thumbnailUrl()}
+              when={mediaQuery.data}
               fallback={<div class="absolute inset-0 skeleton rounded-none" />}
             >
               {(url) => (
@@ -176,7 +113,7 @@ export function PostMedia(props: PostMediaProps) {
         <Match when={props.media.type === 'video' || props.media.type === 'animation'}>
           <div class="relative w-full" style={containerStyle()}>
             <Show
-              when={thumbnailUrl()}
+              when={mediaQuery.data}
               fallback={<div class="absolute inset-0 skeleton rounded-none" />}
             >
               {(url) => (
@@ -254,7 +191,7 @@ export function PostMedia(props: PostMediaProps) {
         <Match when={props.media.type === 'sticker'}>
           <div class="w-32 h-32">
             <Show
-              when={thumbnailUrl()}
+              when={mediaQuery.data}
               fallback={<Skeleton class="w-full h-full" rounded="lg" />}
             >
               {(url) => (
@@ -469,14 +406,16 @@ export function PostMedia(props: PostMediaProps) {
             rel="noopener noreferrer"
             class="glass rounded-xl overflow-hidden block hover:bg-[var(--bg-secondary)] transition-colors"
           >
-            <Show when={props.media.webpagePhoto && thumbnailUrl()}>
-              <div class="relative w-full" style={{ 'aspect-ratio': '1.91' }}>
-                <img
-                  src={thumbnailUrl()!}
-                  alt=""
-                  class="w-full h-full object-cover"
-                />
-              </div>
+            <Show when={props.media.webpagePhoto && mediaQuery.data}>
+              {(url) => (
+                <div class="relative w-full" style={{ 'aspect-ratio': '1.91' }}>
+                  <img
+                    src={url()}
+                    alt=""
+                    class="w-full h-full object-cover"
+                  />
+                </div>
+              )}
             </Show>
             <div class="p-4">
               <Show when={props.media.webpageSiteName}>
@@ -521,7 +460,7 @@ function MediaModal(props: {
   media: MessageMedia
   onClose: () => void
 }) {
-  // Load full resolution
+  // Load full resolution - query handles cleanup automatically
   const fullQuery = useMedia(
     () => props.channelId,
     () => props.messageId,

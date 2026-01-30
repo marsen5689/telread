@@ -27,14 +27,16 @@ const TRUNCATE_THRESHOLD = 280
 export function TimelinePost(props: TimelinePostProps) {
   const navigate = useNavigate()
 
-  // Generate URLs - prefer username for pretty URLs
-  const channelUrl = () =>
+  // Generate URLs - prefer username for pretty URLs (memoized)
+  const channelUrl = createMemo(() =>
     props.channelUsername ? `/c/${props.channelUsername}` : `/channel/${props.channelId}`
+  )
 
-  const postUrl = () =>
+  const postUrl = createMemo(() =>
     props.channelUsername
       ? `/c/${props.channelUsername}/${props.post.id}`
       : `/post/${props.post.channelId}/${props.post.id}`
+  )
 
   const handlePostClick = () => {
     navigate(postUrl())

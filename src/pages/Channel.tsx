@@ -3,7 +3,7 @@ import { createMemo, Show } from 'solid-js'
 import { Timeline } from '@/components/timeline'
 import { ChannelCard } from '@/components/channel'
 import { Skeleton } from '@/components/ui'
-import { useChannels, useChannelInfo, useMessages, useLeaveChannel } from '@/lib/query'
+import { useResolveChannel, useChannelInfo, useMessages, useLeaveChannel } from '@/lib/query'
 import { groupPostsByMediaGroup } from '@/lib/utils'
 
 /**
@@ -20,32 +20,30 @@ function Channel() {
   const params = useParams()
   const navigate = useNavigate()
 
-  const channelsQuery = useChannels()
-
-  // Resolve channel ID from either :id or :username param
-  const channelId = createMemo(() => {
-    // Direct ID from /channel/:id route
-    if (params.id) {
-      return parseInt(params.id, 10)
+  // Resolve channel from ID or username param
+  // Checks cache first, then fetches from API
+  const idOrUsername = createMemo(() => {
+    const value = params.id ? parseInt(params.id, 10) : params.username
+    if (import.meta.env.DEV) {
+      console.log('[Channel] idOrUsername:', value, 'params:', params)
     }
-    // Username from /@:username route - look up in channels list
-    const username = params.username
-    if (username && channelsQuery.data) {
-      const found = channelsQuery.data.find(
-        (c) => c.username?.toLowerCase() === username.toLowerCase()
-      )
-      return found?.id ?? 0
-    }
-    return 0
+    return value
   })
+
+  const resolvedChannel = useResolveChannel(idOrUsername)
+  const channelId = resolvedChannel.channelId
+
+  if (import.meta.env.DEV) {
+    console.log('[Channel] resolvedChannel status:', resolvedChannel.status, 'channelId:', channelId())
+  }
 
   const channelInfoQuery = useChannelInfo(channelId)
   const messagesQuery = useMessages(channelId)
   const leaveMutation = useLeaveChannel()
 
-  // Use full info if available, fallback to basic channel data
+  // Use full info if available, fallback to resolved channel
   const channel = createMemo(() =>
-    channelInfoQuery.data ?? channelsQuery.data?.find((c) => c.id === channelId())
+    channelInfoQuery.data ?? resolvedChannel.data
   )
 
   const handleLeave = async () => {

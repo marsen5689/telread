@@ -1,4 +1,5 @@
 import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query'
+import { createMemo } from 'solid-js'
 import {
   fetchChannels,
   joinChannel,
@@ -107,4 +108,61 @@ export function useChannelInfo(channelId: () => number) {
     gcTime: 1000 * 60 * 60, // 1 hour in cache
     refetchOnMount: false, // Use cache if available
   }))
+}
+
+/**
+ * Hook to resolve channel by ID or username
+ * 
+ * First checks cached channels list, then fetches from API if not found.
+ * Returns channel with ID that can be used by other hooks.
+ */
+export function useResolveChannel(idOrUsername: () => string | number | undefined) {
+  const queryClient = useQueryClient()
+
+  const query = createQuery(() => {
+    const value = idOrUsername()
+    if (import.meta.env.DEV) {
+      console.log('[useResolveChannel] createQuery - value:', value, 'enabled:', !!value)
+    }
+    return {
+      queryKey: queryKeys.channels.resolve(String(value ?? '')),
+      queryFn: async (): Promise<Channel | null> => {
+        if (import.meta.env.DEV) {
+          console.log('[useResolveChannel] queryFn executing for:', value)
+        }
+        if (!value) return null
+
+        // Check subscribed channels cache first
+        const cached = queryClient.getQueryData<Channel[]>(queryKeys.channels.list())
+        
+        if (typeof value === 'number') {
+          const found = cached?.find((c) => c.id === value)
+          if (found) {
+            if (import.meta.env.DEV) console.log('[useResolveChannel] Found in cache by id')
+            return found
+          }
+        } else {
+          const found = cached?.find((c) => c.username?.toLowerCase() === value.toLowerCase())
+          if (found) {
+            if (import.meta.env.DEV) console.log('[useResolveChannel] Found in cache by username')
+            return found
+          }
+        }
+
+        // Not in subscriptions - fetch from API
+        if (import.meta.env.DEV) console.log('[useResolveChannel] Fetching from API...')
+        const result = await getChannel(value)
+        if (import.meta.env.DEV) console.log('[useResolveChannel] API result:', result?.id, result?.title)
+        return result
+      },
+      enabled: !!value,
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 60 * 24,
+    }
+  })
+
+  // Reactive channelId for dependent queries
+  const channelId = createMemo(() => query.data?.id ?? 0)
+
+  return { ...query, channelId }
 }

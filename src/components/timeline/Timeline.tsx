@@ -88,13 +88,16 @@ function getScrollParent(element: HTMLElement | null): HTMLElement | null {
 /**
  * Timeline feed component with infinite scroll
  *
- * Uses Index instead of For - Index tracks by index position,
- * so when array changes, only changed indices re-render.
+ * Uses For with keyed items for efficient updates.
  * Scroll events are handled on the nearest scrollable parent.
  */
 export function Timeline(props: TimelineProps) {
   let containerRef: HTMLDivElement | undefined
   let scrollParent: HTMLElement | null = null
+  let throttleTimer: ReturnType<typeof setTimeout> | null = null
+  let restoreTimer: ReturnType<typeof setTimeout> | null = null
+  let rafId: number | null = null
+  let ticking = false
 
   // Incremental rendering - start with few items, render more on scroll
   const [renderCount, setRenderCount] = createSignal(INITIAL_RENDER_COUNT)
@@ -121,10 +124,6 @@ export function Timeline(props: TimelineProps) {
     return map
   })
 
-  // Throttle state with proper cleanup
-  let ticking = false
-  let throttleTimer: ReturnType<typeof setTimeout> | null = null
-
   // Scroll position storage key
   const getScrollKey = () => props.scrollKey ? `timeline-scroll:${props.scrollKey}` : null
 
@@ -145,7 +144,8 @@ export function Timeline(props: TimelineProps) {
         const scrollTop = parseInt(saved, 10)
         if (!isNaN(scrollTop)) {
           // Use requestAnimationFrame to ensure content is rendered
-          requestAnimationFrame(() => {
+          rafId = requestAnimationFrame(() => {
+            rafId = null
             scrollParent?.scrollTo({ top: scrollTop })
           })
         }
@@ -154,27 +154,26 @@ export function Timeline(props: TimelineProps) {
   }
 
   const handleScroll = () => {
+    // Guard: if scrollParent is null, we've been cleaned up
     if (!scrollParent) return
 
     const scrollTop = scrollParent.scrollTop
     const scrollHeight = scrollParent.scrollHeight
     const clientHeight = scrollParent.clientHeight
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
 
-    // Save scroll position periodically (debounced by throttle)
-    if (props.scrollKey && !ticking) {
+    // Save scroll position periodically
+    if (props.scrollKey) {
       saveScrollPosition()
     }
 
-    if (ticking) return
-
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-
-    // First, render more items if we have them (faster than API call)
+    // Incremental rendering - NOT throttled (fast, no API call)
     if (distanceFromBottom < INFINITE_SCROLL_THRESHOLD && hasMoreToRender()) {
-      setRenderCount(prev => prev + RENDER_BATCH_SIZE)
+      setRenderCount(prev => Math.min(prev + RENDER_BATCH_SIZE, (props.items?.length ?? 0)))
     }
     
-    // Then, load more from API if needed
+    // API calls - throttled to prevent spam
+    if (ticking) return
     if (distanceFromBottom < INFINITE_SCROLL_THRESHOLD && !props.isLoadingMore && props.hasMore && !hasMoreToRender()) {
       ticking = true
       props.onLoadMore()
@@ -192,19 +191,32 @@ export function Timeline(props: TimelineProps) {
     if (scrollParent) {
       scrollParent.addEventListener('scroll', handleScroll, { passive: true })
       // Wait for content to be ready then restore position
-      setTimeout(restoreScrollPosition, 50)
+      restoreTimer = setTimeout(restoreScrollPosition, 50)
     }
   })
 
   // Cleanup on unmount
   onCleanup(() => {
     saveScrollPosition()
+    
     if (scrollParent) {
       scrollParent.removeEventListener('scroll', handleScroll)
+      scrollParent = null // Clear reference to guard handleScroll
     }
+    
     if (throttleTimer) {
       clearTimeout(throttleTimer)
       throttleTimer = null
+    }
+    
+    if (restoreTimer) {
+      clearTimeout(restoreTimer)
+      restoreTimer = null
+    }
+    
+    if (rafId) {
+      cancelAnimationFrame(rafId)
+      rafId = null
     }
   })
 

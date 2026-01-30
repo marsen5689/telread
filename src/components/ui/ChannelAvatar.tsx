@@ -17,12 +17,19 @@ interface ChannelAvatarProps {
  * - Cached photos load instantly from IndexedDB
  * - Multiple avatars for same channel share one request
  * - Falls back to initials-based avatar while loading or if no photo exists
+ * 
+ * Uses useProfilePhoto query hook which handles:
+ * - Automatic cleanup on unmount
+ * - Caching (RAM -> IndexedDB -> API)
+ * - Request deduplication
  */
 export function ChannelAvatar(props: ChannelAvatarProps) {
   let containerRef: HTMLDivElement | undefined
+  let observer: IntersectionObserver | undefined
   const [isVisible, setIsVisible] = createSignal(false)
 
   // Lazy load - only fetch when visible
+  // Query hook handles cleanup automatically
   const photoQuery = useProfilePhoto(
     () => props.channelId,
     'small',
@@ -32,18 +39,24 @@ export function ChannelAvatar(props: ChannelAvatarProps) {
   onMount(() => {
     if (!containerRef) return
 
-    const observer = new IntersectionObserver(
+    observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
+        // Check observer still exists (not cleaned up)
+        if (entries[0]?.isIntersecting && observer) {
+          observer.disconnect()
+          observer = undefined
           setIsVisible(true)
-          observer.disconnect() // Stop observing once visible
         }
       },
       { rootMargin: '100px' } // Start loading 100px before visible
     )
 
     observer.observe(containerRef)
-    onCleanup(() => observer.disconnect())
+  })
+
+  onCleanup(() => {
+    observer?.disconnect()
+    observer = undefined
   })
 
   return (

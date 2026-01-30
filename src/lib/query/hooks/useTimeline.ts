@@ -20,44 +20,30 @@ import { queryClient } from '../client'
 
 /**
  * Hook to fetch messages from a single channel
- * Now also populates the centralized posts store
+ * 
+ * Simple and clean - just TanStack Query with postsState sync for timeline integration
  */
 export function useMessages(channelId: () => number, enabled?: () => boolean) {
   const query = createQuery(() => ({
     queryKey: queryKeys.messages.list(channelId()),
     queryFn: async () => {
       const messages = await fetchMessages(channelId(), { limit: 50 })
-      // Populate centralized store
+      // Sync to centralized store for timeline
       upsertPosts(messages)
       return messages
     },
-    enabled: enabled?.() ?? true,
-    staleTime: 1000 * 60 * 30, // 30 min - real-time updates handle new posts
-    refetchOnMount: false, // Use postsState if available
+    enabled: (enabled?.() ?? true) && channelId() !== 0,
+    staleTime: 1000 * 60 * 5, // 5 min
   }))
 
-  // Memoized channel posts - only recalculates when sortedKeys change
-  // Individual post updates are handled by component-level reactivity
-  const channelPosts = createMemo(() => {
-    const cid = channelId()
-    // Track sortedKeys for list changes (posts added/removed)
-    const keys = postsState.sortedKeys
-    // untrack byId access - we only need the list, not individual post changes
-    return untrack(() =>
-      keys
-        .map((key) => postsState.byId[key])
-        .filter((post): post is Message => post?.channelId === cid)
-    )
-  })
+  // Sync cached data to postsState on restore
+  createEffect(
+    on(() => query.data, (data) => {
+      if (data?.length) upsertPosts(data)
+    }, { defer: false })
+  )
 
-  // Return posts from centralized store for this channel
-  return {
-    ...query,
-    // Override data to come from centralized store
-    get data() {
-      return channelPosts()
-    },
-  }
+  return query
 }
 
 /**
@@ -71,7 +57,6 @@ export function useInfiniteMessages(channelId: () => number) {
         limit: 20,
         offsetId: pageParam,
       })
-      // Populate centralized store
       upsertPosts(messages)
       return messages
     },
@@ -80,29 +65,18 @@ export function useInfiniteMessages(channelId: () => number) {
       if (lastPage.length < 20) return undefined
       return lastPage[lastPage.length - 1]?.id
     },
+    enabled: channelId() !== 0,
     staleTime: 1000 * 60 * 5,
   }))
 
-  // Memoized channel posts - only recalculates when sortedKeys change
-  const channelPosts = createMemo(() => {
-    const cid = channelId()
-    // Track sortedKeys for list changes (posts added/removed)
-    const keys = postsState.sortedKeys
-    // untrack byId access - we only need the list, not individual post changes
-    return untrack(() =>
-      keys
-        .map((key) => postsState.byId[key])
-        .filter((post): post is Message => post?.channelId === cid)
-    )
-  })
+  // Sync cached pages to postsState
+  createEffect(
+    on(() => query.data?.pages, (pages) => {
+      if (pages?.length) upsertPosts(pages.flat())
+    }, { defer: false })
+  )
 
-  // Return posts from centralized store
-  return {
-    ...query,
-    get data() {
-      return { pages: [channelPosts()] }
-    },
-  }
+  return query
 }
 
 /**

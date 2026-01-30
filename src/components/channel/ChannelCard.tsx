@@ -1,4 +1,4 @@
-import { Show, createMemo, createResource, createSignal, createEffect } from 'solid-js'
+import { Show, createMemo, createResource, createSignal, createEffect, onCleanup } from 'solid-js'
 import { ChannelAvatar, GlassButton } from '@/components/ui'
 import { downloadProfilePhoto, isClientReady } from '@/lib/telegram'
 import type { ChannelFullInfo } from '@/lib/telegram'
@@ -121,7 +121,11 @@ export function ChannelCard(props: ChannelCardProps) {
   createEffect(() => {
     const url = bannerUrl()
     if (url) {
-      extractDominantColor(url).then(setDominantColor)
+      let cancelled = false
+      extractDominantColor(url).then((color) => {
+        if (!cancelled) setDominantColor(color)
+      })
+      onCleanup(() => { cancelled = true })
     }
   })
 

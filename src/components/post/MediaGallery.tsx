@@ -1,6 +1,5 @@
-import { For, Show, createSignal, createMemo, onCleanup, onMount, createEffect } from 'solid-js'
+import { For, Show, createSignal, createMemo, onCleanup, onMount } from 'solid-js'
 import { Motion } from 'solid-motionone'
-import { downloadMedia, getCachedMedia, isClientReady } from '@/lib/telegram'
 import { useMedia } from '@/lib/query'
 import type { MessageMedia } from '@/lib/telegram'
 
@@ -74,87 +73,32 @@ export function MediaGallery(props: MediaGalleryProps) {
 
 /**
  * Single item in the gallery grid
+ * Uses useMedia hook for automatic cleanup and caching
  */
 function GalleryItem(props: {
   item: MediaItem
   class?: string
   onClick: () => void
 }) {
-  const [thumbnailUrl, setThumbnailUrl] = createSignal<string | null>(null)
-  const [hasStartedLoading, setHasStartedLoading] = createSignal(false)
-  const [waitingForClient, setWaitingForClient] = createSignal(false)
-
+  const [isVisible, setIsVisible] = createSignal(false)
   let observer: IntersectionObserver | undefined
-  let containerRef: HTMLDivElement | undefined
-  let isMounted = true
 
-  // Create key for tracking prop changes
-  const itemKey = createMemo(() => `${props.item.channelId}:${props.item.messageId}`)
-
-  // Reset when item changes
-  createEffect(() => {
-    itemKey()
-    setThumbnailUrl(null)
-    setHasStartedLoading(false)
-    setWaitingForClient(false)
-
-    if (containerRef && isMounted) {
-      const rect = containerRef.getBoundingClientRect()
-      const isVisible = rect.top < window.innerHeight + 400
-      if (isVisible) {
-        setHasStartedLoading(true)
-        loadMedia()
-      }
-    }
-  })
-
-  // Retry loading when client becomes ready
-  createEffect(() => {
-    if (isClientReady() && waitingForClient() && !thumbnailUrl()) {
-      setWaitingForClient(false)
-      loadMedia()
-    }
-  })
-
-  const loadMedia = async () => {
-    const { channelId, messageId } = props.item
-
-    // Check cache first (works without client)
-    const cached = getCachedMedia(channelId, messageId, 'large')
-    if (cached) {
-      if (isMounted && props.item.channelId === channelId && props.item.messageId === messageId) {
-        setThumbnailUrl(cached)
-      }
-      return
-    }
-
-    // Wait for client to be ready before downloading
-    if (!isClientReady()) {
-      // Verify props haven't changed before setting waiting state
-      if (isMounted && props.item.channelId === channelId && props.item.messageId === messageId) {
-        setWaitingForClient(true)
-      }
-      return
-    }
-
-    try {
-      const url = await downloadMedia(channelId, messageId, 'large')
-      if (isMounted && props.item.channelId === channelId && props.item.messageId === messageId) {
-        setThumbnailUrl(url)
-      }
-    } catch {
-      // Silently fail
-    }
-  }
+  // Use query hook - handles all async/cleanup automatically
+  const mediaQuery = useMedia(
+    () => props.item.channelId,
+    () => props.item.messageId,
+    () => 'large',
+    isVisible
+  )
 
   const setupObserver = (el: HTMLDivElement) => {
-    containerRef = el
     observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting && !hasStartedLoading()) {
-          setHasStartedLoading(true)
-          loadMedia()
-          observer?.disconnect()
+        // Check observer still exists (not cleaned up)
+        if (entries[0]?.isIntersecting && observer) {
+          observer.disconnect()
+          observer = undefined
+          setIsVisible(true)
         }
       },
       { rootMargin: '400px', threshold: 0 }
@@ -163,8 +107,8 @@ function GalleryItem(props: {
   }
 
   onCleanup(() => {
-    isMounted = false
     observer?.disconnect()
+    observer = undefined
   })
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -174,7 +118,10 @@ function GalleryItem(props: {
     }
   }
 
-  const mediaType = () => props.item.media.type === 'video' || props.item.media.type === 'animation' ? 'video' : 'image'
+  const mediaType = () => 
+    props.item.media.type === 'video' || props.item.media.type === 'animation' 
+      ? 'video' 
+      : 'image'
 
   return (
     <div
@@ -187,7 +134,7 @@ function GalleryItem(props: {
       onKeyDown={handleKeyDown}
     >
       <Show
-        when={thumbnailUrl()}
+        when={mediaQuery.data}
         fallback={<div class="absolute inset-0 skeleton" />}
       >
         {(url) => (
@@ -228,13 +175,8 @@ function GalleryModal(props: {
   const canGoPrev = () => currentIndex() > 0
   const canGoNext = () => currentIndex() < props.items.length - 1
 
-  const goToPrev = () => {
-    if (canGoPrev()) setCurrentIndex((i) => i - 1)
-  }
-
-  const goToNext = () => {
-    if (canGoNext()) setCurrentIndex((i) => i + 1)
-  }
+  const goToPrev = () => setCurrentIndex((i) => Math.max(0, i - 1))
+  const goToNext = () => setCurrentIndex((i) => Math.min(props.items.length - 1, i + 1))
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') props.onClose()
@@ -252,10 +194,11 @@ function GalleryModal(props: {
     document.body.style.overflow = ''
   })
 
-  // Load full resolution for current item
+  // Load full resolution for current item - query handles cleanup
+  // Guard against empty items array
   const fullQuery = useMedia(
-    () => currentItem().channelId,
-    () => currentItem().messageId,
+    () => currentItem()?.channelId ?? 0,
+    () => currentItem()?.messageId ?? 0,
     () => undefined
   )
 

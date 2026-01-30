@@ -4,7 +4,7 @@ import { Motion } from 'solid-motionone'
 import { ChannelAvatar, PostSkeleton } from '@/components/ui'
 import { PostContent, PostMedia, PostActions, MediaGallery } from '@/components/post'
 import { CommentSection } from '@/components/comments'
-import { usePost, useChannel, useChannels } from '@/lib/query'
+import { usePost, useResolveChannel, useChannelInfo } from '@/lib/query'
 import { postsState } from '@/lib/store'
 import type { Message } from '@/lib/telegram'
 
@@ -13,37 +13,28 @@ import type { Message } from '@/lib/telegram'
  *
  * Supports two URL formats:
  * - /post/:channelId/:messageId - by numeric ID
- * - /@:username/:messageId - by username
- *
- * Uses same layout as timeline - no card wrappers
+ * - /c/:username/:messageId - by username
  */
 function Post() {
   const params = useParams()
   const navigate = useNavigate()
 
-  const channelsQuery = useChannels()
-
-  // Resolve channel ID from either :channelId or :username param
-  const channelId = createMemo(() => {
-    // Direct ID from /post/:channelId/:messageId route
-    if (params.channelId) {
-      return parseInt(params.channelId, 10)
-    }
-    // Username from /@:username/:messageId route - look up in channels list
-    const username = params.username
-    if (username && channelsQuery.data) {
-      const found = channelsQuery.data.find(
-        (c) => c.username?.toLowerCase() === username.toLowerCase()
-      )
-      return found?.id ?? 0
-    }
-    return 0
+  // Resolve channel from ID or username param
+  const idOrUsername = createMemo(() => {
+    if (params.channelId) return parseInt(params.channelId, 10)
+    if (params.username) return params.username
+    return undefined
   })
 
+  const resolvedChannel = useResolveChannel(idOrUsername)
+  const channelId = resolvedChannel.channelId
   const messageId = () => parseInt(params.messageId ?? '0', 10)
 
   const postQuery = usePost(channelId, messageId)
-  const channelQuery = useChannel(channelId)
+  const channelInfoQuery = useChannelInfo(channelId)
+
+  // Use resolved channel or full info
+  const channel = createMemo(() => channelInfoQuery.data ?? resolvedChannel.data)
 
   // Find all posts in the same media group
   const groupedPosts = createMemo(() => {
@@ -90,13 +81,16 @@ function Post() {
   }
 
   const handleChannelClick = () => {
-    const channel = channelQuery.data
-    if (channel?.username) {
-      navigate(`/c/${channel.username}`)
-    } else {
+    const ch = channel()
+    if (ch?.username) {
+      navigate(`/c/${ch.username}`)
+    } else if (channelId()) {
       navigate(`/channel/${channelId()}`)
     }
   }
+
+  const isLoading = () => postQuery.isLoading || resolvedChannel.isLoading
+  const isError = () => postQuery.isError || resolvedChannel.isError
 
   return (
     <div class="min-h-full pb-24">
@@ -119,20 +113,20 @@ function Post() {
         </button>
       </div>
 
-      {/* Loading - only show if no error */}
-      <Show when={(postQuery.isLoading || channelQuery.isLoading) && !postQuery.isError && !channelQuery.isError}>
+      {/* Loading */}
+      <Show when={isLoading() && !isError()}>
         <PostSkeleton />
       </Show>
 
-      {/* Error - takes priority over loading */}
-      <Show when={postQuery.isError || channelQuery.isError}>
+      {/* Error */}
+      <Show when={isError()}>
         <div class="p-4 text-center">
           <p class="text-[var(--danger)]">Failed to load post</p>
           <button
             type="button"
             onClick={() => {
               postQuery.refetch()
-              channelQuery.refetch()
+              resolvedChannel.refetch()
             }}
             class="mt-2 text-accent hover:underline"
           >
@@ -141,22 +135,8 @@ function Post() {
         </div>
       </Show>
 
-      {/* Channel not found - only after both queries complete without error */}
-      <Show when={!postQuery.isLoading && !channelQuery.isLoading && !postQuery.isError && !channelQuery.isError && postQuery.data && !channelQuery.data}>
-        <div class="p-4 text-center">
-          <p class="text-tertiary">Channel not found</p>
-          <button
-            type="button"
-            onClick={handleBack}
-            class="mt-2 text-accent hover:underline"
-          >
-            Go back
-          </button>
-        </div>
-      </Show>
-
-      {/* Post content - same structure as timeline */}
-      <Show when={postQuery.data && channelQuery.data}>
+      {/* Post content */}
+      <Show when={postQuery.data && channel()}>
         <Motion.article
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -164,10 +144,10 @@ function Post() {
         >
           {/* Header */}
           <div class="post-header cursor-pointer" onClick={handleChannelClick}>
-            <ChannelAvatar channelId={channelId()} name={channelQuery.data!.title} size="md" />
+            <ChannelAvatar channelId={channelId()} name={channel()!.title} size="md" />
             <div class="flex-1 min-w-0">
               <p class="font-semibold text-primary hover:underline truncate">
-                {channelQuery.data!.title}
+                {channel()!.title}
               </p>
               <p class="text-sm text-tertiary">
                 {formatDate(postQuery.data!.date)}
@@ -213,7 +193,7 @@ function Post() {
             <PostActions
               channelId={channelId()}
               messageId={messageId()}
-              channelTitle={channelQuery.data!.title}
+              channelTitle={channel()!.title}
               preview={postQuery.data!.text}
               views={postQuery.data!.views}
               replies={postQuery.data!.replies}

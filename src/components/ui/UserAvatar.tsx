@@ -15,12 +15,19 @@ interface UserAvatarProps {
  *
  * Uses lazy loading - only fetches when visible in viewport.
  * Falls back to initials-based avatar while loading or if no photo exists.
+ * 
+ * Uses useProfilePhoto query hook which handles:
+ * - Automatic cleanup on unmount
+ * - Caching (RAM -> IndexedDB -> API)
+ * - Request deduplication
  */
 export function UserAvatar(props: UserAvatarProps) {
   let containerRef: HTMLDivElement | undefined
+  let observer: IntersectionObserver | undefined
   const [isVisible, setIsVisible] = createSignal(false)
 
   // Lazy load - only fetch when visible
+  // Query hook handles cleanup automatically
   const photoQuery = useProfilePhoto(
     () => props.userId,
     'small',
@@ -30,18 +37,24 @@ export function UserAvatar(props: UserAvatarProps) {
   onMount(() => {
     if (!containerRef) return
 
-    const observer = new IntersectionObserver(
+    observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          setIsVisible(true)
+        // Check observer still exists (not cleaned up)
+        if (entries[0]?.isIntersecting && observer) {
           observer.disconnect()
+          observer = undefined
+          setIsVisible(true)
         }
       },
       { rootMargin: '100px' }
     )
 
     observer.observe(containerRef)
-    onCleanup(() => observer.disconnect())
+  })
+
+  onCleanup(() => {
+    observer?.disconnect()
+    observer = undefined
   })
 
   return (
