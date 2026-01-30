@@ -14,6 +14,8 @@ function Settings() {
   const handleLogout = async () => {
     if (confirm('Are you sure you want to log out?')) {
       await logout()
+      // Clear auth state (also clears auth hint for optimistic loading)
+      authStore.setUser(null)
       navigate('/login')
     }
   }
@@ -25,7 +27,7 @@ function Settings() {
   ]
 
   return (
-    <div class="p-4 space-y-6 h-full overflow-y-auto custom-scrollbar">
+    <div class="p-4 space-y-6 min-h-full pb-24">
       <h1 class="text-2xl font-semibold text-primary">
         Settings
       </h1>

@@ -53,13 +53,24 @@ const deserialize = (str: string): unknown => {
   })
 }
 
+// Promise that resolves when cache restore completes
+let cacheRestoreResolve: () => void
+export const cacheRestorePromise = new Promise<void>((resolve) => {
+  cacheRestoreResolve = resolve
+})
+
 const idbPersister: Persister = {
   persistClient: async (client: PersistedClient) => {
     await set(IDB_KEY, serialize(client))
   },
   restoreClient: async (): Promise<PersistedClient | undefined> => {
-    const data = await get<string>(IDB_KEY)
-    return data ? (deserialize(data) as PersistedClient) : undefined
+    try {
+      const data = await get<string>(IDB_KEY)
+      return data ? (deserialize(data) as PersistedClient) : undefined
+    } finally {
+      // Signal that restore is complete (whether successful or not)
+      cacheRestoreResolve()
+    }
   },
   removeClient: async () => {
     await del(IDB_KEY)

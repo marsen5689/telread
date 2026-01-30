@@ -22,12 +22,23 @@ import {
 
 /**
  * Protected route wrapper - redirects to login if not authenticated
- * Defined as stable component to prevent re-mounting children
+ *
+ * Optimistic rendering: If user had a previous session (maybeAuthenticated),
+ * show UI immediately with cached data while verifying auth in background.
+ * This makes the app feel much faster on repeat visits.
  */
 function ProtectedRoute(props: ParentProps) {
+  // Show loading only if: loading AND no previous session (first-time users)
+  const shouldShowLoading = () =>
+    authStore.isLoading && !authStore.maybeAuthenticated
+
+  // Redirect to login if: not loading AND not authenticated
+  const shouldRedirect = () =>
+    !authStore.isLoading && !authStore.isAuthenticated
+
   return (
     <Show
-      when={!authStore.isLoading}
+      when={!shouldShowLoading()}
       fallback={
         <div class="min-h-screen flex flex-col items-center justify-center bg-[var(--bg-primary)]">
           {/* App Icon with pulse animation */}
@@ -73,7 +84,7 @@ function ProtectedRoute(props: ParentProps) {
         </div>
       }
     >
-      <Show when={authStore.isAuthenticated} fallback={<Navigate href="/login" />}>
+      <Show when={!shouldRedirect()} fallback={<Navigate href="/login" />}>
         <MainLayout>{props.children}</MainLayout>
       </Show>
     </Show>

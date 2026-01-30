@@ -67,7 +67,7 @@ function Post() {
   }
 
   return (
-    <div class="h-full overflow-y-auto custom-scrollbar">
+    <div class="min-h-full pb-24">
       {/* Back button */}
       <div class="sticky top-0 z-30 px-4 pt-4">
         <button

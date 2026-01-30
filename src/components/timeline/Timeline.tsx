@@ -22,13 +22,32 @@ interface TimelineProps {
 }
 
 /**
+ * Find the nearest scrollable parent element
+ */
+function getScrollParent(element: HTMLElement | null): HTMLElement | null {
+  if (!element) return null
+
+  let parent = element.parentElement
+  while (parent) {
+    const { overflow, overflowY } = getComputedStyle(parent)
+    if (overflow === 'auto' || overflow === 'scroll' || overflowY === 'auto' || overflowY === 'scroll') {
+      return parent
+    }
+    parent = parent.parentElement
+  }
+  return null
+}
+
+/**
  * Timeline feed component with infinite scroll
  *
  * Uses Index instead of For - Index tracks by index position,
  * so when array changes, only changed indices re-render.
+ * Scroll events are handled on the nearest scrollable parent.
  */
 export function Timeline(props: TimelineProps) {
   let containerRef: HTMLDivElement | undefined
+  let scrollParent: HTMLElement | null = null
 
   // Channel lookup map
   const channelMap = createMemo(() => {
@@ -49,48 +68,34 @@ export function Timeline(props: TimelineProps) {
   // Save scroll position to sessionStorage
   const saveScrollPosition = () => {
     const key = getScrollKey()
-    if (key && containerRef) {
-      sessionStorage.setItem(key, String(containerRef.scrollTop))
+    if (key && scrollParent) {
+      sessionStorage.setItem(key, String(scrollParent.scrollTop))
     }
   }
 
   // Restore scroll position from sessionStorage
   const restoreScrollPosition = () => {
     const key = getScrollKey()
-    if (key && containerRef) {
+    if (key && scrollParent) {
       const saved = sessionStorage.getItem(key)
       if (saved) {
         const scrollTop = parseInt(saved, 10)
         if (!isNaN(scrollTop)) {
           // Use requestAnimationFrame to ensure content is rendered
           requestAnimationFrame(() => {
-            containerRef?.scrollTo({ top: scrollTop })
+            scrollParent?.scrollTo({ top: scrollTop })
           })
         }
       }
     }
   }
 
-  // Restore scroll on mount
-  onMount(() => {
-    // Wait for content to be ready
-    setTimeout(restoreScrollPosition, 50)
-  })
+  const handleScroll = () => {
+    if (!scrollParent) return
 
-  // Save scroll position on unmount
-  onCleanup(() => {
-    saveScrollPosition()
-    if (throttleTimer) {
-      clearTimeout(throttleTimer)
-      throttleTimer = null
-    }
-  })
-
-  const handleScroll = (e: Event) => {
-    const target = e.currentTarget as HTMLElement
-    const scrollTop = target.scrollTop
-    const scrollHeight = target.scrollHeight
-    const clientHeight = target.clientHeight
+    const scrollTop = scrollParent.scrollTop
+    const scrollHeight = scrollParent.scrollHeight
+    const clientHeight = scrollParent.clientHeight
 
     // Save scroll position periodically (debounced by throttle)
     if (props.scrollKey && !ticking) {
@@ -112,6 +117,28 @@ export function Timeline(props: TimelineProps) {
     }
   }
 
+  // Setup scroll listener on mount
+  onMount(() => {
+    scrollParent = getScrollParent(containerRef ?? null)
+    if (scrollParent) {
+      scrollParent.addEventListener('scroll', handleScroll, { passive: true })
+      // Wait for content to be ready then restore position
+      setTimeout(restoreScrollPosition, 50)
+    }
+  })
+
+  // Cleanup on unmount
+  onCleanup(() => {
+    saveScrollPosition()
+    if (scrollParent) {
+      scrollParent.removeEventListener('scroll', handleScroll)
+    }
+    if (throttleTimer) {
+      clearTimeout(throttleTimer)
+      throttleTimer = null
+    }
+  })
+
   // Get channel by ID
   const getChannel = (channelId: number) => channelMap().get(channelId)
 
@@ -119,7 +146,7 @@ export function Timeline(props: TimelineProps) {
   const showSkeleton = () => props.isLoading && (props.items?.length ?? 0) === 0
 
   return (
-    <div ref={containerRef} class="h-full overflow-y-auto custom-scrollbar" onScroll={handleScroll}>
+    <div ref={containerRef} class="min-h-full pb-24">
       {/* Empty state */}
       <Show when={isEmpty()}>
         <div class="flex flex-col items-center justify-center h-64 text-center">
@@ -138,9 +165,9 @@ export function Timeline(props: TimelineProps) {
         </div>
       </Show>
 
-      {/* Loading skeleton */}
+      {/* Loading skeleton - minimal for faster render */}
       <Show when={showSkeleton()}>
-        <Index each={[1, 2, 3, 4, 5]}>{() => <PostSkeleton />}</Index>
+        <Index each={[1, 2, 3]}>{() => <PostSkeleton />}</Index>
       </Show>
 
       {/* New posts button */}

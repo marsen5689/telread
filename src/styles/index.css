@@ -299,6 +299,31 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
+     DESKTOP SIDEBAR NAVIGATION
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  .sidebar-nav-item {
+    @apply flex items-center gap-4 px-4 py-3 rounded-xl mb-1;
+    @apply text-base font-medium;
+    color: var(--color-text-secondary);
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .sidebar-nav-item:hover {
+    background: var(--pill-bg);
+    color: var(--color-text);
+  }
+
+  .sidebar-nav-item-active {
+    color: var(--color-text);
+    font-weight: 600;
+  }
+
+  .sidebar-nav-item-active svg {
+    color: var(--accent);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
      NEW POSTS BUTTON - Liquid glass pill
      ═══════════════════════════════════════════════════════════════════════ */
 

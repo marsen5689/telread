@@ -27,7 +27,7 @@ function Bookmarks() {
   }
 
   return (
-    <div class="p-4 space-y-4 h-full overflow-y-auto custom-scrollbar">
+    <div class="p-4 space-y-4 min-h-full pb-24">
       {/* Header */}
       <div class="flex items-center justify-between">
         <h1 class="text-2xl font-semibold text-primary">

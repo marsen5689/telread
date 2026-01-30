@@ -31,7 +31,7 @@ function Channel() {
   }
 
   return (
-    <div class="h-full flex flex-col">
+    <div class="min-h-full flex flex-col">
       {/* Back button */}
       <div class="px-4 pt-4">
         <button onClick={() => navigate(-1)} class="pill">
@@ -83,7 +83,7 @@ function Channel() {
       </Show>
 
       {/* Posts */}
-      <div class="flex-1 overflow-hidden">
+      <div class="flex-1">
         <Timeline
           items={groupPostsByMediaGroup(messagesQuery.data ?? [])}
           channels={channel() ? [channel()!] : []}
