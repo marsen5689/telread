@@ -1,5 +1,5 @@
 import { getTelegramClient } from './client'
-import { MAX_CONCURRENT_DOWNLOADS, MEDIA_CACHE_MAX_SIZE } from '@/config/constants'
+import { MEDIA_CACHE_MAX_SIZE } from '@/config/constants'
 
 // ============================================================================
 // LRU Cache for Media URLs
@@ -93,40 +93,80 @@ const mediaCache = new MediaLRUCache(MEDIA_CACHE_MAX_SIZE)
 // Download Queue Management
 // ============================================================================
 
-let activeDownloads = 0
-const downloadQueue: Array<() => void> = []
+const MAX_MEDIA_DOWNLOADS = 6
+const MAX_PROFILE_DOWNLOADS = 4
+const DOWNLOAD_TIMEOUT = 15000 // 15 seconds
 
-function acquireDownloadSlot(): Promise<void> {
-  if (activeDownloads < MAX_CONCURRENT_DOWNLOADS) {
-    activeDownloads++
-    return Promise.resolve()
-  }
-  return new Promise(resolve => downloadQueue.push(resolve))
+/**
+ * Wrap a promise with a timeout
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Timeout: ${label} took longer than ${ms}ms`))
+    }, ms)
+
+    promise
+      .then((value) => {
+        clearTimeout(timer)
+        resolve(value)
+      })
+      .catch((error) => {
+        clearTimeout(timer)
+        reject(error)
+      })
+  })
 }
 
-function releaseDownloadSlot(): void {
-  activeDownloads--
-  const next = downloadQueue.shift()
-  if (next) {
-    activeDownloads++
-    next()
+/**
+ * Creates a semaphore-based download queue
+ * Prevents overwhelming the Telegram API with concurrent requests
+ */
+function createDownloadQueue(maxConcurrent: number) {
+  let active = 0
+  const queue: Array<() => void> = []
+
+  return {
+    acquire(): Promise<void> {
+      if (active < maxConcurrent) {
+        active++
+        return Promise.resolve()
+      }
+      return new Promise(resolve => queue.push(resolve))
+    },
+    release(): void {
+      const next = queue.shift()
+      if (next) {
+        next()
+      } else {
+        active--
+      }
+    },
+    get pending() {
+      return queue.length
+    },
+    get active() {
+      return active
+    }
   }
 }
+
+// Separate queues to prevent profile photos from blocking media
+const mediaQueue = createDownloadQueue(MAX_MEDIA_DOWNLOADS)
+const profileQueue = createDownloadQueue(MAX_PROFILE_DOWNLOADS)
 
 // ============================================================================
 // Debug Logging
 // ============================================================================
 
-const DEBUG_MEDIA = import.meta.env.DEV
-
 function debugLog(message: string, ...args: unknown[]) {
-  if (DEBUG_MEDIA) {
+  if (import.meta.env.DEV) {
     console.log(`[Media] ${message}`, ...args)
   }
 }
 
 function debugWarn(message: string, ...args: unknown[]) {
-  if (DEBUG_MEDIA) {
+  if (import.meta.env.DEV) {
     console.warn(`[Media] ${message}`, ...args)
   }
 }
@@ -155,42 +195,56 @@ export async function downloadMedia(
 ): Promise<string | null> {
   const cacheKey = `${channelId}:${messageId}:${thumbSize ?? 'full'}`
 
+  debugLog(`downloadMedia called: channel=${channelId}, msg=${messageId}, thumb=${thumbSize}`)
+
   // Check cache first
   const cached = mediaCache.get(cacheKey)
   if (cached) {
+    debugLog(`Cache hit: ${cacheKey}`)
     return cached
   }
 
   // Check if already aborted
   if (signal?.aborted) {
+    debugLog(`Already aborted: ${cacheKey}`)
     return null
   }
 
   const client = getTelegramClient()
+  debugLog(`Waiting for media slot... (active: ${mediaQueue.active}, queue: ${mediaQueue.pending})`)
 
   // Wait for available download slot
-  await acquireDownloadSlot()
+  await mediaQueue.acquire()
+  debugLog(`Got media slot (active: ${mediaQueue.active})`)
 
   // Check again after waiting for slot
   if (signal?.aborted) {
-    releaseDownloadSlot()
+    mediaQueue.release()
     return null
   }
 
   try {
     // Always fetch fresh message to get valid file references
-    const messages = await client.getMessages(channelId, [messageId])
+    debugLog(`Fetching message: channel=${channelId}, msg=${messageId}`)
+    const messages = await withTimeout(
+      client.getMessages(channelId, [messageId]),
+      DOWNLOAD_TIMEOUT,
+      `getMessages(${channelId}, ${messageId})`
+    )
+    debugLog(`getMessages response:`, messages)
 
     if (signal?.aborted) {
+      debugLog(`Aborted after getMessages`)
       return null
     }
 
     if (!Array.isArray(messages) || messages.length === 0 || !messages[0]) {
-      debugWarn(`Message not found: channel=${channelId}, msg=${messageId}`)
+      debugWarn(`Message not found: channel=${channelId}, msg=${messageId}`, messages)
       return null
     }
 
     const msg = messages[0]
+    debugLog(`Message found: id=${msg.id}, hasMedia=${!!msg.media}, mediaType=${msg.media?.type}`)
 
     if (!msg.media) {
       debugLog(`Message has no media: channel=${channelId}, msg=${messageId}`)
@@ -219,6 +273,7 @@ export async function downloadMedia(
 
     try {
       const media = msg.media as any
+      debugLog(`Media object:`, { type: media.type, hasThumbnail: typeof media.getThumbnail === 'function' })
 
       if (thumbType && typeof media.getThumbnail === 'function') {
         // For photos/videos/documents with thumbnails, get the thumbnail first
@@ -228,16 +283,32 @@ export async function downloadMedia(
           ?? media.getThumbnail('x')  // fallback to large
 
         if (thumbnail) {
-          debugLog(`Found thumbnail type: ${thumbnail.type}`)
-          buffer = await client.downloadAsBuffer(thumbnail)
+          debugLog(`Found thumbnail, downloading...`, { thumbType: thumbnail.type })
+          buffer = await withTimeout(
+            client.downloadAsBuffer(thumbnail),
+            DOWNLOAD_TIMEOUT,
+            `downloadThumbnail(${channelId}, ${messageId})`
+          )
+          debugLog(`Thumbnail downloaded, size: ${buffer?.length ?? 0} bytes`)
         } else {
           // No thumbnail found - download full media
-          debugLog(`No thumbnail found, downloading full media`)
-          buffer = await client.downloadAsBuffer(media)
+          debugLog(`No thumbnail found, downloading full media...`)
+          buffer = await withTimeout(
+            client.downloadAsBuffer(media),
+            DOWNLOAD_TIMEOUT,
+            `downloadMedia(${channelId}, ${messageId})`
+          )
+          debugLog(`Full media downloaded, size: ${buffer?.length ?? 0} bytes`)
         }
       } else {
         // Download full media (no getThumbnail method or no thumb requested)
-        buffer = await client.downloadAsBuffer(media)
+        debugLog(`Downloading full media (no thumb)...`)
+        buffer = await withTimeout(
+          client.downloadAsBuffer(media),
+          DOWNLOAD_TIMEOUT,
+          `downloadMedia(${channelId}, ${messageId})`
+        )
+        debugLog(`Downloaded, size: ${buffer?.length ?? 0} bytes`)
       }
     } catch (downloadError) {
       if (signal?.aborted) {
@@ -252,7 +323,11 @@ export async function downloadMedia(
 
         try {
           // Refetch message to get fresh file reference
-          const freshMessages = await client.getMessages(channelId, [messageId])
+          const freshMessages = await withTimeout(
+            client.getMessages(channelId, [messageId]),
+            DOWNLOAD_TIMEOUT,
+            `retry-getMessages(${channelId}, ${messageId})`
+          )
 
           if (signal?.aborted) {
             return null
@@ -268,12 +343,12 @@ export async function downloadMedia(
                 ?? freshMedia.getThumbnail('x')
 
               if (thumbnail) {
-                buffer = await client.downloadAsBuffer(thumbnail)
+                buffer = await withTimeout(client.downloadAsBuffer(thumbnail), DOWNLOAD_TIMEOUT, 'retry-thumb')
               } else {
-                buffer = await client.downloadAsBuffer(freshMedia)
+                buffer = await withTimeout(client.downloadAsBuffer(freshMedia), DOWNLOAD_TIMEOUT, 'retry-media')
               }
             } else {
-              buffer = await client.downloadAsBuffer(freshMedia)
+              buffer = await withTimeout(client.downloadAsBuffer(freshMedia), DOWNLOAD_TIMEOUT, 'retry-media')
             }
           }
         } catch (retryError) {
@@ -308,7 +383,7 @@ export async function downloadMedia(
     }
     return null
   } finally {
-    releaseDownloadSlot()
+    mediaQueue.release()
   }
 }
 
@@ -335,8 +410,10 @@ export async function downloadProfilePhoto(
 
   const client = getTelegramClient()
 
+  // Use separate queue for profile photos
+  await profileQueue.acquire()
+
   try {
-    // Resolve peer - could be channel/chat or user
     const peer = await resolvePeerWithPhoto(client, peerId)
 
     if (!peer?.photo) {
@@ -348,7 +425,12 @@ export async function downloadProfilePhoto(
       return null
     }
 
-    const buffer = await client.downloadAsBuffer(photoLocation)
+    const buffer = await withTimeout(
+      client.downloadAsBuffer(photoLocation),
+      DOWNLOAD_TIMEOUT,
+      `profilePhoto(${peerId})`
+    )
+    debugLog(`Profile photo downloaded, size: ${buffer?.length ?? 0} bytes`)
     if (!buffer?.length) {
       return null
     }
@@ -362,6 +444,8 @@ export async function downloadProfilePhoto(
   } catch (error) {
     debugWarn(`Failed to download profile photo: peer=${peerId}`, error)
     return null
+  } finally {
+    profileQueue.release()
   }
 }
 
@@ -374,14 +458,14 @@ async function resolvePeerWithPhoto(
 ) {
   // Try as channel/chat
   try {
-    return await client.getChat(peerId)
+    return await withTimeout(client.getChat(peerId), DOWNLOAD_TIMEOUT, `getChat(${peerId})`)
   } catch {
     // Not a chat, try as user
   }
 
   // Try as user
   try {
-    const users = await client.getUsers([peerId])
+    const users = await withTimeout(client.getUsers([peerId]), DOWNLOAD_TIMEOUT, `getUsers(${peerId})`)
     return users?.[0] ?? null
   } catch {
     return null

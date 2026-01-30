@@ -10,6 +10,76 @@ let clientInstance: TelegramClient | null = null
 let clientVersion = 0
 
 /**
+ * Log level constants (matching mtcute LogManager)
+ */
+export const LogLevel = {
+  OFF: 0,
+  ERROR: 1,
+  WARN: 2,
+  INFO: 3,
+  DEBUG: 4,
+  VERBOSE: 5,
+} as const
+
+export type LogLevelType = (typeof LogLevel)[keyof typeof LogLevel]
+
+/**
+ * Configure client logging after initialization
+ */
+function setupClientLogging(client: TelegramClient): void {
+  // Access the internal log manager through the client
+  const logManager = (client as any).log?.mgr ?? (client as any)._log?.mgr
+
+  if (!logManager) {
+    if (import.meta.env.DEV) {
+      console.warn('[TelRead] Could not access mtcute LogManager')
+    }
+    return
+  }
+
+  if (import.meta.env.DEV) {
+    // In development, show INFO level logs
+    logManager.level = LogLevel.INFO
+
+    // Custom log handler for better formatting
+    logManager.handler = (
+      _color: number,
+      level: number,
+      tag: string,
+      fmt: string,
+      args: unknown[]
+    ) => {
+      const timestamp = new Date().toISOString().split('T')[1].slice(0, 12)
+      const levelNames = ['OFF', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'VERBOSE']
+      const levelName = levelNames[level] ?? 'UNKNOWN'
+
+      // Color coding for different log levels
+      const styles: Record<number, string> = {
+        1: 'color: #ff4444; font-weight: bold', // ERROR - red
+        2: 'color: #ffaa00; font-weight: bold', // WARN - orange
+        3: 'color: #44aaff',                     // INFO - blue
+        4: 'color: #888888',                     // DEBUG - gray
+        5: 'color: #666666',                     // VERBOSE - dark gray
+      }
+
+      const style = styles[level] ?? ''
+      const prefix = `%c[${timestamp}] [mtcute/${levelName}] [${tag}]`
+
+      if (args.length > 0) {
+        console.log(prefix, style, fmt, ...args)
+      } else {
+        console.log(prefix, style, fmt)
+      }
+    }
+
+    console.log('[TelRead] mtcute logging enabled (level: INFO)')
+  } else {
+    // In production, only show errors
+    logManager.level = LogLevel.ERROR
+  }
+}
+
+/**
  * Get or create the Telegram client singleton
  */
 export function getTelegramClient(): TelegramClient {
@@ -35,8 +105,15 @@ export function getTelegramClient(): TelegramClient {
     },
   })
 
+  // Setup logging
+  setupClientLogging(clientInstance)
+
   // Increment version for new client instance
   clientVersion++
+
+  if (import.meta.env.DEV) {
+    console.log('[TelRead] Telegram client initialized (version:', clientVersion, ')')
+  }
 
   return clientInstance
 }
@@ -47,6 +124,39 @@ export function getTelegramClient(): TelegramClient {
  */
 export function getClientVersion(): number {
   return clientVersion
+}
+
+/**
+ * Set mtcute log level dynamically
+ *
+ * @param level - 0=OFF, 1=ERROR, 2=WARN, 3=INFO, 4=DEBUG, 5=VERBOSE
+ */
+export function setLogLevel(level: LogLevelType): void {
+  if (!clientInstance) {
+    if (import.meta.env.DEV) {
+      console.warn('[TelRead] Cannot set log level: client not initialized')
+    }
+    return
+  }
+
+  const logManager = (clientInstance as any).log?.mgr ?? (clientInstance as any)._log?.mgr
+  if (logManager) {
+    logManager.level = level
+    if (import.meta.env.DEV) {
+      const levelNames = ['OFF', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'VERBOSE']
+      console.log(`[TelRead] Log level set to: ${levelNames[level]}`)
+    }
+  }
+}
+
+/**
+ * Get current log level
+ */
+export function getLogLevel(): number {
+  if (!clientInstance) return LogLevel.OFF
+
+  const logManager = (clientInstance as any).log?.mgr ?? (clientInstance as any)._log?.mgr
+  return logManager?.level ?? LogLevel.OFF
 }
 
 /**
@@ -81,12 +191,16 @@ export async function logout(): Promise<void> {
     // Increment version before cleanup to signal handlers
     clientVersion++
 
+    if (import.meta.env.DEV) {
+      console.log('[TelRead] Logging out (version:', clientVersion, ')')
+    }
+
     try {
       await clientInstance.logOut()
     } catch (error) {
       // Log but don't throw - we still want to clear the instance
       if (import.meta.env.DEV) {
-        console.warn('[Client] Error during logout:', error)
+        console.warn('[TelRead] Error during logout:', error)
       }
     }
 
@@ -101,4 +215,8 @@ export async function logout(): Promise<void> {
 export function resetClient(): void {
   clientVersion++
   clientInstance = null
+
+  if (import.meta.env.DEV) {
+    console.log('[TelRead] Client reset (version:', clientVersion, ')')
+  }
 }

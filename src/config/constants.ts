@@ -22,9 +22,15 @@ export const MAX_CHANNELS_TO_FETCH = 50
 
 /**
  * Maximum concurrent media downloads
- * Prevents overwhelming the Telegram connection
+ * Higher value = faster loading but more API pressure
  */
-export const MAX_CONCURRENT_DOWNLOADS = 3
+export const MAX_CONCURRENT_DOWNLOADS = 10
+
+/**
+ * Download timeout in milliseconds (30 seconds)
+ * Prevents stuck downloads from blocking the queue
+ */
+export const DOWNLOAD_TIMEOUT_MS = 30000
 
 /**
  * Maximum comment length (Telegram limit)

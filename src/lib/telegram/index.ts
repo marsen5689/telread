@@ -1,4 +1,15 @@
-export { getTelegramClient, getClientVersion, isAuthenticated, getCurrentUser, logout, resetClient } from './client'
+export {
+  getTelegramClient,
+  getClientVersion,
+  isAuthenticated,
+  getCurrentUser,
+  logout,
+  resetClient,
+  setLogLevel,
+  getLogLevel,
+  LogLevel,
+  type LogLevelType,
+} from './client'
 export {
   startPhoneAuth,
   submitCode,

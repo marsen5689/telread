@@ -333,6 +333,7 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
     }
   }
 
+  // Other media types not supported yet (audio, voice, etc.)
   return undefined
 }
 

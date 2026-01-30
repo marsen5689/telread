@@ -1,4 +1,4 @@
-import { createSignal, Show, Match, Switch, createEffect, createResource } from 'solid-js'
+import { createSignal, Show, Match, Switch, onCleanup, createEffect } from 'solid-js'
 import { Motion } from 'solid-motionone'
 import { downloadMedia, getCachedMedia } from '@/lib/telegram'
 import { DEFAULT_ASPECT_RATIO } from '@/config/constants'
@@ -15,24 +15,50 @@ interface PostMediaProps {
 
 /**
  * Renders post media (photos, videos, documents)
+ * Uses Intersection Observer for lazy loading - only loads when visible
  */
 export function PostMedia(props: PostMediaProps) {
   const [isExpanded, setIsExpanded] = createSignal(false)
-  const [isLoaded, setIsLoaded] = createSignal(false)
+  const [thumbnailUrl, setThumbnailUrl] = createSignal<string | null>(null)
 
-  // Fetch media thumbnail (800x800) on mount
-  const [thumbnailUrl] = createResource(
-    () => ({ channelId: props.channelId, messageId: props.messageId }),
-    async (params) => {
-      // Check centralized cache first
-      const cached = getCachedMedia(params.channelId, params.messageId, 'large')
-      if (cached) return cached
+  let observer: IntersectionObserver | undefined
+  let hasStartedLoading = false
 
-      // Fetch (downloadMedia handles caching internally)
-      const url = await downloadMedia(params.channelId, params.messageId, 'large')
-      return url
+  // Setup Intersection Observer for lazy loading
+  const setupObserver = (el: HTMLDivElement) => {
+    observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !hasStartedLoading) {
+          hasStartedLoading = true
+          loadMedia()
+          observer?.disconnect()
+        }
+      },
+      {
+        rootMargin: '400px', // Start loading 400px before visible
+        threshold: 0
+      }
+    )
+    observer.observe(el)
+  }
+
+  // Load media when visible
+  const loadMedia = async () => {
+    // Check cache first
+    const cached = getCachedMedia(props.channelId, props.messageId, 'large')
+    if (cached) {
+      setThumbnailUrl(cached)
+      return
     }
-  )
+
+    const url = await downloadMedia(props.channelId, props.messageId, 'large')
+    setThumbnailUrl(url)
+  }
+
+  // Cleanup
+  onCleanup(() => {
+    observer?.disconnect()
+  })
 
   // Calculate aspect ratio with safety check for division by zero
   const aspectRatio = () => {
@@ -52,7 +78,7 @@ export function PostMedia(props: PostMediaProps) {
   })
 
   return (
-    <div class={`relative rounded-xl overflow-hidden ${props.class ?? ''}`}>
+    <div ref={setupObserver} class={`relative rounded-xl overflow-hidden ${props.class ?? ''}`}>
       <Switch>
         {/* Photo */}
         <Match when={props.media.type === 'photo'}>
@@ -66,14 +92,8 @@ export function PostMedia(props: PostMediaProps) {
               <img
                 src={thumbnailUrl()!}
                 alt="Post media"
-                class={`
-                  w-full h-full object-cover cursor-pointer
-                  transition-opacity duration-300
-                  ${isLoaded() ? 'opacity-100' : 'opacity-0'}
-                `}
-                onLoad={() => setIsLoaded(true)}
+                class="w-full h-full object-cover cursor-pointer"
                 onClick={() => setIsExpanded(true)}
-                loading="lazy"
               />
             </Show>
           </div>
