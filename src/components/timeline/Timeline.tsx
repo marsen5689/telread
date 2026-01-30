@@ -165,11 +165,17 @@ export function Timeline(props: TimelineProps) {
       saveScrollPosition()
     }
 
-    if (ticking || props.isLoadingMore || !props.hasMore) return
+    if (ticking) return
 
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight
 
-    if (distanceFromBottom < INFINITE_SCROLL_THRESHOLD) {
+    // First, render more items if we have them (faster than API call)
+    if (distanceFromBottom < INFINITE_SCROLL_THRESHOLD && hasMoreToRender()) {
+      setRenderCount(prev => prev + RENDER_BATCH_SIZE)
+    }
+    
+    // Then, load more from API if needed
+    if (distanceFromBottom < INFINITE_SCROLL_THRESHOLD && !props.isLoadingMore && props.hasMore && !hasMoreToRender()) {
       ticking = true
       props.onLoadMore()
       // Reset throttle after a delay
@@ -250,8 +256,8 @@ export function Timeline(props: TimelineProps) {
       </Show>
 
       {/* Items list - handles both single posts and groups */}
-      {/* Using For (tracks by reference) instead of Index (tracks by position) for stable cleanup */}
-      <For each={props.items ?? []}>
+      {/* Incremental rendering - only render visible items for performance */}
+      <For each={visibleItems()}>
         {(item) => (
           <Show
             when={item.type === 'single'}

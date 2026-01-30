@@ -212,9 +212,9 @@ export function App() {
         console.error('[App] Error caught by boundary:', err)
         // On cleanNode errors during navigation, just redirect to home
         // Check for various manifestations of this SolidJS cleanup error
+        // SolidJS cleanNode errors during navigation - safe to ignore
         const isCleanNodeError =
           err?.message?.includes("reading '24'") ||
-          err?.message?.includes("reading '") && err?.message?.includes("'") ||
           err?.stack?.includes('cleanNode')
 
         if (isCleanNodeError) {

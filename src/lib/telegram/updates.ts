@@ -365,6 +365,9 @@ export function startUpdatesListener(): UpdatesCleanup {
       if (pendingBatch.messages.length > 0) {
         processBatch()
       }
+      
+      // Clear pending messages queue (messages that arrived before store was ready)
+      pendingMessages.length = 0
 
       // Reset pause state
       isPaused = false
