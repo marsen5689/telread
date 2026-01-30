@@ -14,18 +14,12 @@ interface PostMediaProps {
 
 /**
  * Renders post media (photos, videos, documents)
- *
- * Uses createResource with IntersectionObserver for proper lazy loading
- * without causing parent re-renders.
  */
 export function PostMedia(props: PostMediaProps) {
   const [isExpanded, setIsExpanded] = createSignal(false)
   const [isLoaded, setIsLoaded] = createSignal(false)
-  let containerRef: HTMLDivElement | undefined
 
-  // Use createResource to fetch media
-  // Fetches immediately on mount (lazy loading via IntersectionObserver was broken
-  // because scroll container is not document viewport)
+  // Fetch media thumbnail (800x800) on mount
   const [thumbnailUrl] = createResource(
     () => ({ channelId: props.channelId, messageId: props.messageId }),
     async (params) => {
@@ -38,7 +32,6 @@ export function PostMedia(props: PostMediaProps) {
       return url
     }
   )
-
 
   // Calculate aspect ratio
   const aspectRatio = () => {
@@ -54,7 +47,7 @@ export function PostMedia(props: PostMediaProps) {
   })
 
   return (
-    <div ref={containerRef} class={`relative rounded-xl overflow-hidden ${props.class ?? ''}`}>
+    <div class={`relative rounded-xl overflow-hidden ${props.class ?? ''}`}>
       <Switch>
         {/* Photo */}
         <Match when={props.media.type === 'photo'}>
@@ -99,6 +92,8 @@ export function PostMedia(props: PostMediaProps) {
                 {/* Play button overlay */}
                 <div class="absolute inset-0 flex items-center justify-center bg-black/20">
                   <button
+                    type="button"
+                    aria-label="Play video"
                     onClick={() => setIsExpanded(true)}
                     class="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center
                            shadow-lg hover:bg-white hover:scale-105 transition-all"
@@ -222,6 +217,8 @@ function MediaModal(props: {
       onClick={props.onClose}
     >
       <button
+        type="button"
+        aria-label="Close"
         class="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors"
         onClick={props.onClose}
       >

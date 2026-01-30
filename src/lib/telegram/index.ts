@@ -46,7 +46,6 @@ export {
   getVideoStreamUrl,
   preloadThumbnails,
   clearMediaCache,
-  isMediaCached,
   getCachedMedia,
 } from './media'
 export {

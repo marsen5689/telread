@@ -3,6 +3,28 @@ import { getTelegramClient } from './client'
 // Cache for downloaded media URLs
 const mediaCache = new Map<string, string>()
 
+// Limit concurrent downloads to avoid overwhelming Telegram connection
+const MAX_CONCURRENT_DOWNLOADS = 3
+let activeDownloads = 0
+const downloadQueue: Array<() => void> = []
+
+function acquireDownloadSlot(): Promise<void> {
+  if (activeDownloads < MAX_CONCURRENT_DOWNLOADS) {
+    activeDownloads++
+    return Promise.resolve()
+  }
+  return new Promise(resolve => downloadQueue.push(resolve))
+}
+
+function releaseDownloadSlot(): void {
+  activeDownloads--
+  const next = downloadQueue.shift()
+  if (next) {
+    activeDownloads++
+    next()
+  }
+}
+
 // Debug mode - set to true for troubleshooting
 const DEBUG_MEDIA = import.meta.env.DEV
 
@@ -39,9 +61,11 @@ export async function downloadMedia(
 
   const client = getTelegramClient()
 
+  // Wait for available download slot
+  await acquireDownloadSlot()
+
   try {
     // Always fetch fresh message to get valid file references
-    // getMessages returns fresh fileReference even for old messages
     const messages = await client.getMessages(channelId, [messageId])
 
     if (!Array.isArray(messages) || messages.length === 0 || !messages[0]) {
@@ -153,6 +177,8 @@ export async function downloadMedia(
   } catch (error) {
     debugWarn(`Error downloading media: channel=${channelId}, msg=${messageId}`, error)
     return null
+  } finally {
+    releaseDownloadSlot()
   }
 }
 
@@ -245,7 +271,7 @@ export async function preloadThumbnails(
 ): Promise<void> {
   await Promise.allSettled(
     messages.map(({ channelId, messageId }) =>
-      downloadMedia(channelId, messageId, 'medium')
+      downloadMedia(channelId, messageId, 'large')
     )
   )
 }
@@ -258,18 +284,6 @@ export function clearMediaCache(): void {
     URL.revokeObjectURL(url)
   }
   mediaCache.clear()
-}
-
-/**
- * Check if media is cached
- */
-export function isMediaCached(
-  channelId: number,
-  messageId: number,
-  thumbSize?: 'small' | 'medium' | 'large'
-): boolean {
-  const cacheKey = `${channelId}:${messageId}:${thumbSize ?? 'full'}`
-  return mediaCache.has(cacheKey)
 }
 
 /**
