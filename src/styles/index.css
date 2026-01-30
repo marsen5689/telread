@@ -299,6 +299,48 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
+     NEW POSTS BUTTON - Sticky notification pill
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  .new-posts-btn {
+    @apply px-4 py-2 text-sm font-medium rounded-full;
+    background: var(--accent);
+    color: white;
+    box-shadow:
+      0 4px 12px rgba(0, 122, 255, 0.3),
+      0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                box-shadow 0.15s ease;
+
+    /* GPU acceleration */
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+
+    /* Touch optimization */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .new-posts-btn:hover {
+    transform: translateZ(0) scale(1.05);
+    box-shadow:
+      0 6px 16px rgba(0, 122, 255, 0.4),
+      0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .new-posts-btn:active {
+    transform: translateZ(0) scale(0.95);
+  }
+
+  .dark .new-posts-btn {
+    box-shadow:
+      0 4px 12px rgba(0, 122, 255, 0.25),
+      0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
      POST - Clean without card wrapper
      ═══════════════════════════════════════════════════════════════════════ */
 
