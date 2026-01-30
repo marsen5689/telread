@@ -30,11 +30,22 @@ function Channel() {
     }
   }
 
+  const handleBack = () => {
+    const referrer = document.referrer
+    const isSameOrigin = referrer && new URL(referrer).origin === window.location.origin
+
+    if (isSameOrigin) {
+      navigate(-1)
+    } else {
+      navigate('/')
+    }
+  }
+
   return (
     <div class="min-h-full flex flex-col">
       {/* Back button */}
       <div class="px-4 pt-4">
-        <button onClick={() => navigate(-1)} class="pill">
+        <button onClick={handleBack} class="pill">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>

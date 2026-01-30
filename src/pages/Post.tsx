@@ -55,9 +55,14 @@ function Post() {
   })
 
   const handleBack = () => {
-    if (window.history.length > 1) {
+    // Check if we came from within the app (same origin)
+    const referrer = document.referrer
+    const isSameOrigin = referrer && new URL(referrer).origin === window.location.origin
+
+    if (isSameOrigin) {
       navigate(-1)
     } else {
+      // Direct link or external referrer - go to home
       navigate('/')
     }
   }
