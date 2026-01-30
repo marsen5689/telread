@@ -20,7 +20,7 @@ let isPaused = false
 
 // Queue for messages that arrive before store is ready
 // Limited to prevent memory issues during initial sync
-const MAX_PENDING_MESSAGES = 500
+const MAX_PENDING_MESSAGES = 100
 const pendingMessages: TgMessage[] = []
 
 // ============================================================================

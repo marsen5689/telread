@@ -185,11 +185,25 @@ const PROFILE_CACHE_PREFIX = 'profile-photo:'
 const PROFILE_CACHE_VERSION = 2 // v2: binary data instead of base64
 const PROFILE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7 // 7 days
 
-// Simple cache for profile photo blob URLs - NO eviction/revocation
-// Blob URLs are tiny (~50 bytes), actual blob data is managed by browser
-// We don't revoke because Avatar components may still reference them
+// Simple cache for profile photo blob URLs with soft limit
+// We don't aggressively revoke URLs because Avatar components may still reference them
+// Instead, we just evict oldest entries when cache gets too large
 // On page reload, this Map is cleared anyway
+const MAX_PROFILE_PHOTO_CACHE = 200
 const profilePhotoCache = new Map<string, string>()
+
+function addToProfilePhotoCache(key: string, url: string): void {
+  // Soft eviction when cache is too large - remove oldest 20%
+  if (profilePhotoCache.size >= MAX_PROFILE_PHOTO_CACHE) {
+    const toRemove = Math.floor(MAX_PROFILE_PHOTO_CACHE * 0.2)
+    const keys = Array.from(profilePhotoCache.keys()).slice(0, toRemove)
+    for (const k of keys) {
+      // Don't revoke - components may still reference
+      profilePhotoCache.delete(k)
+    }
+  }
+  profilePhotoCache.set(key, url)
+}
 
 interface CachedProfilePhoto {
   data: Uint8Array // Binary data
@@ -227,7 +241,7 @@ async function getCachedProfilePhoto(peerId: number, size: string): Promise<stri
     // Create blob URL and store in memory cache
     const blob = new Blob([cached.data], { type: 'image/jpeg' })
     const url = URL.createObjectURL(blob)
-    profilePhotoCache.set(cacheKey, url)
+    addToProfilePhotoCache(cacheKey, url)
     return url
   } catch {
     return null
@@ -625,8 +639,8 @@ export async function downloadProfilePhoto(
     const blob = new Blob([uint8Buffer], { type: 'image/jpeg' })
     const url = URL.createObjectURL(blob)
 
-    // Store in non-evicting memory cache
-    profilePhotoCache.set(cacheKey, url)
+    // Store in memory cache with soft eviction
+    addToProfilePhotoCache(cacheKey, url)
     return url
   } catch (error) {
     debugWarn(`Failed to download profile photo: peer=${peerId}`, error)

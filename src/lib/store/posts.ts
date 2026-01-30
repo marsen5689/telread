@@ -94,13 +94,10 @@ export function upsertPost(post: Message): void {
     const existing = s.byId[key]
     
     if (existing) {
-      // Update only if newer
+      // Update only if newer (O(1) check via byId)
       const existingTime = getTime(existing.editDate ?? existing.date)
       const newTime = getTime(post.editDate ?? post.date)
       if (newTime <= existingTime) return
-      s.byId[key] = post
-    } else if (s.sortedKeys.includes(key) || s.pendingKeys.includes(key)) {
-      // Already tracked - just update
       s.byId[key] = post
     } else {
       // New post - add to pending (Twitter-style)

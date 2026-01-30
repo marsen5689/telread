@@ -1,5 +1,5 @@
 import { createQuery, createInfiniteQuery } from '@tanstack/solid-query'
-import { createSignal, createEffect, on, createMemo, untrack } from 'solid-js'
+import { createEffect, on, createMemo, untrack } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
 import {
   fetchMessages,
@@ -106,10 +106,10 @@ export function useInfiniteMessages(channelId: () => number) {
 
 /**
  * Timeline data structure - channels only (posts are in postsState)
+ * Note: channelMap is derived in useOptimizedTimeline via createMemo
  */
 export interface TimelineData {
   channels: ChannelWithLastMessage[]
-  channelMap: Map<number, ChannelWithLastMessage>
 }
 
 /**
@@ -181,18 +181,11 @@ async function fetchInitialTimeline(): Promise<TimelineData> {
   const channels = await fetchChannelsWithLastMessages()
 
   if (import.meta.env.DEV) {
-    console.log(`[Timeline] Got ${channels.length} channels in ${Math.round(performance.now() - startTime)}ms`)
-  }
-
-  const channelMap = new Map<number, ChannelWithLastMessage>()
-  channels.forEach((c) => channelMap.set(c.id, c))
-
-  if (import.meta.env.DEV) {
     const postCount = channels.filter((c) => c.lastMessage).length
-    console.log(`[Timeline] fetchInitialTimeline done: ${postCount} posts in ${Math.round(performance.now() - startTime)}ms`)
+    console.log(`[Timeline] fetchInitialTimeline done: ${channels.length} channels, ${postCount} posts in ${Math.round(performance.now() - startTime)}ms`)
   }
 
-  return { channels, channelMap }
+  return { channels }
 }
 
 /**
@@ -275,7 +268,13 @@ async function backgroundSyncRecentHistory(
 export function useOptimizedTimeline() {
   // Channels store (separate from posts)
   const [channels, setChannels] = createStore<ChannelWithLastMessage[]>([])
-  const [channelMap, setChannelMap] = createSignal<Map<number, ChannelWithLastMessage>>(new Map())
+  
+  // Derive channelMap from channels array (no duplicate state)
+  const channelMap = createMemo(() => {
+    const map = new Map<number, ChannelWithLastMessage>()
+    for (const c of channels) map.set(c.id, c)
+    return map
+  })
 
   // Initial data query - fetches channels and populates posts store
   const initialQuery = createQuery(() => ({
@@ -313,8 +312,8 @@ export function useOptimizedTimeline() {
         if (!data) return
 
         // Sync channels (always update - they might change)
+        // channelMap is derived via createMemo, no need to set separately
         setChannels(reconcile(data.channels))
-        setChannelMap(data.channelMap)
 
         // Extract and upsert posts from channels (works for both cache restore and fresh fetch)
         if (!initialDataProcessed) {
