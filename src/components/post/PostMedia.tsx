@@ -1,4 +1,4 @@
-import { createSignal, Show, Match, Switch, onCleanup, createEffect, createMemo } from 'solid-js'
+import { createSignal, Show, Match, Switch, onCleanup, onMount, createEffect, createMemo } from 'solid-js'
 import { Motion } from 'solid-motionone'
 import { downloadMedia, getCachedMedia } from '@/lib/telegram'
 import { DEFAULT_ASPECT_RATIO } from '@/config/constants'
@@ -284,14 +284,14 @@ function MediaModal(props: {
   }
 
   // Setup event listeners with proper cleanup
-  createEffect(() => {
+  onMount(() => {
     document.addEventListener('keydown', handleKeyDown)
     document.body.style.overflow = 'hidden'
+  })
 
-    onCleanup(() => {
-      document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = ''
-    })
+  onCleanup(() => {
+    document.removeEventListener('keydown', handleKeyDown)
+    document.body.style.overflow = ''
   })
 
   return (

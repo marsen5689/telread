@@ -202,7 +202,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
-     FLOATING NAVIGATION - Bottom bar
+     FLOATING NAVIGATION - Bottom bar (GPU-accelerated)
      ═══════════════════════════════════════════════════════════════════════ */
 
   /* Shared Liquid Glass background - Apple iOS 26 style */
@@ -214,6 +214,16 @@
     box-shadow:
       0 4px 24px rgba(0, 0, 0, 0.08),
       inset 0 1px 0 hsl(0 0% 100% / 30%);
+
+    /* GPU acceleration for smooth scrolling */
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+
+    /* Containment for layout isolation */
+    contain: layout style paint;
+    isolation: isolate;
   }
 
   .dark .floating-glass {
@@ -229,28 +239,59 @@
     @apply floating-glass;
     @apply flex items-center justify-center w-14 h-14 rounded-full;
     color: var(--color-text-secondary);
-    transition: background 0.15s ease;
+    transition: background 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+    /* Touch optimization */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .floating-circle:hover {
     background: var(--pill-bg-hover);
   }
 
+  .floating-circle:active {
+    transform: translateZ(0) scale(0.96);
+  }
+
   /* Center pill with nav items */
   .floating-pill {
     @apply floating-glass;
     @apply flex items-center gap-1 px-3 h-14 rounded-full;
+
+    /* Touch optimization */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
 
   .nav-item {
     @apply flex items-center justify-center w-12 h-12 rounded-full;
     color: var(--color-text-tertiary);
-    transition: color 0.15s ease, background 0.15s ease;
+    transition: color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                background 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+    /* GPU layer for each nav item */
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+
+    /* Touch optimization */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .nav-item:hover {
     background: var(--pill-bg);
     color: var(--color-text);
+  }
+
+  .nav-item:active {
+    transform: translateZ(0) scale(0.96);
   }
 
   .nav-item-active {
@@ -461,6 +502,19 @@
 
   .safe-top { padding-top: env(safe-area-inset-top, 0); }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+
+  /* GPU-accelerated fixed navigation container */
+  .nav-container {
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    will-change: transform;
+    contain: layout style;
+    pointer-events: none;
+  }
+
+  .nav-container > * {
+    pointer-events: auto;
+  }
 }
 
 @keyframes shimmer {

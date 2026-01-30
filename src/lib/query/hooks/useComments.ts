@@ -3,14 +3,37 @@ import {
   createMutation,
   useQueryClient,
 } from '@tanstack/solid-query'
+import { createEffect, on } from 'solid-js'
 import {
   fetchComments,
   sendComment,
+  downloadProfilePhoto,
   CommentError,
   type Comment,
   type CommentThread,
 } from '@/lib/telegram'
 import { queryKeys } from '../keys'
+
+/**
+ * Collect all unique author IDs from a comment tree
+ */
+function collectAuthorIds(comments: Comment[]): number[] {
+  const ids = new Set<number>()
+
+  const traverse = (list: Comment[]) => {
+    for (const comment of list) {
+      if (comment.author.id > 0) {
+        ids.add(comment.author.id)
+      }
+      if (comment.replies?.length) {
+        traverse(comment.replies)
+      }
+    }
+  }
+
+  traverse(comments)
+  return Array.from(ids)
+}
 
 /**
  * Hook to fetch comments for a post
@@ -27,7 +50,9 @@ export function useComments(
   messageId: () => number,
   enabled?: () => boolean
 ) {
-  return createQuery(() => ({
+  const queryClient = useQueryClient()
+
+  const query = createQuery(() => ({
     queryKey: queryKeys.comments.thread(channelId(), messageId()),
     queryFn: () => fetchComments(channelId(), messageId()),
     staleTime: 1000 * 60 * 2, // 2 minutes - comments change more frequently
@@ -42,6 +67,29 @@ export function useComments(
       return failureCount < 2
     },
   }))
+
+  // Prefetch author avatars when comments load
+  createEffect(
+    on(
+      () => query.data,
+      (data) => {
+        if (!data?.comments.length) return
+
+        const authorIds = collectAuthorIds(data.comments)
+
+        // Prefetch all author photos in parallel (non-blocking)
+        for (const authorId of authorIds) {
+          queryClient.prefetchQuery({
+            queryKey: queryKeys.media.profile(authorId),
+            queryFn: () => downloadProfilePhoto(authorId, 'small'),
+            staleTime: 1000 * 60 * 60 * 24, // 24 hours
+          })
+        }
+      }
+    )
+  )
+
+  return query
 }
 
 /**

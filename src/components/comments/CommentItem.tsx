@@ -1,4 +1,5 @@
 import { UserAvatar } from '@/components/ui'
+import { formatRelativeTime } from '@/lib/utils'
 import type { Comment } from '@/lib/telegram'
 
 interface CommentItemProps {
@@ -13,7 +14,7 @@ interface CommentItemProps {
  * Shows author avatar, name, time, content, and reply action.
  */
 export function CommentItem(props: CommentItemProps) {
-  const timeAgo = () => formatTimeAgo(props.comment.date)
+  const timeAgo = () => formatRelativeTime(props.comment.date)
 
   return (
     <div class="flex gap-3 py-3">
@@ -44,13 +45,15 @@ export function CommentItem(props: CommentItemProps) {
         {/* Actions */}
         <div class="mt-2 flex items-center gap-4">
           <button
+            type="button"
             onClick={() => props.onReply?.(props.comment.id)}
+            aria-label={`Reply to ${props.comment.author.name}`}
             class={`
               text-xs flex items-center gap-1 transition-colors
               ${props.isReplying ? 'text-accent' : 'text-tertiary hover:text-accent'}
             `}
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -66,22 +69,3 @@ export function CommentItem(props: CommentItemProps) {
   )
 }
 
-function formatTimeAgo(date: Date | string): string {
-  const d = date instanceof Date ? date : new Date(date)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-
-  const minutes = Math.floor(diff / (1000 * 60))
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  if (hours < 24) return `${hours}h ago`
-  if (days < 7) return `${days}d ago`
-
-  return d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  })
-}

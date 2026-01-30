@@ -1,4 +1,4 @@
-import { For, Show, createSignal, createMemo, onCleanup, createEffect } from 'solid-js'
+import { For, Show, createSignal, createMemo, onCleanup, onMount, createEffect } from 'solid-js'
 import { Motion } from 'solid-motionone'
 import { downloadMedia, getCachedMedia } from '@/lib/telegram'
 import { useMedia } from '@/lib/query'
@@ -147,11 +147,24 @@ function GalleryItem(props: {
     observer?.disconnect()
   })
 
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      props.onClick()
+    }
+  }
+
+  const mediaType = () => props.item.media.type === 'video' || props.item.media.type === 'animation' ? 'video' : 'image'
+
   return (
     <div
       ref={setupObserver}
-      class={`relative aspect-square cursor-pointer overflow-hidden ${props.class ?? ''}`}
+      role="button"
+      tabIndex={0}
+      aria-label={`View ${mediaType()} in fullscreen`}
+      class={`relative aspect-square cursor-pointer overflow-hidden focus:outline-none focus:ring-2 focus:ring-[var(--accent)] ${props.class ?? ''}`}
       onClick={props.onClick}
+      onKeyDown={handleKeyDown}
     >
       <Show
         when={thumbnailUrl()}
@@ -160,7 +173,7 @@ function GalleryItem(props: {
         {(url) => (
           <img
             src={url()}
-            alt=""
+            alt={`Media ${mediaType()}`}
             class="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
             loading="lazy"
           />
@@ -169,9 +182,9 @@ function GalleryItem(props: {
 
       {/* Video indicator */}
       <Show when={props.item.media.type === 'video' || props.item.media.type === 'animation'}>
-        <div class="absolute inset-0 flex items-center justify-center bg-black/20">
+        <div class="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
           <div class="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
-            <svg class="w-5 h-5 text-gray-900 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+            <svg class="w-5 h-5 text-gray-900 ml-0.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M8 5v14l11-7z" />
             </svg>
           </div>
@@ -209,14 +222,14 @@ function GalleryModal(props: {
     if (e.key === 'ArrowRight') goToNext()
   }
 
-  createEffect(() => {
+  onMount(() => {
     document.addEventListener('keydown', handleKeyDown)
     document.body.style.overflow = 'hidden'
+  })
 
-    onCleanup(() => {
-      document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = ''
-    })
+  onCleanup(() => {
+    document.removeEventListener('keydown', handleKeyDown)
+    document.body.style.overflow = ''
   })
 
   // Load full resolution for current item

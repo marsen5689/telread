@@ -39,8 +39,8 @@ export function PostActions(props: PostActionsProps) {
     <div class="flex items-center gap-2">
       {/* Comments pill - only show if channel has comments enabled */}
       <Show when={hasComments()}>
-        <button onClick={props.onCommentClick} class="pill">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button type="button" onClick={props.onCommentClick} class="pill" aria-label="View comments">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -48,9 +48,9 @@ export function PostActions(props: PostActionsProps) {
               d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
             />
           </svg>
-          <Show when={props.replies && props.replies > 0}>
+          {props.replies && props.replies > 0 && (
             <span>{formatCount(props.replies)}</span>
-          </Show>
+          )}
         </button>
       </Show>
 
@@ -77,15 +77,18 @@ export function PostActions(props: PostActionsProps) {
 
       {/* Bookmark pill */}
       <button
+        type="button"
         onClick={handleBookmark}
         class={`pill ${isBookmarked() ? 'pill-active' : ''}`}
-        title={isBookmarked() ? 'Remove bookmark' : 'Bookmark'}
+        aria-label={isBookmarked() ? 'Remove bookmark' : 'Add bookmark'}
+        aria-pressed={isBookmarked()}
       >
         <svg
           class="w-4 h-4"
           fill={isBookmarked() ? 'currentColor' : 'none'}
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             stroke-linecap="round"

@@ -276,6 +276,7 @@ export function clearPosts(): void {
   setState({
     byId: {},
     sortedKeys: [],
+    pendingKeys: [],
     lastUpdated: Date.now(),
   })
 }

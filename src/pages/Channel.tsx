@@ -91,6 +91,7 @@ export function Channel() {
           isLoadingMore={false}
           hasMore={false}
           onLoadMore={() => {}}
+          scrollKey={`channel-${channelId()}`}
         />
       </div>
     </div>

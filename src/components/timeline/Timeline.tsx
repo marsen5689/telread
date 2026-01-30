@@ -1,4 +1,4 @@
-import { Index, Show, Switch, Match, createMemo, onCleanup } from 'solid-js'
+import { Index, Show, Switch, Match, createMemo, onCleanup, onMount } from 'solid-js'
 import { TimelinePost } from './TimelinePost'
 import { TimelineGroup } from './TimelineGroup'
 import { PostSkeleton } from '@/components/ui'
@@ -17,6 +17,8 @@ interface TimelineProps {
   pendingCount?: number
   /** Called when user clicks "show new posts" button */
   onShowNewPosts?: () => void
+  /** Key for scroll position restoration (e.g., 'home', 'channel-123') */
+  scrollKey?: string
 }
 
 /**
@@ -26,6 +28,8 @@ interface TimelineProps {
  * so when array changes, only changed indices re-render.
  */
 export function Timeline(props: TimelineProps) {
+  let containerRef: HTMLDivElement | undefined
+
   // Channel lookup map
   const channelMap = createMemo(() => {
     const map = new Map<number, Channel>()
@@ -39,8 +43,43 @@ export function Timeline(props: TimelineProps) {
   let ticking = false
   let throttleTimer: ReturnType<typeof setTimeout> | null = null
 
-  // Cleanup throttle timer on unmount
+  // Scroll position storage key
+  const getScrollKey = () => props.scrollKey ? `timeline-scroll:${props.scrollKey}` : null
+
+  // Save scroll position to sessionStorage
+  const saveScrollPosition = () => {
+    const key = getScrollKey()
+    if (key && containerRef) {
+      sessionStorage.setItem(key, String(containerRef.scrollTop))
+    }
+  }
+
+  // Restore scroll position from sessionStorage
+  const restoreScrollPosition = () => {
+    const key = getScrollKey()
+    if (key && containerRef) {
+      const saved = sessionStorage.getItem(key)
+      if (saved) {
+        const scrollTop = parseInt(saved, 10)
+        if (!isNaN(scrollTop)) {
+          // Use requestAnimationFrame to ensure content is rendered
+          requestAnimationFrame(() => {
+            containerRef?.scrollTo({ top: scrollTop })
+          })
+        }
+      }
+    }
+  }
+
+  // Restore scroll on mount
+  onMount(() => {
+    // Wait for content to be ready
+    setTimeout(restoreScrollPosition, 50)
+  })
+
+  // Save scroll position on unmount
   onCleanup(() => {
+    saveScrollPosition()
     if (throttleTimer) {
       clearTimeout(throttleTimer)
       throttleTimer = null
@@ -48,12 +87,18 @@ export function Timeline(props: TimelineProps) {
   })
 
   const handleScroll = (e: Event) => {
-    if (ticking || props.isLoadingMore || !props.hasMore) return
-
     const target = e.currentTarget as HTMLElement
     const scrollTop = target.scrollTop
     const scrollHeight = target.scrollHeight
     const clientHeight = target.clientHeight
+
+    // Save scroll position periodically (debounced by throttle)
+    if (props.scrollKey && !ticking) {
+      saveScrollPosition()
+    }
+
+    if (ticking || props.isLoadingMore || !props.hasMore) return
+
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight
 
     if (distanceFromBottom < INFINITE_SCROLL_THRESHOLD) {
@@ -74,7 +119,7 @@ export function Timeline(props: TimelineProps) {
   const showSkeleton = () => props.isLoading && (props.items?.length ?? 0) === 0
 
   return (
-    <div class="h-full overflow-y-auto custom-scrollbar" onScroll={handleScroll}>
+    <div ref={containerRef} class="h-full overflow-y-auto custom-scrollbar" onScroll={handleScroll}>
       {/* Empty state */}
       <Show when={isEmpty()}>
         <div class="flex flex-col items-center justify-center h-64 text-center">

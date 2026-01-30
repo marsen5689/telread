@@ -3,6 +3,7 @@ import { useNavigate } from '@solidjs/router'
 import { Motion } from 'solid-motionone'
 import { GlassCard, GlassButton } from '@/components/ui'
 import { bookmarksStore } from '@/lib/store'
+import { formatRelativeTime } from '@/lib/utils'
 
 /**
  * Bookmarks page - Shows all saved posts
@@ -92,7 +93,7 @@ export function Bookmarks() {
                         {bookmark.preview}
                       </p>
                       <p class="text-xs text-tertiary mt-2">
-                        Saved {formatTimeAgo(bookmark.savedAt)}
+                        Saved {formatRelativeTime(bookmark.savedAt)}
                       </p>
                     </div>
                     <button
@@ -120,22 +121,3 @@ export function Bookmarks() {
   )
 }
 
-function formatTimeAgo(date: Date | string): string {
-  const d = date instanceof Date ? date : new Date(date)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-
-  const minutes = Math.floor(diff / (1000 * 60))
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  if (hours < 24) return `${hours}h ago`
-  if (days < 7) return `${days}d ago`
-
-  return d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  })
-}

@@ -23,6 +23,7 @@ export function Home() {
         onLoadMore={timeline.loadMore}
         pendingCount={timeline.pendingCount}
         onShowNewPosts={timeline.showNewPosts}
+        scrollKey="home"
       />
     </div>
   )

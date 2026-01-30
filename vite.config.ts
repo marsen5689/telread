@@ -7,18 +7,19 @@ export default defineConfig({
   plugins: [
     solid(),
     VitePWA({
-      registerType: 'prompt',
+      registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icons/*.png', 'robots.txt'],
       manifest: {
         name: 'TelRead - Telegram Reader',
         short_name: 'TelRead',
-        description: 'Twitter-like Telegram Channel Reader with Liquid Glass design',
-        theme_color: '#0ea5e9',
-        background_color: '#0a0a1a',
+        description: 'Modern Telegram Channel Reader with Liquid Glass design',
+        theme_color: '#007aff',
+        background_color: '#000000',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
         scope: '/',
+        categories: ['social', 'news'],
         icons: [
           {
             src: 'icons/icon.svg',
@@ -26,9 +27,19 @@ export default defineConfig({
             type: 'image/svg+xml',
           },
           {
-            src: 'icons/icon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
+            src: 'icons/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: 'icons/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+          },
+          {
+            src: 'icons/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
             purpose: 'maskable',
           },
         ],

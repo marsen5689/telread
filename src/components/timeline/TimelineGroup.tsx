@@ -2,6 +2,7 @@ import { Show, createMemo } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { ChannelAvatar } from '@/components/ui'
 import { PostContent, PostActions, MediaGallery } from '@/components/post'
+import { formatTimeAgo } from '@/lib/utils'
 import type { Message } from '@/lib/telegram'
 
 interface TimelineGroupProps {
@@ -109,19 +110,3 @@ export function TimelineGroup(props: TimelineGroupProps) {
   )
 }
 
-function formatTimeAgo(date: Date | string): string {
-  const d = date instanceof Date ? date : new Date(date)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-
-  const minutes = Math.floor(diff / (1000 * 60))
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-
-  if (minutes < 1) return 'now'
-  if (minutes < 60) return `${minutes}m`
-  if (hours < 24) return `${hours}h`
-  if (days < 7) return `${days}d`
-
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}

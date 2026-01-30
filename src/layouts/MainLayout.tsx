@@ -59,9 +59,8 @@ export function MainLayout(props: ParentProps) {
         {props.children}
       </main>
 
-      {/* Floating Bottom Navigation - outside main flow */}
-      {/* Floating navigation - 3 separate elements */}
-      <div class="fixed bottom-4 left-0 right-0 z-50 flex items-center justify-between px-4 max-w-md mx-auto safe-bottom">
+      {/* Floating Bottom Navigation - GPU accelerated */}
+      <div class="fixed bottom-4 left-0 right-0 z-50 flex items-center justify-between px-4 max-w-md mx-auto safe-bottom nav-container">
         {/* Left: User avatar */}
         <A href="/settings" class="floating-circle">
           <UserAvatar
