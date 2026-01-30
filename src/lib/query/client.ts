@@ -67,7 +67,7 @@ const idbPersister: Persister = {
 }
 
 // Clear old cache on version change
-const CACHE_VERSION = 'v7'
+const CACHE_VERSION = 'v8' // v8: profile photos now use data URLs
 const CACHE_VERSION_KEY = 'telread-cache-version'
 
 const storedVersion = localStorage.getItem(CACHE_VERSION_KEY)
@@ -113,9 +113,10 @@ persistQueryClient({
   buster: CACHE_VERSION,
   dehydrateOptions: {
     shouldDehydrateQuery: (query) => {
-      // Don't persist media queries - blob URLs are session-only
       const key = query.queryKey as string[]
-      if (key[0] === 'media') return false
+      // Don't persist media downloads (post images) - too large
+      // But DO persist profile photos - they use data URLs now
+      if (key[0] === 'media' && key[1] === 'download') return false
       return query.state.status === 'success'
     },
   },

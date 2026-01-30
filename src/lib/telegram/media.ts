@@ -127,17 +127,7 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(chunks.join(''))
 }
 
-/**
- * Convert base64 to Uint8Array
- */
-function base64ToUint8Array(base64: string): Uint8Array {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes
-}
+// base64ToUint8Array removed - no longer needed since we use data URLs directly
 
 /**
  * Get profile photo from persistent cache
@@ -153,10 +143,8 @@ async function getCachedProfilePhoto(peerId: number, size: string): Promise<stri
     if (cached.version !== PROFILE_CACHE_VERSION) return null
     if (Date.now() - cached.timestamp > PROFILE_CACHE_TTL) return null
 
-    // Convert base64 back to blob URL
-    const bytes = base64ToUint8Array(cached.data)
-    const blob = new Blob([bytes], { type: 'image/jpeg' })
-    return URL.createObjectURL(blob)
+    // Return data URL (base64) - can be persisted
+    return `data:image/jpeg;base64,${cached.data}`
   } catch {
     return null
   }
@@ -540,13 +528,13 @@ export async function downloadProfilePhoto(
     // Save to persistent cache (async, don't await)
     cacheProfilePhoto(peerId, size, uint8Buffer)
 
-    // Create blob URL for immediate use
-    const blob = new Blob([uint8Buffer], { type: 'image/jpeg' })
-    const url = URL.createObjectURL(blob)
+    // Return data URL (base64) - can be persisted by TanStack Query
+    const base64 = uint8ArrayToBase64(uint8Buffer)
+    const dataUrl = `data:image/jpeg;base64,${base64}`
 
     // Store in non-evicting memory cache
-    profilePhotoMemoryCache.set(cacheKey, url)
-    return url
+    profilePhotoMemoryCache.set(cacheKey, dataUrl)
+    return dataUrl
   } catch (error) {
     debugWarn(`Failed to download profile photo: peer=${peerId}`, error)
     return null
