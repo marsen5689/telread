@@ -245,9 +245,9 @@ export function Timeline(props: TimelineProps) {
         <For each={[1, 2, 3]}>{() => <PostSkeleton />}</For>
       </Show>
 
-      {/* New posts button - Twitter style */}
+      {/* New posts button - Twitter style, positioned below sticky header */}
       <Show when={props.pendingCount && props.pendingCount > 0}>
-        <div class="sticky top-0 z-10 flex justify-center py-3 pointer-events-none">
+        <div class="sticky top-14 z-10 flex justify-center py-3 pointer-events-none">
           <button
             type="button"
             onClick={() => {
