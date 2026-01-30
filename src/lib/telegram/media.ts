@@ -3,8 +3,27 @@ import { getTelegramClient } from './client'
 // Cache for downloaded media URLs
 const mediaCache = new Map<string, string>()
 
+// Debug mode - set to true for troubleshooting
+const DEBUG_MEDIA = import.meta.env.DEV
+
+function debugLog(message: string, ...args: unknown[]) {
+  if (DEBUG_MEDIA) {
+    console.log(`[Media] ${message}`, ...args)
+  }
+}
+
+function debugWarn(message: string, ...args: unknown[]) {
+  if (DEBUG_MEDIA) {
+    console.warn(`[Media] ${message}`, ...args)
+  }
+}
+
 /**
  * Download media from a message and return a blob URL
+ *
+ * Uses mtcute's built-in download methods which handle:
+ * - Automatic file reference refresh on FILE_REFERENCE_EXPIRED
+ * - Proper thumbnail extraction for videos/photos
  */
 export async function downloadMedia(
   channelId: number,
@@ -19,115 +38,120 @@ export async function downloadMedia(
   }
 
   const client = getTelegramClient()
-  const anyClient = client as any
 
   try {
-    // Get message by ID - method may vary by version
-    let msg: any = null
+    // Always fetch fresh message to get valid file references
+    // getMessages returns fresh fileReference even for old messages
+    const messages = await client.getMessages(channelId, [messageId])
 
-    // Try getMessages with array
-    try {
-      const messages = await client.getMessages(channelId, [messageId])
-      if (Array.isArray(messages) && messages.length > 0) {
-        msg = messages[0]
-      }
-    } catch {
-      // Try iterating history as fallback
-      for await (const m of client.iterHistory(channelId, { limit: 50 })) {
-        if (m.id === messageId) {
-          msg = m
-          break
-        }
-      }
-    }
-
-    if (!msg?.media) {
+    if (!Array.isArray(messages) || messages.length === 0 || !messages[0]) {
+      debugWarn(`Message not found: channel=${channelId}, msg=${messageId}`)
       return null
     }
 
-    // Download using available method
+    const msg = messages[0]
+
+    if (!msg.media) {
+      debugLog(`Message has no media: channel=${channelId}, msg=${messageId}`)
+      return null
+    }
+
+    const mediaType = msg.media.type
+
+    // Only downloadable media types
+    const downloadableTypes = ['photo', 'video', 'document', 'sticker', 'animation', 'audio', 'voice']
+    if (!downloadableTypes.includes(mediaType)) {
+      debugLog(`Media type not downloadable: ${mediaType}`)
+      return null
+    }
+
+    debugLog(`Downloading media: channel=${channelId}, msg=${messageId}, type=${mediaType}, thumb=${thumbSize}`)
+
+    // Download using mtcute's downloadAsBuffer
     let buffer: Uint8Array | null = null
-    const mediaType = msg.media?.type
-    const anyMedia = msg.media as any
+
+    // Map thumb size to mtcute format
+    // 's' = small (100x100), 'm' = medium (320x320), 'x' = large (800x800)
+    const thumbType = thumbSize
+      ? thumbSize === 'small' ? 's' : thumbSize === 'medium' ? 'm' : 'x'
+      : undefined
 
     try {
-      // For videos/animations, get thumbnail
-      if ((mediaType === 'video' || mediaType === 'animation') && thumbSize) {
-        // Method 1: Use mtcute's thumbnails property
-        if (anyMedia.thumbnails && anyMedia.thumbnails.length > 0) {
-          const thumbType = thumbSize === 'small' ? 's' : 'm'
-          const thumb = anyMedia.getThumbnail?.(thumbType) ?? anyMedia.thumbnails[0]
-          if (thumb) {
-            if (thumb.location && anyClient.downloadMedia) {
-              buffer = await anyClient.downloadMedia(thumb.location)
-            } else if (anyClient.downloadMedia) {
-              buffer = await anyClient.downloadMedia(thumb)
-            }
-          }
+      const media = msg.media as any
+
+      if (thumbType && typeof media.getThumbnail === 'function') {
+        // For photos/videos/documents with thumbnails, get the thumbnail first
+        const thumbnail = media.getThumbnail(thumbType)
+          ?? media.getThumbnail('m')  // fallback to medium
+          ?? media.getThumbnail('s')  // fallback to small
+          ?? media.getThumbnail('x')  // fallback to large
+
+        if (thumbnail) {
+          debugLog(`Found thumbnail type: ${thumbnail.type}`)
+          buffer = await client.downloadAsBuffer(thumbnail)
+        } else {
+          // No thumbnail found - download full media
+          // For photos this gets the best size, for videos the full file
+          debugLog(`No thumbnail found, downloading full media`)
+          buffer = await client.downloadAsBuffer(media)
         }
-
-        // Method 2: Fallback to raw.thumbs
-        if (!buffer) {
-          const thumbs = anyMedia.raw?.thumbs
-          if (thumbs && Array.isArray(thumbs)) {
-            const thumbType = thumbSize === 'small' ? 's' : 'm'
-            const thumb = thumbs.find((t: any) => t.type === thumbType)
-              ?? thumbs.find((t: any) => t.type === 'm')
-              ?? thumbs.find((t: any) => t._ === 'photoSize')
-
-            if (thumb && thumb._ === 'photoSize') {
-              const doc = anyMedia.raw
-              if (doc) {
-                const inputLocation = {
-                  _: 'inputDocumentFileLocation',
-                  id: doc.id,
-                  accessHash: doc.accessHash,
-                  fileReference: doc.fileReference,
-                  thumbSize: thumb.type,
-                }
-
-                try {
-                  if (anyClient.downloadToBuffer) {
-                    buffer = await anyClient.downloadToBuffer(inputLocation)
-                  } else if (anyClient.downloadAsBuffer) {
-                    buffer = await anyClient.downloadAsBuffer(inputLocation)
-                  } else if (anyClient.downloadMedia) {
-                    buffer = await anyClient.downloadMedia(inputLocation)
-                  }
-                } catch {
-                  // Fallback failed
-                }
-              }
-            }
-          }
-        }
-
-        if (!buffer) {
-          return null
-        }
-      } else if (anyClient.downloadMedia) {
-        buffer = await anyClient.downloadMedia(msg.media, {
-          thumb: thumbSize ? 'm' : undefined,
-        })
-      } else if (anyClient.downloadAsBuffer) {
-        buffer = await anyClient.downloadAsBuffer(msg.media)
+      } else {
+        // Download full media (no getThumbnail method or no thumb requested)
+        buffer = await client.downloadAsBuffer(media)
       }
-    } catch {
-      // Download failed silently
+    } catch (downloadError) {
+      const errorMessage = downloadError instanceof Error ? downloadError.message : String(downloadError)
+
+      // Check for FILE_REFERENCE_EXPIRED - try refetching message
+      if (errorMessage.includes('FILE_REFERENCE') || errorMessage.includes('400')) {
+        debugWarn(`File reference expired, refetching: channel=${channelId}, msg=${messageId}`)
+
+        try {
+          // Refetch message to get fresh file reference
+          const freshMessages = await client.getMessages(channelId, [messageId])
+          if (freshMessages?.[0]?.media) {
+            const freshMedia = freshMessages[0].media as any
+
+            if (thumbType && typeof freshMedia.getThumbnail === 'function') {
+              const thumbnail = freshMedia.getThumbnail(thumbType)
+                ?? freshMedia.getThumbnail('m')
+                ?? freshMedia.getThumbnail('s')
+                ?? freshMedia.getThumbnail('x')
+
+              if (thumbnail) {
+                buffer = await client.downloadAsBuffer(thumbnail)
+              } else {
+                // No thumbnail - download full media
+                buffer = await client.downloadAsBuffer(freshMedia)
+              }
+            } else {
+              buffer = await client.downloadAsBuffer(freshMedia)
+            }
+          }
+        } catch (retryError) {
+          debugWarn(`Retry failed: channel=${channelId}, msg=${messageId}`, retryError)
+        }
+      } else {
+        debugWarn(`Download failed: channel=${channelId}, msg=${messageId}`, downloadError)
+      }
     }
 
-    if (!buffer) {
+    if (!buffer || buffer.length === 0) {
+      debugWarn(`Empty buffer: channel=${channelId}, msg=${messageId}`)
       return null
     }
 
-    // Thumbnails are always JPEG images, even for videos
+    // Thumbnails are always JPEG images
     const mimeType = thumbSize ? 'image/jpeg' : getMimeType(msg.media)
-    const blob = new Blob([buffer], { type: mimeType })
+    // Convert to regular array for Blob compatibility
+    const blob = new Blob([new Uint8Array(buffer)], { type: mimeType })
     const url = URL.createObjectURL(blob)
 
     mediaCache.set(cacheKey, url)
+    debugLog(`Cached media: ${cacheKey}`)
     return url
-  } catch {
+  } catch (error) {
+    debugWarn(`Error downloading media: channel=${channelId}, msg=${messageId}`, error)
     return null
   }
 }
@@ -169,7 +193,8 @@ export async function downloadProfilePhoto(
       return null
     }
 
-    const blob = new Blob([buffer], { type: 'image/jpeg' })
+    // Convert to regular array for Blob compatibility
+    const blob = new Blob([new Uint8Array(buffer)], { type: 'image/jpeg' })
     const url = URL.createObjectURL(blob)
 
     mediaCache.set(cacheKey, url)
@@ -233,6 +258,30 @@ export function clearMediaCache(): void {
     URL.revokeObjectURL(url)
   }
   mediaCache.clear()
+}
+
+/**
+ * Check if media is cached
+ */
+export function isMediaCached(
+  channelId: number,
+  messageId: number,
+  thumbSize?: 'small' | 'medium' | 'large'
+): boolean {
+  const cacheKey = `${channelId}:${messageId}:${thumbSize ?? 'full'}`
+  return mediaCache.has(cacheKey)
+}
+
+/**
+ * Get cached media URL if available
+ */
+export function getCachedMedia(
+  channelId: number,
+  messageId: number,
+  thumbSize?: 'small' | 'medium' | 'large'
+): string | null {
+  const cacheKey = `${channelId}:${messageId}:${thumbSize ?? 'full'}`
+  return mediaCache.get(cacheKey) ?? null
 }
 
 function getMimeType(media: { type: string; mimeType?: string }): string {

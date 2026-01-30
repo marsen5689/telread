@@ -1,5 +1,6 @@
 import { getTelegramClient } from './client'
 import type { Message as TgMessage } from '@mtcute/web'
+import Long from 'long'
 
 // ============================================================================
 // Types
@@ -113,23 +114,21 @@ export async function fetchComments(
     const peer = await client.resolvePeer(channelId)
 
     // Use messages.getReplies - the correct Telegram API for channel post comments
-    // Note: Telegram TL API uses snake_case for parameter names
     const result = (await client.call({
       _: 'messages.getReplies',
       peer,
-      msg_id: messageId,
-      offset_id: options?.offsetId ?? 0,
-      offset_date: 0,
-      add_offset: 0,
+      msgId: messageId,
+      offsetId: options?.offsetId ?? 0,
+      offsetDate: 0,
+      addOffset: 0,
       limit,
-      max_id: 0,
-      min_id: 0,
-      hash: BigInt(0),
+      maxId: 0,
+      minId: 0,
+      hash: Long.ZERO,
     })) as TLMessagesResponse
 
     return processCommentsResponse(result, messageId, limit)
   } catch (error) {
-    // Check for specific Telegram errors
     const errorMessage = error instanceof Error ? error.message : String(error)
 
     if (errorMessage.includes('MSG_ID_INVALID') || errorMessage.includes('CHANNEL_INVALID')) {
@@ -139,8 +138,6 @@ export async function fetchComments(
     if (errorMessage.includes('FLOOD')) {
       throw new CommentError('Too many requests, please try again later', 'NETWORK')
     }
-
-    console.warn('Primary comment fetch failed, trying fallback:', errorMessage)
 
     // Fallback to getDiscussionMessage + iterHistory
     return fetchCommentsViaDiscussion(channelId, messageId, limit)
@@ -273,7 +270,6 @@ async function fetchCommentsViaDiscussion(
       nextOffsetId: comments.length > 0 ? comments[comments.length - 1].id : undefined,
     }
   } catch (error) {
-    console.error('Fallback comment fetch failed:', error)
     throw new CommentError('Failed to load comments', 'NETWORK')
   }
 }

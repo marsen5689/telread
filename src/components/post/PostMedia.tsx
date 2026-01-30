@@ -1,12 +1,9 @@
-import { createSignal, Show, Match, Switch, createEffect, onCleanup, onMount, createResource } from 'solid-js'
+import { createSignal, Show, Match, Switch, createEffect, createResource } from 'solid-js'
 import { Motion } from 'solid-motionone'
-import { downloadMedia } from '@/lib/telegram'
+import { downloadMedia, getCachedMedia } from '@/lib/telegram'
 import type { MessageMedia } from '@/lib/telegram'
 import { useMedia } from '@/lib/query'
 import { Skeleton } from '@/components/ui'
-
-// Simple in-memory cache for media URLs
-const mediaCache = new Map<string, string>()
 
 interface PostMediaProps {
   channelId: number
@@ -24,51 +21,23 @@ interface PostMediaProps {
 export function PostMedia(props: PostMediaProps) {
   const [isExpanded, setIsExpanded] = createSignal(false)
   const [isLoaded, setIsLoaded] = createSignal(false)
-  const [shouldFetch, setShouldFetch] = createSignal(false)
   let containerRef: HTMLDivElement | undefined
 
-  const cacheKey = () => `${props.channelId}:${props.messageId}:medium`
-
-  // Use createResource - only fetches when shouldFetch is true
+  // Use createResource to fetch media
+  // Fetches immediately on mount (lazy loading via IntersectionObserver was broken
+  // because scroll container is not document viewport)
   const [thumbnailUrl] = createResource(
-    () => shouldFetch() ? cacheKey() : null,
-    async (key) => {
-      if (!key) return null
-
-      // Check cache first
-      const cached = mediaCache.get(key)
+    () => ({ channelId: props.channelId, messageId: props.messageId }),
+    async (params) => {
+      // Check centralized cache first
+      const cached = getCachedMedia(params.channelId, params.messageId, 'large')
       if (cached) return cached
 
-      // Fetch and cache
-      const url = await downloadMedia(props.channelId, props.messageId, 'medium')
-      if (url) mediaCache.set(key, url)
+      // Fetch (downloadMedia handles caching internally)
+      const url = await downloadMedia(params.channelId, params.messageId, 'large')
       return url
     }
   )
-
-  // IntersectionObserver to trigger loading
-  onMount(() => {
-    if (!containerRef) return
-
-    // Check if already cached - load immediately
-    if (mediaCache.has(cacheKey())) {
-      setShouldFetch(true)
-      return
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          observer.disconnect()
-          setShouldFetch(true)
-        }
-      },
-      { rootMargin: '200px', threshold: 0 }
-    )
-
-    observer.observe(containerRef)
-    onCleanup(() => observer.disconnect())
-  })
 
 
   // Calculate aspect ratio
@@ -222,11 +191,11 @@ function MediaModal(props: {
   media: MessageMedia
   onClose: () => void
 }) {
-  // Load full resolution
+  // Load full resolution (undefined = no thumbnail, full size)
   const fullQuery = useMedia(
     () => props.channelId,
     () => props.messageId,
-    () => 'large'
+    () => undefined  // Full resolution, not thumbnail
   )
 
   // Close on escape

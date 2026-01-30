@@ -4,15 +4,17 @@ import { queryKeys } from '../keys'
 
 /**
  * Hook to download media from a message
+ *
+ * @param size - 'small' (100x100), 'medium' (320x320), 'large' (800x800), or undefined for full resolution
  */
 export function useMedia(
   channelId: () => number,
   messageId: () => number,
-  size?: () => 'small' | 'medium' | 'large',
+  size?: () => 'small' | 'medium' | 'large' | undefined,
   enabled?: () => boolean
 ) {
   return createQuery(() => ({
-    queryKey: queryKeys.media.download(channelId(), messageId(), size?.()),
+    queryKey: queryKeys.media.download(channelId(), messageId(), size?.() ?? 'full'),
     queryFn: () => downloadMedia(channelId(), messageId(), size?.()),
     staleTime: Infinity, // Media doesn't change
     gcTime: 1000 * 60 * 60, // Keep in cache for 1 hour
