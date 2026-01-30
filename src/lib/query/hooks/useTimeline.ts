@@ -1,5 +1,5 @@
 import { createQuery, createInfiniteQuery } from '@tanstack/solid-query'
-import { createEffect, on, createMemo, untrack } from 'solid-js'
+import { createEffect, on, createMemo, untrack, onCleanup } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
 import {
   fetchMessages,
@@ -352,11 +352,14 @@ export function useOptimizedTimeline() {
         hasSynced = true
 
         // Delay to let getDifference/catchUp complete first
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
           backgroundSyncRecentHistory(data.channels, (messages) => {
             upsertPosts(messages)
           })
         }, 2000)
+        
+        // Cleanup if component unmounts before timeout fires
+        onCleanup(() => clearTimeout(timeoutId))
       }
     )
   )

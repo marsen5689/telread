@@ -89,8 +89,9 @@ function Post() {
     }
   }
 
-  const isLoading = () => postQuery.isLoading || resolvedChannel.isLoading
-  const isError = () => postQuery.isError || resolvedChannel.isError
+  const hasData = () => postQuery.data && channel()
+  const isLoading = () => !hasData() && (postQuery.isLoading || resolvedChannel.isLoading || resolvedChannel.isFetching)
+  const isError = () => !hasData() && (postQuery.isError || resolvedChannel.isError)
 
   return (
     <div class="min-h-full pb-24">
@@ -113,12 +114,12 @@ function Post() {
         </button>
       </div>
 
-      {/* Loading */}
-      <Show when={isLoading() && !isError()}>
+      {/* Loading - only when no data yet */}
+      <Show when={isLoading()}>
         <PostSkeleton />
       </Show>
 
-      {/* Error */}
+      {/* Error - only when no data and error occurred */}
       <Show when={isError()}>
         <div class="p-4 text-center">
           <p class="text-[var(--danger)]">Failed to load post</p>
@@ -136,7 +137,7 @@ function Post() {
       </Show>
 
       {/* Post content */}
-      <Show when={postQuery.data && channel()}>
+      <Show when={hasData()}>
         <Motion.article
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}

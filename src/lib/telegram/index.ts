@@ -2,6 +2,7 @@ export {
   getTelegramClient,
   getClientVersion,
   isClientReady,
+  waitForClientReady,
   setClientReady,
   isAuthenticated,
   getCurrentUser,
@@ -19,6 +20,7 @@ export {
   submitCode,
   submit2FA,
   startQRAuth,
+  stopQRAuth,
   type AuthState,
   type AuthCallbacks,
 } from './auth'

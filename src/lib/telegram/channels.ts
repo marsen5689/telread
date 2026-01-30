@@ -1,4 +1,4 @@
-import { getTelegramClient } from './client'
+import { getTelegramClient, waitForClientReady } from './client'
 import { mapMessage } from './messages'
 import { MAX_DIALOGS_TO_ITERATE } from '@/config/constants'
 import type { Chat, Message as TgMessage } from '@mtcute/web'
@@ -177,6 +177,9 @@ export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMe
  * Get a single channel by ID or username
  */
 export async function getChannel(idOrUsername: string | number): Promise<Channel | null> {
+  const ready = await waitForClientReady()
+  if (!ready) return null
+
   const client = getTelegramClient()
 
   try {

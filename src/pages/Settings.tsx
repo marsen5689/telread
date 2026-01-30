@@ -13,7 +13,12 @@ function Settings() {
 
   const handleLogout = async () => {
     if (confirm('Are you sure you want to log out?')) {
-      await logout()
+      try {
+        await logout()
+      } catch (error) {
+        console.error('Logout failed:', error)
+        // Continue with logout anyway - user wants to leave
+      }
       // Clear auth state (also clears auth hint for optimistic loading)
       authStore.setUser(null)
       navigate('/login')

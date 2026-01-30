@@ -67,7 +67,7 @@ const idbPersister: Persister = {
 }
 
 // Clear old cache on version change
-const CACHE_VERSION = 'v9' // v9: posts extracted from channels in effect (cache restore fix)
+const CACHE_VERSION = 'v10' // v10: don't persist null resolve results
 const CACHE_VERSION_KEY = 'telread-cache-version'
 
 const storedVersion = localStorage.getItem(CACHE_VERSION_KEY)
@@ -93,8 +93,9 @@ const [, restorePromise] = persistQueryClient({
     shouldDehydrateQuery: (query) => {
       const key = query.queryKey as string[]
       // Don't persist media queries - they use blob URLs (session-only)
-      // Media persistence is handled by separate IndexedDB cache in media.ts
       if (key[0] === 'media') return false
+      // Don't persist resolve queries with null data (failed lookups)
+      if (key[0] === 'channels' && key[1] === 'resolve' && !query.state.data) return false
       return query.state.status === 'success'
     },
   },

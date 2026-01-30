@@ -1,4 +1,4 @@
-import { createSignal, Show, onMount } from 'solid-js'
+import { createSignal, Show, createEffect, onCleanup } from 'solid-js'
 
 interface QRCodeLoginProps {
   qrUrl?: string
@@ -17,11 +17,19 @@ export function QRCodeLogin(props: QRCodeLoginProps) {
   const [qrDataUrl, setQrDataUrl] = createSignal<string | null>(null)
 
   // Generate QR code image when URL changes
-  onMount(async () => {
-    if (props.qrUrl) {
+  // Uses createEffect to track qrUrl changes and properly cleanup async operations
+  createEffect(() => {
+    const url = props.qrUrl
+    if (!url) return
+    
+    let cancelled = false
+    
+    ;(async () => {
       // Dynamically import QR code library for code splitting
       const QRCode = (await import('qrcode')).default
-      const dataUrl = await QRCode.toDataURL(props.qrUrl, {
+      if (cancelled) return
+      
+      const dataUrl = await QRCode.toDataURL(url, {
         width: 256,
         margin: 2,
         color: {
@@ -29,8 +37,12 @@ export function QRCodeLogin(props: QRCodeLoginProps) {
           light: '#ffffff',
         },
       })
+      
+      if (cancelled) return
       setQrDataUrl(dataUrl)
-    }
+    })()
+    
+    onCleanup(() => { cancelled = true })
   })
 
   return (

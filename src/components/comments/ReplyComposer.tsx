@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show } from 'solid-js'
+import { createSignal, onMount, Show } from 'solid-js'
 import { GlassButton } from '@/components/ui'
 
 interface ReplyComposerProps {
@@ -37,7 +37,8 @@ export function ReplyComposer(props: ReplyComposerProps) {
     target.style.height = `${Math.min(target.scrollHeight, 120)}px`
   }
 
-  createEffect(() => {
+  // Focus textarea on mount
+  onMount(() => {
     textareaRef?.focus()
   })
 

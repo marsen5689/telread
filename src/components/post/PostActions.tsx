@@ -1,4 +1,4 @@
-import { Show, For } from 'solid-js'
+import { Show, For, createMemo } from 'solid-js'
 import { bookmarksStore } from '@/lib/store'
 import { useSendReaction } from '@/lib/query'
 import { formatCount } from '@/lib/utils'
@@ -36,9 +36,10 @@ export function PostActions(props: PostActionsProps) {
     )
   }
 
-  // Get currently chosen emojis by the user
-  const currentChosenEmojis = () =>
+  // Get currently chosen emojis by the user (memoized to avoid recalculating on each access)
+  const currentChosenEmojis = createMemo(() =>
     (props.reactions ?? []).filter((r) => r.chosen).map((r) => r.emoji)
+  )
 
   const handleReactionClick = (emoji: string) => {
     // Toggle the reaction - preserves other chosen reactions

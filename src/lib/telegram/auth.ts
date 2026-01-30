@@ -134,10 +134,28 @@ export async function submit2FA(
   }
 }
 
+// Store for cancelling active QR polling
+let cancelQRPolling: (() => void) | null = null
+
+/**
+ * Stop any active QR polling
+ * Call this when navigating away from QR login screen
+ */
+export function stopQRAuth(): void {
+  if (cancelQRPolling) {
+    cancelQRPolling()
+    cancelQRPolling = null
+  }
+}
+
 /**
  * Start QR code authentication
+ * Returns cleanup function to stop polling
  */
 export async function startQRAuth(callbacks: AuthCallbacks): Promise<void> {
+  // Cancel any existing polling first
+  stopQRAuth()
+  
   const client = getTelegramClient()
 
   try {
@@ -168,15 +186,31 @@ export async function startQRAuth(callbacks: AuthCallbacks): Promise<void> {
   }
 }
 
-async function pollQRLogin(
+function pollQRLogin(
   expires: number,
   callbacks: AuthCallbacks
-): Promise<void> {
+): void {
   const client = getTelegramClient()
+  let cancelled = false
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+  // Store cancel function globally
+  cancelQRPolling = () => {
+    cancelled = true
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+  }
 
   const poll = async () => {
+    if (cancelled) return
+    
     if (Date.now() / 1000 > expires) {
-      startQRAuth(callbacks)
+      // Token expired, get a new one (if not cancelled)
+      if (!cancelled) {
+        startQRAuth(callbacks)
+      }
       return
     }
 
@@ -188,14 +222,22 @@ async function pollQRLogin(
         exceptIds: [],
       })
 
+      if (cancelled) return
+
       if (result._ === 'auth.loginTokenSuccess') {
+        cancelQRPolling = null
         callbacks.onStateChange({ step: 'done' })
         return
       }
 
-      setTimeout(poll, 2000)
+      if (!cancelled) {
+        timeoutId = setTimeout(poll, 2000)
+      }
     } catch (error: unknown) {
+      if (cancelled) return
+      
       if (is2FAError(error)) {
+        cancelQRPolling = null
         try {
           const passwordInfo = await client.call({ _: 'account.getPassword' })
           callbacks.onStateChange({
@@ -211,7 +253,9 @@ async function pollQRLogin(
         return
       }
 
-      setTimeout(poll, 2000)
+      if (!cancelled) {
+        timeoutId = setTimeout(poll, 2000)
+      }
     }
   }
 

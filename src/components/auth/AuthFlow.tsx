@@ -10,6 +10,7 @@ import {
   submitCode,
   submit2FA,
   startQRAuth,
+  stopQRAuth,
   type AuthState,
 } from '@/lib/telegram'
 
@@ -84,6 +85,8 @@ export function AuthFlow(props: AuthFlowProps) {
   }
 
   const handleBack = () => {
+    // Stop QR polling if navigating away from QR screen
+    stopQRAuth()
     setError(undefined)
     setState({ step: 'phone' })
   }

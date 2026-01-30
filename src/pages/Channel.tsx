@@ -21,21 +21,9 @@ function Channel() {
   const navigate = useNavigate()
 
   // Resolve channel from ID or username param
-  // Checks cache first, then fetches from API
-  const idOrUsername = createMemo(() => {
-    const value = params.id ? parseInt(params.id, 10) : params.username
-    if (import.meta.env.DEV) {
-      console.log('[Channel] idOrUsername:', value, 'params:', params)
-    }
-    return value
-  })
-
+  const idOrUsername = () => params.id ? parseInt(params.id, 10) : params.username
   const resolvedChannel = useResolveChannel(idOrUsername)
   const channelId = resolvedChannel.channelId
-
-  if (import.meta.env.DEV) {
-    console.log('[Channel] resolvedChannel status:', resolvedChannel.status, 'channelId:', channelId())
-  }
 
   const channelInfoQuery = useChannelInfo(channelId)
   const messagesQuery = useMessages(channelId)
@@ -82,27 +70,20 @@ function Channel() {
           when={channel()}
           fallback={
             <div class="relative overflow-hidden rounded-3xl">
-              {/* Banner skeleton */}
-              <Skeleton class="h-28 rounded-none" />
-              {/* Content card skeleton */}
+              {/* Banner */}
+              <div class="h-28 bg-[var(--bg-tertiary)]" />
+              {/* Content card */}
               <div class="relative glass-card -mt-8 mx-3 mb-3 p-4">
-                {/* Avatar and actions row */}
-                <div class="flex items-end gap-4 -mt-14 mb-3">
-                  <Skeleton class="w-20 h-20 rounded-full ring-4 ring-[var(--bg-primary)] flex-shrink-0" />
-                  <div class="flex-1 flex justify-end gap-2">
-                    <Skeleton class="h-8 w-20 rounded-xl" />
-                  </div>
+                {/* Avatar row */}
+                <div class="flex items-end gap-4 -mt-14 mb-4">
+                  <Skeleton class="w-20 h-20 rounded-full ring-4 ring-[var(--bg-primary)]" />
+                  <div class="flex-1" />
                 </div>
-                {/* Title and username */}
-                <Skeleton class="h-6 w-48 mb-1" />
-                <Skeleton class="h-4 w-28 mb-3" />
-                {/* Description */}
-                <Skeleton class="h-12 w-full mb-3" />
-                {/* Stats */}
-                <div class="flex items-center gap-4">
-                  <Skeleton class="h-4 w-24" />
-                  <Skeleton class="h-4 w-20" />
-                </div>
+                {/* Content */}
+                <Skeleton class="h-6 w-40 mb-2" />
+                <Skeleton class="h-4 w-24 mb-4" />
+                <Skeleton class="h-4 w-full mb-1" />
+                <Skeleton class="h-4 w-2/3" />
               </div>
             </div>
           }
@@ -122,7 +103,7 @@ function Channel() {
         <Timeline
           items={groupPostsByMediaGroup(messagesQuery.data ?? [])}
           channels={channel() ? [channel()!] : []}
-          isLoading={messagesQuery.isLoading}
+          isLoading={resolvedChannel.isLoading || resolvedChannel.isFetching || messagesQuery.isLoading}
           isLoadingMore={false}
           hasMore={false}
           onLoadMore={() => {}}

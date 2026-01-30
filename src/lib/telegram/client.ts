@@ -175,6 +175,25 @@ export function isClientReady(): boolean {
 }
 
 /**
+ * Wait for client to be ready (with timeout)
+ * @param timeoutMs - Maximum time to wait (default 5000ms)
+ * @returns true if client is ready, false if timeout
+ */
+export async function waitForClientReady(timeoutMs = 5000): Promise<boolean> {
+  if (clientReady()) return true
+  
+  const interval = 100
+  const maxAttempts = Math.ceil(timeoutMs / interval)
+  
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(resolve => setTimeout(resolve, interval))
+    if (clientReady()) return true
+  }
+  
+  return false
+}
+
+/**
  * Mark client as ready for API calls
  * Called after successful connect() and authentication
  */

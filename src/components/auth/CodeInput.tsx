@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For } from 'solid-js'
+import { createSignal, onMount, For } from 'solid-js'
 
 interface CodeInputProps {
   phone: string
@@ -59,7 +59,7 @@ export function CodeInput(props: CodeInputProps) {
   }
 
   // Focus first input on mount
-  createEffect(() => {
+  onMount(() => {
     inputRefs[0]?.focus()
   })
 

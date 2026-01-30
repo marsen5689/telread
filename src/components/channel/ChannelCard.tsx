@@ -158,20 +158,31 @@ export function ChannelCard(props: ChannelCardProps) {
     return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`
   })
 
+  // Track if banner is ready (has dominant color or loaded)
+  const bannerReady = createMemo(() => !!dominantColor() || !!bannerUrl())
+
   return (
     <div class={`relative overflow-hidden rounded-3xl ${props.class ?? ''}`}>
       {/* Banner with blurred avatar background */}
       <div class="relative h-28 overflow-hidden">
-        {/* Dynamic gradient based on avatar color */}
-        <div class="absolute inset-0 transition-all duration-700" style={gradientStyle()} />
+        {/* Neutral base layer */}
+        <div class="absolute inset-0 bg-[var(--bg-secondary)]" />
+        
+        {/* Dynamic gradient - fades in smoothly */}
+        <div 
+          class="absolute inset-0 transition-opacity duration-500"
+          classList={{ 'opacity-0': !bannerReady(), 'opacity-100': bannerReady() }}
+          style={gradientStyle()} 
+        />
 
-        {/* Blurred avatar as banner */}
+        {/* Blurred avatar as banner - fades in via CSS */}
         <Show when={bannerUrl()}>
           {(url) => (
             <img
               src={url()}
               alt=""
-              class="absolute inset-0 w-full h-full object-cover scale-150 blur-2xl opacity-60"
+              class="absolute inset-0 w-full h-full object-cover scale-150 blur-2xl transition-opacity duration-700"
+              style={{ opacity: dominantColor() ? 0.6 : 0 }}
             />
           )}
         </Show>
