@@ -56,7 +56,8 @@ export function TimelineGroup(props: TimelineGroupProps) {
     navigate(channelUrl())
   }
 
-  const timeAgo = () => formatTimeAgo(primaryPost().date)
+  // Memoize to avoid recalculating on every render
+  const timeAgo = createMemo(() => formatTimeAgo(primaryPost().date))
 
   return (
     <article class="post cursor-pointer" onClick={handlePostClick}>

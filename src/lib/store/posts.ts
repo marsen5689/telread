@@ -429,10 +429,30 @@ export function usePostsStore() {
 }
 
 /**
+ * Clear all pending batch timers
+ * Called on logout to prevent memory leaks and stale updates
+ */
+function clearPendingTimers(): void {
+  if (viewsUpdateTimer) {
+    clearTimeout(viewsUpdateTimer)
+    viewsUpdateTimer = null
+  }
+  if (reactionsUpdateTimer) {
+    clearTimeout(reactionsUpdateTimer)
+    reactionsUpdateTimer = null
+  }
+  pendingViewsUpdates.clear()
+  pendingReactionsUpdates.clear()
+}
+
+/**
  * Clear all posts (for logout)
  * Also resets isInitialized so updates will be queued until timeline loads again
  */
 export function clearPosts(): void {
+  // Clear pending batch timers first to prevent stale updates
+  clearPendingTimers()
+
   setState({
     byId: {},
     sortedKeys: [],

@@ -95,6 +95,8 @@ function queueMessage(message: TgMessage): void {
 // Visibility Change Handler
 // ============================================================================
 
+let visibilityCleanup: (() => void) | null = null
+
 function handleVisibilityChange(): void {
   if (document.visibilityState === 'hidden') {
     // Pause processing when tab is hidden
@@ -125,9 +127,20 @@ function handleVisibilityChange(): void {
   }
 }
 
-// Register visibility handler once
-if (typeof document !== 'undefined') {
+function startVisibilityListener(): () => void {
+  if (typeof document === 'undefined') return () => {}
+
   document.addEventListener('visibilitychange', handleVisibilityChange)
+  return () => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }
+}
+
+function stopVisibilityListener(): void {
+  if (visibilityCleanup) {
+    visibilityCleanup()
+    visibilityCleanup = null
+  }
 }
 
 /**
@@ -176,6 +189,17 @@ export function startUpdatesListener(): UpdatesCleanup {
     activeCleanup()
     activeCleanup = null
   }
+
+  // Clear any pending batch from previous session
+  if (batchTimer) {
+    clearTimeout(batchTimer)
+    batchTimer = null
+  }
+  pendingBatch.messages = []
+  isPaused = false
+
+  // Start visibility listener for pause/resume on tab switch
+  visibilityCleanup = startVisibilityListener()
 
   const client = getTelegramClient()
   const clientVersion = getClientVersion()
@@ -323,6 +347,10 @@ export function startUpdatesListener(): UpdatesCleanup {
 
   const cleanup: UpdatesCleanup = () => {
     try {
+      // Stop visibility listener
+      stopVisibilityListener()
+
+      // Remove Telegram event handlers
       client.onNewMessage?.remove(handleNewMessage)
       client.onEditMessage?.remove(handleEditMessage)
       client.onDeleteMessage?.remove(handleDeleteMessage)
@@ -342,6 +370,9 @@ export function startUpdatesListener(): UpdatesCleanup {
 }
 
 export function stopUpdatesListener(): void {
+  // Stop visibility listener
+  stopVisibilityListener()
+
   // Clear batch timer
   if (batchTimer) {
     clearTimeout(batchTimer)

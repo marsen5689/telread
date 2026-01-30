@@ -11,7 +11,6 @@ import {
 import {
   upsertPosts,
   postsState,
-  getChannelPosts,
   revealPendingPosts,
   markStoreInitialized,
 } from '@/lib/store'
@@ -36,14 +35,26 @@ export function useMessages(channelId: () => number, enabled?: () => boolean) {
     staleTime: 1000 * 60 * 5,
   }))
 
+  // Memoized channel posts - only recalculates when sortedKeys change
+  // Individual post updates are handled by component-level reactivity
+  const channelPosts = createMemo(() => {
+    const cid = channelId()
+    // Track sortedKeys for list changes (posts added/removed)
+    const keys = postsState.sortedKeys
+    // untrack byId access - we only need the list, not individual post changes
+    return untrack(() =>
+      keys
+        .map((key) => postsState.byId[key])
+        .filter((post): post is Message => post?.channelId === cid)
+    )
+  })
+
   // Return posts from centralized store for this channel
   return {
     ...query,
     // Override data to come from centralized store
     get data() {
-      // Direct store access for proper SolidJS dependency tracking
-      void postsState.lastUpdated
-      return getChannelPosts(channelId())
+      return channelPosts()
     },
   }
 }
@@ -71,13 +82,24 @@ export function useInfiniteMessages(channelId: () => number) {
     staleTime: 1000 * 60 * 5,
   }))
 
+  // Memoized channel posts - only recalculates when sortedKeys change
+  const channelPosts = createMemo(() => {
+    const cid = channelId()
+    // Track sortedKeys for list changes (posts added/removed)
+    const keys = postsState.sortedKeys
+    // untrack byId access - we only need the list, not individual post changes
+    return untrack(() =>
+      keys
+        .map((key) => postsState.byId[key])
+        .filter((post): post is Message => post?.channelId === cid)
+    )
+  })
+
   // Return posts from centralized store
   return {
     ...query,
     get data() {
-      // Direct store access for proper SolidJS dependency tracking
-      void postsState.lastUpdated
-      return { pages: [getChannelPosts(channelId())] }
+      return { pages: [channelPosts()] }
     },
   }
 }

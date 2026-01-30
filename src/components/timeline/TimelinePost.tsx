@@ -45,7 +45,8 @@ export function TimelinePost(props: TimelinePostProps) {
     navigate(channelUrl())
   }
 
-  const timeAgo = () => formatTimeAgo(props.post.date)
+  // Memoize to avoid recalculating on every render
+  const timeAgo = createMemo(() => formatTimeAgo(props.post.date))
 
   // Check if text is long enough to be truncated
   const isTruncated = createMemo(() => {
