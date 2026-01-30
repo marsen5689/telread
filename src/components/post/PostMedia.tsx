@@ -380,6 +380,24 @@ function InlineVoicePlayer(props: {
   const [currentTime, setCurrentTime] = createSignal(0)
   const [duration, setDuration] = createSignal(props.media.duration ?? 0)
   let audioRef: HTMLAudioElement | undefined
+  let visibilityObserver: IntersectionObserver | undefined
+
+  // Pause audio when scrolled out of view
+  const setupVisibilityObserver = (el: HTMLDivElement) => {
+    visibilityObserver = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting && audioRef && isPlaying()) {
+          audioRef.pause()
+        }
+      },
+      { threshold: 0.2 }
+    )
+    visibilityObserver.observe(el)
+  }
+
+  onCleanup(() => {
+    visibilityObserver?.disconnect()
+  })
 
   // Load full audio file
   const audioQuery = useMedia(
@@ -436,7 +454,7 @@ function InlineVoicePlayer(props: {
   }
 
   return (
-    <div class="glass rounded-xl p-3 flex items-center gap-3">
+    <div ref={setupVisibilityObserver} class="glass rounded-xl p-3 flex items-center gap-3">
       {/* Play/Pause button */}
       <button
         type="button"
@@ -515,6 +533,24 @@ function InlineVideoNote(props: {
   const [currentTime, setCurrentTime] = createSignal(0)
   const [duration, setDuration] = createSignal(props.media.duration ?? 0)
   let videoRef: HTMLVideoElement | undefined
+  let visibilityObserver: IntersectionObserver | undefined
+
+  // Pause video when scrolled out of view
+  const setupVisibilityObserver = (el: HTMLDivElement) => {
+    visibilityObserver = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting && videoRef && isPlaying()) {
+          videoRef.pause()
+        }
+      },
+      { threshold: 0.2 }
+    )
+    visibilityObserver.observe(el)
+  }
+
+  onCleanup(() => {
+    visibilityObserver?.disconnect()
+  })
 
   // Load full video file
   const videoQuery = useMedia(
@@ -546,6 +582,7 @@ function InlineVideoNote(props: {
 
   return (
     <div 
+      ref={setupVisibilityObserver}
       class="relative cursor-pointer group"
       style={{ width: `${size}px`, height: `${size}px` }}
       onClick={handleClick}
@@ -635,6 +672,24 @@ function InlineAudioPlayer(props: {
   const [currentTime, setCurrentTime] = createSignal(0)
   const [duration, setDuration] = createSignal(props.media.duration ?? 0)
   let audioRef: HTMLAudioElement | undefined
+  let visibilityObserver: IntersectionObserver | undefined
+
+  // Pause audio when scrolled out of view
+  const setupVisibilityObserver = (el: HTMLDivElement) => {
+    visibilityObserver = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting && audioRef && isPlaying()) {
+          audioRef.pause()
+        }
+      },
+      { threshold: 0.2 }
+    )
+    visibilityObserver.observe(el)
+  }
+
+  onCleanup(() => {
+    visibilityObserver?.disconnect()
+  })
 
   // Load full audio file
   const audioQuery = useMedia(
@@ -668,7 +723,7 @@ function InlineAudioPlayer(props: {
   }
 
   return (
-    <div class="glass rounded-xl p-4">
+    <div ref={setupVisibilityObserver} class="glass rounded-xl p-4">
       <div class="flex items-center gap-4">
         {/* Album art / Icon */}
         <div class="w-12 h-12 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center flex-shrink-0">
@@ -759,6 +814,20 @@ function InlineVideoPlayer(props: {
   const [showControls, setShowControls] = createSignal(true)
   let videoRef: HTMLVideoElement | undefined
   let hideControlsTimeout: number | undefined
+  let visibilityObserver: IntersectionObserver | undefined
+
+  // Pause video when scrolled out of view
+  const setupVisibilityObserver = (el: HTMLDivElement) => {
+    visibilityObserver = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting && videoRef && isPlaying()) {
+          videoRef.pause()
+        }
+      },
+      { threshold: 0.2 }
+    )
+    visibilityObserver.observe(el)
+  }
 
   // Load thumbnail first
   const thumbQuery = useMedia(
@@ -818,10 +887,12 @@ function InlineVideoPlayer(props: {
 
   onCleanup(() => {
     clearTimeout(hideControlsTimeout)
+    visibilityObserver?.disconnect()
   })
 
   return (
     <div 
+      ref={setupVisibilityObserver}
       class="relative rounded-2xl overflow-hidden flex-shrink-0 shadow-sm hover:shadow-md transition-shadow bg-black" 
       style={props.containerStyle}
     >
