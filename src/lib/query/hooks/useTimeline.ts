@@ -1,5 +1,5 @@
 import { createQuery, createInfiniteQuery } from '@tanstack/solid-query'
-import { createSignal, createEffect, on, createMemo } from 'solid-js'
+import { createSignal, createEffect, on, createMemo, untrack } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
 import {
   fetchMessages,
@@ -359,39 +359,49 @@ export function useOptimizedTimeline() {
   }))
 
   // Populate stores when data loads (from cache or fresh fetch)
-  // Note: Real-time updates also add posts via upsertPost() in updates.ts
+  // Track if initial data has been processed to avoid re-processing
+  let initialDataProcessed = false
   createEffect(
     on(
       () => initialQuery.data,
       (data) => {
         if (!data) return
 
-        // Sync channels
+        // Sync channels (always update - they might change)
         setChannels(reconcile(data.channels))
         setChannelMap(data.channelMap)
 
-        // Populate posts store
-        if (data.posts.length > 0) {
-          upsertPosts(data.posts)
+        // Only process posts once
+        if (!initialDataProcessed) {
+          initialDataProcessed = true
+
+          // Populate posts store
+          if (data.posts.length > 0) {
+            upsertPosts(data.posts)
+          }
+
+          // Mark store as initialized (even if empty)
+          markStoreInitialized()
+
+          // Process messages that arrived before timeline was ready
+          onTimelineLoaded()
         }
-
-        // Mark store as initialized (even if empty)
-        // This allows real-time updates to be processed
-        markStoreInitialized()
-
-        // Process messages that arrived before timeline was ready
-        onTimelineLoaded()
       }
     )
   )
 
   // Populate posts from history pages (from cache or after scroll fetch)
-  // upsertPosts handles deduplication via timestamp checks, so we can process all pages
+  // Track processed page count to avoid re-processing
+  let lastProcessedPageCount = 0
   createEffect(
     on(
       () => historyQuery.data?.pages,
       (pages) => {
         if (!pages || pages.length === 0) return
+        // Only process new pages
+        if (pages.length <= lastProcessedPageCount) return
+        lastProcessedPageCount = pages.length
+
         const posts = pages.flat()
         if (posts.length > 0) {
           upsertPosts(posts)
@@ -425,18 +435,28 @@ export function useOptimizedTimeline() {
   )
 
   // Reactive timeline from centralized store
-  // Direct access to postsState ensures SolidJS tracks the dependency
+  // Only recalculate when sortedKeys change (posts added/removed)
+  // Use untrack for byId access - individual post updates are handled by component-level reactivity
   const timeline = createMemo(() => {
-    // Track lastUpdated to react to in-place updates (reactions, views, etc.)
-    void postsState.lastUpdated
     const keys = postsState.sortedKeys
-    const posts = keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
+    // untrack byId access so changes to individual posts don't trigger full recalculation
+    const posts = untrack(() => 
+      keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
+    )
     // Group posts by groupedId for albums
-    const items = groupPostsByMediaGroup(posts)
-    if (import.meta.env.DEV) {
-      console.log('[Timeline] memo recalculating, keys:', keys.length, 'posts:', posts.length, 'items:', items.length)
-    }
-    return items
+    return groupPostsByMediaGroup(posts)
+  })
+
+  // Memoized pending count - only recalculates when pendingKeys change
+  // Uses untrack for byId to avoid re-renders on views/reactions updates
+  const pendingCount = createMemo(() => {
+    const keys = postsState.pendingKeys
+    if (keys.length === 0) return 0
+    // untrack byId access - we only care about the count, not individual post changes
+    const pendingPosts = untrack(() =>
+      keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
+    )
+    return groupPostsByMediaGroup(pendingPosts).length
   })
 
   return {
@@ -470,12 +490,7 @@ export function useOptimizedTimeline() {
     },
     /** Number of new items (posts/albums) waiting to be shown (Twitter-style) */
     get pendingCount() {
-      // Group pending posts to count items, not individual posts
-      const pendingPosts = postsState.pendingKeys
-        .map((key) => postsState.byId[key])
-        .filter(Boolean) as Message[]
-      const groupedPending = groupPostsByMediaGroup(pendingPosts)
-      return groupedPending.length
+      return pendingCount()
     },
 
     loadMore: () => {

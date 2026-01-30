@@ -16,8 +16,8 @@ export function useMedia(
   return createQuery(() => ({
     queryKey: queryKeys.media.download(channelId(), messageId(), size?.() ?? 'full'),
     queryFn: () => downloadMedia(channelId(), messageId(), size?.()),
-    staleTime: Infinity, // Media doesn't change
-    gcTime: 1000 * 60 * 60, // Keep in cache for 1 hour
+    staleTime: 1000 * 60 * 30, // 30 min - media rarely changes
+    gcTime: 1000 * 60 * 10, // 10 min in memory (blob URLs are session-only anyway)
     // Don't fetch for invalid IDs (client readiness checked in queryFn after cache check)
     enabled: (enabled?.() ?? true) && channelId() !== 0 && messageId() !== 0,
   }))
@@ -34,8 +34,8 @@ export function useProfilePhoto(
   return createQuery(() => ({
     queryKey: queryKeys.media.profile(peerId()),
     queryFn: () => downloadProfilePhoto(peerId(), size ?? 'small'),
-    staleTime: 1000 * 60 * 60 * 24, // Profile photos rarely change
-    gcTime: 1000 * 60 * 60 * 24,
+    staleTime: 1000 * 60 * 60, // 1 hour - profile photos rarely change
+    gcTime: 1000 * 60 * 30, // 30 min in memory
     // Don't fetch for invalid peer IDs (client readiness checked in queryFn after cache check)
     enabled: (enabled?.() ?? true) && peerId() !== 0,
   }))

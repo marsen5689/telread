@@ -5,10 +5,10 @@ import { get, set, del } from 'idb-keyval'
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Cache for 30 minutes before considering stale
-      staleTime: 1000 * 60 * 30,
-      // Keep in cache for 24 hours (for persistence)
-      gcTime: 1000 * 60 * 60 * 24,
+      // Cache for 5 minutes before considering stale
+      staleTime: 1000 * 60 * 5,
+      // Keep in cache for 30 minutes (reduced from 24h to save memory)
+      gcTime: 1000 * 60 * 30,
       // Retry failed requests
       retry: 2,
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
@@ -88,8 +88,8 @@ export const cacheReadyPromise = (async () => {
     const data = await get<string>(IDB_KEY)
     if (data) {
       const persisted = deserialize(data) as PersistedClient
-      // Check if cache is still valid
-      const maxAge = 1000 * 60 * 60 * 24 // 24 hours
+      // Check if cache is still valid (4 hours)
+      const maxAge = 1000 * 60 * 60 * 4
       if (persisted.timestamp && Date.now() - persisted.timestamp < maxAge) {
         hydrate(queryClient, persisted.clientState)
         if (import.meta.env.DEV) {
@@ -109,7 +109,7 @@ export const cacheReadyPromise = (async () => {
 persistQueryClient({
   queryClient,
   persister: idbPersister,
-  maxAge: 1000 * 60 * 60 * 24, // 24 hours
+  maxAge: 1000 * 60 * 60 * 4, // 4 hours (reduced from 24h)
   buster: CACHE_VERSION,
   dehydrateOptions: {
     shouldDehydrateQuery: (query) => {

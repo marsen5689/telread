@@ -10,6 +10,12 @@ import type { Message } from '@/lib/telegram'
 import { getTime } from '@/lib/utils'
 
 /**
+ * Maximum posts to keep in memory
+ * ~500 posts * ~2KB average = ~1MB
+ */
+const MAX_POSTS = 500
+
+/**
  * Post key format: "channelId:messageId"
  */
 type PostKey = string
@@ -52,6 +58,23 @@ function sortKeysByDate(keys: PostKey[], byId: Record<PostKey, Message>): PostKe
 }
 
 /**
+ * Trim store to MAX_POSTS, removing oldest posts
+ * Called after adding new posts to prevent unbounded growth
+ */
+function trimToMaxPosts(s: PostsState): void {
+  if (s.sortedKeys.length <= MAX_POSTS) return
+
+  // Remove from end (oldest posts)
+  const keysToRemove = s.sortedKeys.slice(MAX_POSTS)
+  s.sortedKeys = s.sortedKeys.slice(0, MAX_POSTS)
+
+  // Clean up byId
+  for (const key of keysToRemove) {
+    delete s.byId[key]
+  }
+}
+
+/**
  * Add or update a single post (from real-time updates)
  * New posts go to pending queue, updates modify in place
  */
@@ -72,17 +95,9 @@ export function upsertPost(post: Message): void {
   }
 
   // Check if already in sortedKeys (from initial load/fetch)
-  // This can happen if fetchChannelsWithLastMessages already loaded this post
   if (state.sortedKeys.includes(key)) {
-    if (import.meta.env.DEV) {
-      console.log('[Posts] upsertPost: key already in sortedKeys, just updating byId', key)
-    }
     setState('byId', key, post)
     return
-  }
-
-  if (import.meta.env.DEV) {
-    console.log('[Posts] upsertPost: adding to pending queue', key)
   }
 
   // New post - add to pending queue (Twitter-style)
@@ -177,6 +192,9 @@ export function upsertPosts(posts: Message[]): void {
         s.sortedKeys = sortKeysByDate([...s.sortedKeys, ...newKeys], s.byId)
       }
 
+      // Trim old posts to prevent unbounded memory growth
+      trimToMaxPosts(s)
+
       if (hasChanges) {
         s.lastUpdated = Date.now()
       }
@@ -219,25 +237,68 @@ export function removePosts(channelId: number, messageIds: number[]): void {
 }
 
 /**
+ * Pending views updates - batched for performance
+ */
+const pendingViewsUpdates = new Map<PostKey, number>()
+let viewsUpdateTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushViewsUpdates(): void {
+  if (pendingViewsUpdates.size === 0) return
+
+  const updates = new Map(pendingViewsUpdates)
+  pendingViewsUpdates.clear()
+  viewsUpdateTimer = null
+
+  for (const [key, views] of updates) {
+    const post = state.byId[key]
+    if (post && post.views !== views) {
+      setState('byId', key, 'views', views)
+    }
+  }
+}
+
+/**
  * Update views count for a post
+ * Batched every 1s to prevent excessive updates
  */
 export function updatePostViews(channelId: number, messageId: number, views: number): void {
   const key = makeKey(channelId, messageId)
   const post = state.byId[key]
-  if (!post || post.views === views) return
+  if (!post) return
 
-  setState(
-    produce((s) => {
-      // Double-check post still exists (could be deleted between check and setState)
-      if (!s.byId[key]) return
-      s.byId[key].views = views
-      s.lastUpdated = Date.now()
-    })
-  )
+  // Queue update
+  pendingViewsUpdates.set(key, views)
+
+  // Schedule flush
+  if (!viewsUpdateTimer) {
+    viewsUpdateTimer = setTimeout(flushViewsUpdates, 1000)
+  }
+}
+
+/**
+ * Pending reactions updates - batched for performance
+ */
+const pendingReactionsUpdates = new Map<PostKey, Message['reactions']>()
+let reactionsUpdateTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushReactionsUpdates(): void {
+  if (pendingReactionsUpdates.size === 0) return
+
+  const updates = new Map(pendingReactionsUpdates)
+  pendingReactionsUpdates.clear()
+  reactionsUpdateTimer = null
+
+  for (const [key, reactions] of updates) {
+    const post = state.byId[key]
+    if (post) {
+      setState('byId', key, 'reactions', reactions ?? [])
+    }
+  }
 }
 
 /**
  * Update reactions for a post
+ * Batched every 1s to prevent excessive updates
  */
 export function updatePostReactions(
   channelId: number,
@@ -248,14 +309,13 @@ export function updatePostReactions(
   const post = state.byId[key]
   if (!post) return
 
-  setState(
-    produce((s) => {
-      // Double-check post still exists (could be deleted between check and setState)
-      if (!s.byId[key]) return
-      s.byId[key].reactions = reactions ?? []
-      s.lastUpdated = Date.now()
-    })
-  )
+  // Queue update
+  pendingReactionsUpdates.set(key, reactions)
+
+  // Schedule flush
+  if (!reactionsUpdateTimer) {
+    reactionsUpdateTimer = setTimeout(flushReactionsUpdates, 1000)
+  }
 }
 
 /**
@@ -318,23 +378,6 @@ export function getPendingCount(): number {
  * Called when user clicks "N new posts" button
  */
 export function revealPendingPosts(): void {
-  if (import.meta.env.DEV) {
-    console.log('[Posts] revealPendingPosts called')
-    console.log('[Posts] pendingKeys:', state.pendingKeys.length, state.pendingKeys)
-    console.log('[Posts] sortedKeys before:', state.sortedKeys.length)
-    // Check if pending posts exist in byId
-    const missingPosts = state.pendingKeys.filter((key) => !state.byId[key])
-    if (missingPosts.length > 0) {
-      console.warn('[Posts] Missing posts in byId:', missingPosts)
-    }
-    // Check for duplicates
-    const sortedSet = new Set(state.sortedKeys)
-    const duplicates = state.pendingKeys.filter((key) => sortedSet.has(key))
-    if (duplicates.length > 0) {
-      console.warn('[Posts] Duplicate keys (in both pending and sorted):', duplicates)
-    }
-  }
-
   if (state.pendingKeys.length === 0) return
 
   setState(
@@ -344,13 +387,13 @@ export function revealPendingPosts(): void {
       const allKeys = [...new Set([...s.pendingKeys, ...s.sortedKeys])]
       s.sortedKeys = sortKeysByDate(allKeys, s.byId)
       s.pendingKeys = []
+
+      // Trim old posts to prevent unbounded memory growth
+      trimToMaxPosts(s)
+
       s.lastUpdated = Date.now()
     })
   )
-
-  if (import.meta.env.DEV) {
-    console.log('[Posts] sortedKeys after:', state.sortedKeys.length)
-  }
 }
 
 /**
