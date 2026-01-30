@@ -321,7 +321,7 @@ async function fetchCommentsViaDiscussion(
         msgAny.replyTo?.replyToMsgId === discussion.id
 
       if (isReply) {
-        const mapped = mapHighLevelMessage(msg)
+        const mapped = mapHighLevelMessage(msg, discussion.id)
         if (mapped) {
           comments.push(mapped)
           if (comments.length >= limit) break
@@ -485,7 +485,15 @@ function mapTLMessageToComment(
   const author = resolveAuthor(msg.fromId, users, chats)
 
   // Get reply-to ID
-  const replyToId = msg.replyTo?.replyToMsgId ?? msg.replyTo?.replyToTopId
+  // In discussion groups:
+  // - replyToTopId = ID of discussion message (thread root)
+  // - replyToMsgId = ID of message being replied to
+  // If replyToMsgId === replyToTopId, it's a root comment (not a reply to another comment)
+  const replyToMsgId = msg.replyTo?.replyToMsgId
+  const replyToTopId = msg.replyTo?.replyToTopId
+  const replyToId = (replyToMsgId && replyToTopId && replyToMsgId !== replyToTopId)
+    ? replyToMsgId
+    : undefined
 
   // Map reactions if present
   const reactions = mapReactions(msg.reactions)
@@ -733,8 +741,9 @@ function mapTLForward(
 /**
  * Map high-level mtcute Message to Comment (for iterHistory response)
  * Uses mapMessage internally to get full media/entities/forward support
+ * @param discussionMessageId - ID of the discussion message (thread root) to distinguish root comments from replies
  */
-function mapHighLevelMessage(msg: TgMessage): Comment | null {
+function mapHighLevelMessage(msg: TgMessage, discussionMessageId?: number): Comment | null {
   if (!msg.text && !msg.media) {
     return null
   }
@@ -749,6 +758,12 @@ function mapHighLevelMessage(msg: TgMessage): Comment | null {
   const chatId = msgAny.chat?.id ?? 0
   const mapped = mapMessage(msg, chatId)
 
+  // Get reply-to ID - only set if it's a reply to another comment (not to thread root)
+  const rawReplyToId = msgAny.replyToMessageId ?? msgAny.replyToMessage?.id
+  const replyToId = (rawReplyToId && rawReplyToId !== discussionMessageId)
+    ? rawReplyToId
+    : undefined
+
   return {
     id: msg.id,
     text: msg.text ?? '',
@@ -757,7 +772,7 @@ function mapHighLevelMessage(msg: TgMessage): Comment | null {
       name: msg.sender?.displayName ?? 'Unknown',
     },
     date: msg.date,
-    replyToId: msgAny.replyToMessageId ?? msgAny.replyToMessage?.id,
+    replyToId,
     media: mapped?.media,
     entities: mapped?.entities,
     forward: mapped?.forward,

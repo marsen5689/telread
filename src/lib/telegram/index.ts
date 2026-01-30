@@ -82,7 +82,6 @@ export {
 export {
   subscribeToComments,
   onCommentUpdate,
-  isCommentUpdatesActive,
   getActiveSubscriptionCount,
   type CommentSubscription,
   type CommentUpdate,

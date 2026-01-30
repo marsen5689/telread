@@ -1,6 +1,11 @@
 import { getTelegramClient, getClientVersion } from './client'
 import { mapMessage, type MessageReaction, type Message } from './messages'
 import {
+  handleCommentMessage,
+  handleCommentEdit,
+  handleCommentDelete,
+} from './commentUpdates'
+import {
   upsertPost,
   removePosts,
   updatePostViews,
@@ -221,15 +226,22 @@ export function startUpdatesListener(): UpdatesCleanup {
         return
       }
 
-      // Only process channel messages
       const peer = message.chat
       if (!peer || peer.type !== 'chat') return
 
       const chat = peer as Chat
-      if (chat.chatType !== 'channel') return
-
-      // Add to batch for efficient processing
-      queueMessage(message)
+      
+      // Handle channel posts
+      if (chat.chatType === 'channel') {
+        queueMessage(message)
+        return
+      }
+      
+      // Handle discussion group messages (comments)
+      if (chat.chatType === 'supergroup') {
+        handleCommentMessage(message)
+        return
+      }
     } catch (error) {
       console.error('[Updates] Error handling new message:', error)
     }
@@ -255,10 +267,18 @@ export function startUpdatesListener(): UpdatesCleanup {
       const peer = message.chat
       if (!peer || peer.type !== 'chat') return
       const chat = peer as Chat
-      if (chat.chatType !== 'channel') return
-
-      // Add to batch for efficient processing
-      queueMessage(message)
+      
+      // Handle channel posts
+      if (chat.chatType === 'channel') {
+        queueMessage(message)
+        return
+      }
+      
+      // Handle discussion group messages (comments)
+      if (chat.chatType === 'supergroup') {
+        handleCommentEdit(message)
+        return
+      }
     } catch (error) {
       console.error('[Updates] Error handling edit message:', error)
     }
@@ -271,8 +291,12 @@ export function startUpdatesListener(): UpdatesCleanup {
       const channelId = update.channelId
       if (channelId === null) return
 
+      // Try to handle as channel post deletion
       removePosts(channelId, update.messageIds)
       removePostsFromCache(channelId, update.messageIds)
+      
+      // Also try to handle as comment deletion (if subscribed)
+      handleCommentDelete(channelId, update.messageIds)
     } catch (error) {
       console.error('[Updates] Error handling delete message:', error)
     }
