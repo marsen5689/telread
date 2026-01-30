@@ -18,7 +18,8 @@ export function useMedia(
     queryFn: () => downloadMedia(channelId(), messageId(), size?.()),
     staleTime: Infinity, // Media doesn't change
     gcTime: 1000 * 60 * 60, // Keep in cache for 1 hour
-    enabled: enabled?.() ?? true,
+    // Don't fetch for invalid IDs
+    enabled: (enabled?.() ?? true) && channelId() !== 0 && messageId() !== 0,
   }))
 }
 
@@ -35,6 +36,7 @@ export function useProfilePhoto(
     queryFn: () => downloadProfilePhoto(peerId(), size ?? 'small'),
     staleTime: 1000 * 60 * 60 * 24, // Profile photos rarely change
     gcTime: 1000 * 60 * 60 * 24,
-    enabled: enabled?.() ?? true,
+    // Don't fetch for invalid peer IDs (0 means no user/channel)
+    enabled: (enabled?.() ?? true) && peerId() !== 0,
   }))
 }

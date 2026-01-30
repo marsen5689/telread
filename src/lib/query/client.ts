@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/solid-query'
+import { QueryClient, hydrate } from '@tanstack/solid-query'
 import { persistQueryClient, type PersistedClient, type Persister } from '@tanstack/query-persist-client-core'
 import { get, set, del } from 'idb-keyval'
 
@@ -53,24 +53,13 @@ const deserialize = (str: string): unknown => {
   })
 }
 
-// Promise that resolves when cache restore completes
-let cacheRestoreResolve: () => void
-export const cacheRestorePromise = new Promise<void>((resolve) => {
-  cacheRestoreResolve = resolve
-})
-
 const idbPersister: Persister = {
   persistClient: async (client: PersistedClient) => {
     await set(IDB_KEY, serialize(client))
   },
   restoreClient: async (): Promise<PersistedClient | undefined> => {
-    try {
-      const data = await get<string>(IDB_KEY)
-      return data ? (deserialize(data) as PersistedClient) : undefined
-    } finally {
-      // Signal that restore is complete (whether successful or not)
-      cacheRestoreResolve()
-    }
+    const data = await get<string>(IDB_KEY)
+    return data ? (deserialize(data) as PersistedClient) : undefined
   },
   removeClient: async () => {
     await del(IDB_KEY)
@@ -91,6 +80,29 @@ if (storedVersion !== CACHE_VERSION) {
   })
   localStorage.setItem(CACHE_VERSION_KEY, CACHE_VERSION)
 }
+
+// Pre-load cache from IndexedDB before app renders
+// This ensures cached data is available immediately
+export const cacheReadyPromise = (async () => {
+  try {
+    const data = await get<string>(IDB_KEY)
+    if (data) {
+      const persisted = deserialize(data) as PersistedClient
+      // Check if cache is still valid
+      const maxAge = 1000 * 60 * 60 * 24 // 24 hours
+      if (persisted.timestamp && Date.now() - persisted.timestamp < maxAge) {
+        hydrate(queryClient, persisted.clientState)
+        if (import.meta.env.DEV) {
+          console.log('[QueryClient] Cache restored from IndexedDB')
+        }
+      }
+    }
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn('[QueryClient] Failed to restore cache:', error)
+    }
+  }
+})()
 
 // Enable persistence - cache survives page reloads
 // Exclude media queries (blob URLs can't be persisted)

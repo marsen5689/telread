@@ -40,6 +40,7 @@ export function setAuthHint(authenticated: boolean): void {
 function createAuthStore() {
   const [user, setUser] = createSignal<User | null>(null)
   const [isLoading, setIsLoading] = createSignal(true)
+  const [isAuthVerified, setIsAuthVerified] = createSignal(false)
   // Check for auth hint on store creation
   const hadPreviousSession = hasAuthHint()
 
@@ -53,6 +54,10 @@ function createAuthStore() {
     get isLoading() {
       return isLoading()
     },
+    /** True if auth check completed (success or failure) */
+    get isAuthVerified() {
+      return isAuthVerified()
+    },
     /** True if user had a previous session (optimistic rendering) */
     get maybeAuthenticated() {
       return hadPreviousSession
@@ -61,6 +66,8 @@ function createAuthStore() {
       setUser(newUser)
       // Update auth hint when user changes
       setAuthHint(newUser !== null)
+      // Mark auth as verified once we have a definitive answer
+      setIsAuthVerified(true)
     },
     setIsLoading,
   }

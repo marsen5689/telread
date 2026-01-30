@@ -23,32 +23,23 @@ import {
 /**
  * Protected route wrapper - redirects to login if not authenticated
  *
- * Optimistic rendering: If user had a previous session (maybeAuthenticated),
- * show UI immediately with cached data while verifying auth in background.
- * This makes the app feel much faster on repeat visits.
+ * Shows MainLayout immediately for returning users (maybeAuthenticated).
+ * Timeline handles its own loading state with skeletons.
  */
 function ProtectedRoute(props: ParentProps) {
-  // Show loading only if: loading AND no previous session (first-time users)
-  const shouldShowLoading = () =>
-    authStore.isLoading && !authStore.maybeAuthenticated
+  // Redirect only after auth check completes and confirms not authenticated
+  const shouldRedirect = () => !authStore.isLoading && !authStore.isAuthenticated
 
-  // Redirect to login if: not loading AND not authenticated
-  const shouldRedirect = () =>
-    !authStore.isLoading && !authStore.isAuthenticated
+  // Show content immediately if user might be authenticated (has previous session)
+  // Otherwise show loading screen for first-time users
+  const shouldShowContent = () => authStore.maybeAuthenticated || !authStore.isLoading
 
   return (
     <Show
-      when={!shouldShowLoading()}
+      when={shouldShowContent()}
       fallback={
         <div class="min-h-screen flex flex-col items-center justify-center bg-[var(--bg-primary)]">
-          {/* App Icon with pulse animation */}
-          <svg
-            width="80"
-            height="80"
-            viewBox="0 0 512 512"
-            fill="none"
-            class="mb-6 animate-pulse"
-          >
+          <svg width="80" height="80" viewBox="0 0 512 512" fill="none" class="mb-6 animate-pulse">
             <defs>
               <linearGradient id="loading-bg" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" style="stop-color:#007aff"/>
@@ -63,24 +54,9 @@ function ProtectedRoute(props: ParentProps) {
               <rect x="-120" y="20" width="140" height="12" rx="6" fill="#007aff" fill-opacity="0.3"/>
             </g>
           </svg>
-
-          {/* App name */}
-          <h1 class="text-2xl font-semibold text-primary mb-8" style="letter-spacing: -0.5px;">
-            TelRead
-          </h1>
-
-          {/* Shimmer loading bar */}
-          <div
-            class="w-[120px] h-[3px] rounded-full overflow-hidden"
-            style="background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%); background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite;"
-          />
-
-          <style>{`
-            @keyframes shimmer {
-              0% { background-position: -200% 0; }
-              100% { background-position: 200% 0; }
-            }
-          `}</style>
+          <h1 class="text-2xl font-semibold text-primary mb-8" style="letter-spacing: -0.5px;">TelRead</h1>
+          <div class="w-[120px] h-[3px] rounded-full overflow-hidden" style="background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%); background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite;" />
+          <style>{`@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }`}</style>
         </div>
       }
     >
@@ -158,12 +134,10 @@ export function App() {
       const client = getTelegramClient()
       await client.connect()
 
-      // Get user once - combines isAuthenticated + getCurrentUser
       const user = await client.getMe().catch(() => null)
 
       if (user) {
         authStore.setUser(user)
-        // Start updates loop (non-blocking)
         client.startUpdatesLoop().then(() => {
           if (import.meta.env.DEV) {
             console.log('[App] Updates loop started')
