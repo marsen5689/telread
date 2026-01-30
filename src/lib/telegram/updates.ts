@@ -5,7 +5,7 @@ import {
   removePosts,
   updatePostViews,
   updatePostReactions,
-  hasPosts,
+  isStoreReady,
 } from '@/lib/store'
 import { addPostToCache, removePostsFromCache } from '@/lib/query/hooks'
 import type { Message as TgMessage, RawUpdateInfo, Chat } from '@mtcute/web'
@@ -20,12 +20,7 @@ let listenerClientVersion = 0
 const pendingMessages: TgMessage[] = []
 const MAX_PENDING_MESSAGES = 100
 
-/**
- * Check if posts store has been initialized with data
- */
-function isStoreReady(): boolean {
-  return hasPosts()
-}
+// isStoreReady is now imported from @/lib/store
 
 /**
  * Process pending messages that were queued before store was ready
@@ -134,11 +129,22 @@ export function startUpdatesListener(): UpdatesCleanup {
     if (getClientVersion() !== listenerClientVersion) return
 
     try {
-      const peer = message.chat
-      const chatId = peer?.id
+      const chatId = message.chat?.id
       if (!chatId) return
 
-      if (peer.type !== 'chat') return
+      // Queue if store not ready yet (same as new messages)
+      if (!isStoreReady()) {
+        if (pendingMessages.length < MAX_PENDING_MESSAGES) {
+          pendingMessages.push(message)
+          if (import.meta.env.DEV) {
+            console.debug('[Updates] Queued edited message (store not ready):', chatId, message.id)
+          }
+        }
+        return
+      }
+
+      const peer = message.chat
+      if (!peer || peer.type !== 'chat') return
       const chat = peer as Chat
       if (chat.chatType !== 'channel') return
 

@@ -12,11 +12,14 @@ export type TimelineItem =
  *
  * Posts with the same groupedId are combined into a single timeline item.
  * The first post in the group provides the text/metadata, others provide media.
+ *
+ * Optimized O(n) implementation using a single pass with Map
  */
 export function groupPostsByMediaGroup(posts: Message[]): TimelineItem[] {
   const result: TimelineItem[] = []
-  const processedGroupIds = new Set<string>()
+  const groupMap = new Map<string, { posts: Message[]; index: number }>()
 
+  // Single pass: categorize posts
   for (let i = 0; i < posts.length; i++) {
     const post = posts[i]
 
@@ -28,31 +31,30 @@ export function groupPostsByMediaGroup(posts: Message[]): TimelineItem[] {
 
     const groupIdStr = post.groupedId.toString()
 
-    // Skip if we've already processed this group
-    if (processedGroupIds.has(groupIdStr)) {
-      continue
+    if (!groupMap.has(groupIdStr)) {
+      // First post of this group - reserve a spot in result
+      const index = result.length
+      result.push(null as any) // Placeholder, will be replaced
+      groupMap.set(groupIdStr, { posts: [post], index })
+    } else {
+      // Add to existing group
+      groupMap.get(groupIdStr)!.posts.push(post)
     }
+  }
 
-    // Find all posts with the same groupedId
-    const groupPosts = posts.filter(
-      (p) => p.groupedId?.toString() === groupIdStr
-    )
-
-    // Sort by message ID to maintain order
+  // Fill in the group placeholders
+  for (const [, { posts: groupPosts, index }] of groupMap) {
+    // Sort by message ID to maintain order within album
     groupPosts.sort((a, b) => a.id - b.id)
 
-    processedGroupIds.add(groupIdStr)
-
     if (groupPosts.length === 1) {
-      // Single post with groupedId (shouldn't happen but handle it)
-      result.push({ type: 'single', post: groupPosts[0] })
+      result[index] = { type: 'single', post: groupPosts[0] }
     } else {
-      // Multiple posts = album
-      result.push({
+      result[index] = {
         type: 'group',
         posts: groupPosts,
-        groupedId: post.groupedId,
-      })
+        groupedId: groupPosts[0].groupedId!,
+      }
     }
   }
 

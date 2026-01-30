@@ -10,6 +10,7 @@ export const queryKeys = {
     all: ['channels'] as const,
     list: () => [...queryKeys.channels.all, 'list'] as const,
     detail: (id: number) => [...queryKeys.channels.all, 'detail', id] as const,
+    fullInfo: (id: number) => [...queryKeys.channels.all, 'fullInfo', id] as const,
   },
 
   // Messages/Posts

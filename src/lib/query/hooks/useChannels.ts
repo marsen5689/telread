@@ -1,5 +1,12 @@
 import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query'
-import { fetchChannels, joinChannel, leaveChannel, getChannel, type Channel } from '@/lib/telegram'
+import {
+  fetchChannels,
+  joinChannel,
+  leaveChannel,
+  getChannel,
+  getChannelFullInfo,
+  type Channel,
+} from '@/lib/telegram'
 import { queryKeys } from '../keys'
 
 /**
@@ -82,5 +89,21 @@ export function useLeaveChannel() {
         old ? old.filter((c) => c.id !== channelId) : []
       )
     },
+  }))
+}
+
+/**
+ * Hook to fetch full channel info (description, stats, etc.)
+ *
+ * Used for the channel profile card/header.
+ * Fetches additional data not available in the channels list.
+ */
+export function useChannelInfo(channelId: () => number) {
+  return createQuery(() => ({
+    queryKey: queryKeys.channels.fullInfo(channelId()),
+    queryFn: () => getChannelFullInfo(channelId()),
+    enabled: channelId() !== 0,
+    staleTime: 1000 * 60 * 5, // 5 minutes - balance freshness vs API calls
+    gcTime: 1000 * 60 * 30, // Keep in cache for 30 minutes
   }))
 }

@@ -24,10 +24,12 @@ export {
   fetchChannels,
   fetchChannelsWithLastMessages,
   getChannel,
+  getChannelFullInfo,
   joinChannel,
   leaveChannel,
   type Channel,
   type ChannelWithLastMessage,
+  type ChannelFullInfo,
 } from './channels'
 export {
   fetchMessages,

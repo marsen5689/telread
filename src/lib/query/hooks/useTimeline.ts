@@ -13,6 +13,7 @@ import {
   postsState,
   getChannelPosts,
   revealPendingPosts,
+  markStoreInitialized,
 } from '@/lib/store'
 import { getTime, groupPostsByMediaGroup } from '@/lib/utils'
 import { queryKeys } from '../keys'
@@ -110,28 +111,37 @@ function findInsertionIndex(posts: Message[], postTime: number): number {
 }
 
 /**
- * Add a new post to the TanStack Query cache
- * Called when real-time updates arrive to persist new posts
- * Uses binary insertion (O(n)) instead of full sort (O(n log n))
+ * Add or update a post in TanStack Query cache
+ * Called when real-time updates arrive to persist new/edited posts
+ * Uses binary insertion for new posts, timestamp check for updates
  */
 export function addPostToCache(post: Message): void {
   queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
     if (!old) return old
 
     const postTime = getTime(post.date)
+    const postEffectiveTime = getTime(post.editDate ?? post.date)
 
-    // Check if post already exists using binary search for the time range
+    // Check if post already exists
     const existingIndex = old.posts.findIndex(
       (p) => p.channelId === post.channelId && p.id === post.id
     )
 
     let newPosts: Message[]
     if (existingIndex >= 0) {
+      const existing = old.posts[existingIndex]
+      const existingEffectiveTime = getTime(existing.editDate ?? existing.date)
+
+      // Only update if new post is actually newer (handles out-of-order updates)
+      if (postEffectiveTime <= existingEffectiveTime) {
+        return old // No changes needed
+      }
+
       // Update existing post in place
       newPosts = [...old.posts]
       newPosts[existingIndex] = post
     } else {
-      // Insert at correct position using binary search (O(n) instead of O(n log n))
+      // Insert at correct position using binary search
       const insertIndex = findInsertionIndex(old.posts, postTime)
       newPosts = [
         ...old.posts.slice(0, insertIndex),
@@ -140,23 +150,19 @@ export function addPostToCache(post: Message): void {
       ]
     }
 
-    // Update channel's lastMessage only if this post is from that channel and newer
-    const channelNeedsUpdate = old.channels.some(
-      (c) => c.id === post.channelId &&
-        (!c.lastMessage || getTime(c.lastMessage.date) < postTime)
-    )
+    // Update channel's lastMessage only if this post is newer
+    const newChannels = old.channels.map((channel) => {
+      if (channel.id !== post.channelId) return channel
 
-    const newChannels = channelNeedsUpdate
-      ? old.channels.map((channel) => {
-          if (channel.id === post.channelId) {
-            const currentTime = channel.lastMessage ? getTime(channel.lastMessage.date) : 0
-            if (postTime > currentTime) {
-              return { ...channel, lastMessage: post }
-            }
-          }
-          return channel
-        })
-      : old.channels
+      const currentTime = channel.lastMessage
+        ? getTime(channel.lastMessage.editDate ?? channel.lastMessage.date)
+        : 0
+
+      if (postEffectiveTime > currentTime) {
+        return { ...channel, lastMessage: post }
+      }
+      return channel
+    })
 
     return {
       ...old,
@@ -169,19 +175,37 @@ export function addPostToCache(post: Message): void {
 /**
  * Remove posts from TanStack Query cache
  * Called when posts are deleted
+ * Also clears channel.lastMessage if the deleted post was the last message
  */
 export function removePostsFromCache(channelId: number, messageIds: number[]): void {
   queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
     if (!old) return old
 
     const idsSet = new Set(messageIds)
+
+    // Remove deleted posts
     const newPosts = old.posts.filter(
       (p) => !(p.channelId === channelId && idsSet.has(p.id))
     )
 
+    // Clear channel.lastMessage if it was deleted
+    const newChannels = old.channels.map((channel) => {
+      if (channel.id !== channelId) return channel
+      if (!channel.lastMessage) return channel
+
+      // If lastMessage was deleted, find the next most recent post for this channel
+      // Posts are sorted by date descending, so first match is the newest
+      if (idsSet.has(channel.lastMessage.id)) {
+        const nextLastMessage = newPosts.find((p) => p.channelId === channelId)
+        return { ...channel, lastMessage: nextLastMessage }
+      }
+      return channel
+    })
+
     return {
       ...old,
       posts: newPosts,
+      channels: newChannels,
     }
   })
 }
@@ -281,7 +305,7 @@ export function useOptimizedTimeline() {
   }))
 
   // Populate stores when data loads (from cache or fresh fetch)
-  // This is the ONLY place where posts are added to the store
+  // Note: Real-time updates also add posts via upsertPost() in updates.ts
   createEffect(
     on(
       () => initialQuery.data,
@@ -297,6 +321,10 @@ export function useOptimizedTimeline() {
           upsertPosts(data.posts)
         }
 
+        // Mark store as initialized (even if empty)
+        // This allows real-time updates to be processed
+        markStoreInitialized()
+
         // Process messages that arrived before timeline was ready
         onTimelineLoaded()
       }
@@ -304,6 +332,7 @@ export function useOptimizedTimeline() {
   )
 
   // Populate posts from history pages (from cache or after scroll fetch)
+  // upsertPosts handles deduplication via timestamp checks, so we can process all pages
   createEffect(
     on(
       () => historyQuery.data?.pages,

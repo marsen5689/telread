@@ -46,6 +46,20 @@ export function CommentItem(props: CommentItemProps) {
           )}
         </Show>
 
+        {/* Reply-to indicator */}
+        <Show when={props.comment.replyToAuthor}>
+          {(replyTo) => (
+            <div class="flex items-center gap-1.5 text-xs text-tertiary mb-1">
+              <svg class="w-3 h-3 flex-shrink-0 -scale-x-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+              </svg>
+              <span class="truncate">
+                In reply to <span class="text-accent">{replyTo().name}</span>
+              </span>
+            </div>
+          )}
+        </Show>
+
         {/* Header */}
         <div class="flex items-center gap-2 flex-wrap">
           <span class="font-medium text-primary text-sm">
@@ -68,15 +82,24 @@ export function CommentItem(props: CommentItemProps) {
         </Show>
 
         {/* Media */}
-        <Show when={props.comment.media && props.discussionChatId}>
-          <div class="mt-2">
-            <PostMedia
-              channelId={props.discussionChatId!}
-              messageId={props.comment.id}
-              media={props.comment.media!}
-              class="rounded-lg max-w-xs"
-            />
-          </div>
+        <Show when={props.comment.media}>
+          <Show
+            when={props.discussionChatId}
+            fallback={
+              <div class="mt-2 px-3 py-2 rounded-lg bg-[var(--glass-bg)] text-xs text-tertiary">
+                Media attachment
+              </div>
+            }
+          >
+            <div class="mt-2">
+              <PostMedia
+                channelId={props.discussionChatId!}
+                messageId={props.comment.id}
+                media={props.comment.media!}
+                class="rounded-lg max-w-xs"
+              />
+            </div>
+          </Show>
         </Show>
 
         {/* Reactions */}

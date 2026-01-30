@@ -1,13 +1,16 @@
 import { useParams, useNavigate } from '@solidjs/router'
 import { createMemo, Show } from 'solid-js'
-import { Motion } from 'solid-motionone'
 import { Timeline } from '@/components/timeline'
-import { GlassButton, ChannelAvatar } from '@/components/ui'
-import { useChannels, useMessages, useLeaveChannel } from '@/lib/query'
+import { ChannelCard } from '@/components/channel'
+import { Skeleton } from '@/components/ui'
+import { useChannels, useChannelInfo, useMessages, useLeaveChannel } from '@/lib/query'
 import { groupPostsByMediaGroup } from '@/lib/utils'
 
 /**
  * Channel page - Shows all posts from a single channel
+ *
+ * Features a Twitter-style profile card with glassmorphism design
+ * showing full channel info (description, stats, badges).
  */
 function Channel() {
   const params = useParams()
@@ -16,11 +19,13 @@ function Channel() {
   const channelId = () => parseInt(params.id ?? '0', 10)
 
   const channelsQuery = useChannels()
+  const channelInfoQuery = useChannelInfo(channelId)
   const messagesQuery = useMessages(channelId)
   const leaveMutation = useLeaveChannel()
 
+  // Use full info if available, fallback to basic channel data
   const channel = createMemo(() =>
-    channelsQuery.data?.find((c) => c.id === channelId())
+    channelInfoQuery.data ?? channelsQuery.data?.find((c) => c.id === channelId())
   )
 
   const handleLeave = async () => {
@@ -53,45 +58,33 @@ function Channel() {
         </button>
       </div>
 
-      {/* Channel header */}
-      <Show when={channel()}>
-        <Motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          class="px-4 py-4"
-        >
-          <div class="flex items-center gap-4">
-            <ChannelAvatar channelId={channel()!.id} name={channel()!.title} size="xl" />
-
-            <div class="flex-1 min-w-0">
-              <h1 class="text-xl font-semibold text-primary truncate">
-                {channel()!.title}
-              </h1>
-
-              <Show when={channel()!.username}>
-                <p class="text-sm text-secondary">@{channel()!.username}</p>
-              </Show>
-
-              <div class="flex items-center gap-3 mt-2">
-                <Show when={channel()!.participantsCount}>
-                  <span class="text-sm text-tertiary">
-                    {formatCount(channel()!.participantsCount!)} subscribers
-                  </span>
-                </Show>
-
-                <GlassButton
-                  variant="danger"
-                  size="sm"
-                  onClick={handleLeave}
-                  loading={leaveMutation.isPending}
-                >
-                  Unsubscribe
-                </GlassButton>
+      {/* Channel card */}
+      <div class="px-4 py-4">
+        <Show
+          when={channel()}
+          fallback={
+            <div class="space-y-4">
+              <Skeleton class="h-28 rounded-t-3xl" />
+              <div class="glass-card p-4 -mt-8 mx-3">
+                <div class="flex items-end gap-4 -mt-14 mb-3">
+                  <Skeleton class="w-20 h-20 rounded-full" />
+                </div>
+                <Skeleton class="h-6 w-48 mb-2" />
+                <Skeleton class="h-4 w-32 mb-4" />
+                <Skeleton class="h-16 w-full" />
               </div>
             </div>
-          </div>
-        </Motion.div>
-      </Show>
+          }
+        >
+          {(ch) => (
+            <ChannelCard
+              channel={ch()}
+              onUnsubscribe={handleLeave}
+              isUnsubscribing={leaveMutation.isPending}
+            />
+          )}
+        </Show>
+      </div>
 
       {/* Posts */}
       <div class="flex-1">
@@ -107,11 +100,5 @@ function Channel() {
       </div>
     </div>
   )
-}
-
-function formatCount(count: number): string {
-  if (count < 1000) return count.toString()
-  if (count < 1000000) return `${(count / 1000).toFixed(1)}K`
-  return `${(count / 1000000).toFixed(1)}M`
 }
 export default Channel

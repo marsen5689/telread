@@ -8,6 +8,7 @@ import {
   setClientReady,
   startUpdatesListener,
   stopUpdatesListener,
+  isUpdatesListenerActive,
 } from '@/lib/telegram'
 import { validateConfig } from '@/config/telegram'
 import { MainLayout } from '@/layouts'
@@ -141,6 +142,11 @@ export function App() {
         authStore.setUser(user)
         // Mark client as ready for API calls (media downloads, etc.)
         setClientReady(true)
+
+        // IMPORTANT: Register handlers BEFORE starting updates loop
+        // This ensures we don't miss any updates that arrive immediately
+        startUpdatesListener()
+
         client.startUpdatesLoop().then(() => {
           if (import.meta.env.DEV) {
             console.log('[App] Updates loop started')
@@ -155,13 +161,16 @@ export function App() {
   })
 
   // Start/stop updates when auth state changes
+  // This handles login from Login page and logout scenarios
   createEffect(
     on(
       () => authStore.isAuthenticated,
       (isAuth) => {
         if (isAuth) {
-          // Register event handlers (sync, fast)
-          startUpdatesListener()
+          // Only start if not already active (might be started in onMount)
+          if (!isUpdatesListenerActive()) {
+            startUpdatesListener()
+          }
         } else {
           stopUpdatesListener()
         }

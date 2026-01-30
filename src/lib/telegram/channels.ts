@@ -16,6 +16,35 @@ export interface Channel {
 }
 
 /**
+ * Extended channel info with full details
+ * Fetched separately via getChannelFullInfo for detailed channel view
+ */
+export interface ChannelFullInfo extends Channel {
+  /** Channel description/bio */
+  description?: string
+  /** Number of subscribers */
+  participantsCount?: number
+  /** Number of online members (if available) */
+  onlineCount?: number
+  /** Linked discussion group ID */
+  linkedChatId?: number
+  /** Channel creation date */
+  createdAt?: Date
+  /** Whether the channel is verified */
+  isVerified?: boolean
+  /** Whether the channel is a scam */
+  isScam?: boolean
+  /** Whether the channel is fake */
+  isFake?: boolean
+  /** Invite link (if available) */
+  inviteLink?: string
+  /** Slow mode delay in seconds (if enabled) */
+  slowmodeSeconds?: number
+  /** Whether content is protected (no forwards) */
+  isProtected?: boolean
+}
+
+/**
  * Channel with optional lastMessage - used for optimized timeline initialization
  */
 export interface ChannelWithLastMessage extends Channel {
@@ -157,6 +186,64 @@ export async function getChannel(idOrUsername: string | number): Promise<Channel
     }
     return null
   } catch {
+    return null
+  }
+}
+
+/**
+ * Get full channel information including description, stats, and settings
+ * This makes an additional API call to get ChannelFull
+ */
+export async function getChannelFullInfo(channelId: number): Promise<ChannelFullInfo | null> {
+  const client = getTelegramClient()
+
+  try {
+    const chat = await client.getChat(channelId)
+    if (chat.chatType !== 'channel' || isGroupChat(chat)) {
+      return null
+    }
+
+    // Get basic channel info
+    const baseChannel = mapChatToChannel(chat)
+
+    // Get full channel info using mtcute's inputPeer
+    const fullResult = await client.call({
+      _: 'channels.getFullChannel',
+      channel: chat.inputPeer as any,
+    })
+
+    // Extract full info from response
+    const fullChat = fullResult.fullChat
+    if (fullChat._ !== 'channelFull') {
+      return baseChannel
+    }
+
+    // Get channel flags from raw
+    const raw = chat.raw
+    const isVerified = raw._ === 'channel' && raw.verified === true
+    const isScam = raw._ === 'channel' && raw.scam === true
+    const isFake = raw._ === 'channel' && raw.fake === true
+    const isProtected = raw._ === 'channel' && raw.noforwards === true
+
+    return {
+      ...baseChannel,
+      description: fullChat.about || undefined,
+      participantsCount: fullChat.participantsCount ?? baseChannel.participantsCount,
+      onlineCount: fullChat.onlineCount ?? undefined,
+      linkedChatId: fullChat.linkedChatId ?? undefined,
+      inviteLink: fullChat.exportedInvite?._ === 'chatInviteExported'
+        ? fullChat.exportedInvite.link
+        : undefined,
+      slowmodeSeconds: fullChat.slowmodeSeconds ?? undefined,
+      isVerified,
+      isScam,
+      isFake,
+      isProtected,
+    }
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn('[getChannelFullInfo] Failed:', error)
+    }
     return null
   }
 }

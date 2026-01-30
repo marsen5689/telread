@@ -27,6 +27,8 @@ interface PostsState {
   pendingKeys: PostKey[]
   /** Last update timestamp */
   lastUpdated: number
+  /** Whether the store has been initialized (timeline loaded, even if empty) */
+  isInitialized: boolean
 }
 
 const [state, setState] = createStore<PostsState>({
@@ -34,6 +36,7 @@ const [state, setState] = createStore<PostsState>({
   sortedKeys: [],
   pendingKeys: [],
   lastUpdated: 0,
+  isInitialized: false,
 })
 
 /**
@@ -195,6 +198,7 @@ export function removePosts(channelId: number, messageIds: number[]): void {
         delete s.byId[key]
       }
       s.sortedKeys = s.sortedKeys.filter((k) => !keysToRemove.has(k))
+      s.pendingKeys = s.pendingKeys.filter((k) => !keysToRemove.has(k))
       s.lastUpdated = Date.now()
     })
   )
@@ -254,6 +258,24 @@ export function getChannelPosts(channelId: number): Message[] {
  */
 export function hasPosts(): boolean {
   return state.sortedKeys.length > 0
+}
+
+/**
+ * Check if the store has been initialized (timeline loaded)
+ * This is different from hasPosts - store can be initialized but empty
+ */
+export function isStoreReady(): boolean {
+  return state.isInitialized
+}
+
+/**
+ * Mark the store as initialized
+ * Called when timeline data is first loaded (even if empty)
+ */
+export function markStoreInitialized(): void {
+  if (!state.isInitialized) {
+    setState('isInitialized', true)
+  }
 }
 
 /**

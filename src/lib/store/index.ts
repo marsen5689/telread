@@ -14,6 +14,8 @@ export {
   getTimelinePosts,
   getChannelPosts,
   hasPosts,
+  isStoreReady,
+  markStoreInitialized,
   getPendingCount,
   revealPendingPosts,
   usePostsStore,

@@ -130,7 +130,10 @@ function GalleryItem(props: {
 
     // Wait for client to be ready before downloading
     if (!isClientReady()) {
-      setWaitingForClient(true)
+      // Verify props haven't changed before setting waiting state
+      if (isMounted && props.item.channelId === channelId && props.item.messageId === messageId) {
+        setWaitingForClient(true)
+      }
       return
     }
 

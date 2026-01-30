@@ -27,6 +27,8 @@ export interface Comment {
   author: CommentAuthor
   date: Date
   replyToId?: number
+  /** Author of the comment being replied to (resolved from replyToId) */
+  replyToAuthor?: { name: string }
   replies?: Comment[]
   reactions?: CommentReaction[]
   media?: MessageMedia
@@ -847,12 +849,14 @@ function buildCommentTree(comments: Comment[]): Comment[] {
     commentMap.set(comment.id, comment)
   }
 
-  // Second pass: build tree structure
+  // Second pass: build tree structure and resolve replyToAuthor
   for (const comment of commentsCopy) {
     const parentId = comment.replyToId
     const parent = parentId ? commentMap.get(parentId) : undefined
 
     if (parent) {
+      // Resolve reply-to author from parent comment
+      comment.replyToAuthor = { name: parent.author.name }
       parent.replies!.push(comment)
     } else {
       // This is either a root comment or an orphaned reply

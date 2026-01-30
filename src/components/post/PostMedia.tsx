@@ -112,7 +112,10 @@ export function PostMedia(props: PostMediaProps) {
 
     // Wait for client to be ready before downloading
     if (!isClientReady()) {
-      setWaitingForClient(true)
+      // Verify props haven't changed before setting waiting state
+      if (isMounted && props.channelId === channelId && props.messageId === messageId) {
+        setWaitingForClient(true)
+      }
       return
     }
 

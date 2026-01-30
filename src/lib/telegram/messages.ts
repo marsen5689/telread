@@ -563,50 +563,59 @@ function mapEntities(msg: TgMessage): MessageEntity[] | undefined {
   if (!msg.entities || msg.entities.length === 0) return undefined
 
   return msg.entities.map((entity: TgMessageEntity) => {
-    const base = {
-      offset: entity.offset,
-      length: entity.length,
-    }
+    try {
+      const base = {
+        offset: entity.offset,
+        length: entity.length,
+      }
 
-    // Use mtcute's kind property for entity type
-    const kind = entity.kind
+      // Use mtcute's kind property for entity type
+      const kind = entity.kind
 
-    switch (kind) {
-      case 'bold':
-        return { ...base, type: 'bold' as const }
-      case 'italic':
-        return { ...base, type: 'italic' as const }
-      case 'underline':
-        return { ...base, type: 'underline' as const }
-      case 'strikethrough':
-        return { ...base, type: 'strikethrough' as const }
-      case 'code':
-        return { ...base, type: 'code' as const }
-      case 'pre':
-        return {
-          ...base,
-          type: 'pre' as const,
-          language: entity.is('pre') ? entity.params.language : undefined,
-        }
-      case 'text_link':
-        return {
-          ...base,
-          type: 'link' as const,
-          url: entity.is('text_link') ? entity.params.url : undefined,
-        }
-      case 'mention':
-        return { ...base, type: 'mention' as const }
-      case 'hashtag':
-        return { ...base, type: 'hashtag' as const }
-      case 'email':
-        return { ...base, type: 'email' as const }
-      case 'phone_number':
-        return { ...base, type: 'phone' as const }
-      case 'spoiler':
-        return { ...base, type: 'spoiler' as const }
-      default:
-        // For unknown types, return as bold (fallback)
-        return { ...base, type: 'bold' as const }
+      switch (kind) {
+        case 'bold':
+          return { ...base, type: 'bold' as const }
+        case 'italic':
+          return { ...base, type: 'italic' as const }
+        case 'underline':
+          return { ...base, type: 'underline' as const }
+        case 'strikethrough':
+          return { ...base, type: 'strikethrough' as const }
+        case 'code':
+          return { ...base, type: 'code' as const }
+        case 'pre':
+          return {
+            ...base,
+            type: 'pre' as const,
+            language: entity.is('pre') ? entity.params.language : undefined,
+          }
+        case 'text_link':
+          return {
+            ...base,
+            type: 'link' as const,
+            url: entity.is('text_link') ? entity.params.url : undefined,
+          }
+        case 'mention':
+          return { ...base, type: 'mention' as const }
+        case 'hashtag':
+          return { ...base, type: 'hashtag' as const }
+        case 'email':
+          return { ...base, type: 'email' as const }
+        case 'phone_number':
+          return { ...base, type: 'phone' as const }
+        case 'spoiler':
+          return { ...base, type: 'spoiler' as const }
+        default:
+          // For unknown types, return as bold (fallback)
+          return { ...base, type: 'bold' as const }
+      }
+    } catch {
+      // If entity is malformed, skip it with a safe fallback
+      return {
+        offset: entity.offset ?? 0,
+        length: entity.length ?? 0,
+        type: 'bold' as const,
+      }
     }
   })
 }
