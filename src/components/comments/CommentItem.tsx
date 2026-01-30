@@ -1,4 +1,4 @@
-import { Avatar } from '@/components/ui'
+import { UserAvatar } from '@/components/ui'
 import type { Comment } from '@/lib/telegram'
 
 interface CommentItemProps {
@@ -18,8 +18,8 @@ export function CommentItem(props: CommentItemProps) {
   return (
     <div class="flex gap-3 py-3">
       {/* Avatar */}
-      <Avatar
-        src={props.comment.author.photo}
+      <UserAvatar
+        userId={props.comment.author.id}
         name={props.comment.author.name}
         size="sm"
       />

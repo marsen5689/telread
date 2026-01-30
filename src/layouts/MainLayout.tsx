@@ -1,7 +1,7 @@
 import { type ParentProps } from 'solid-js'
 import { A, useLocation } from '@solidjs/router'
 import { authStore } from '@/lib/store'
-import { Avatar } from '@/components/ui'
+import { UserAvatar } from '@/components/ui'
 
 /**
  * Main application layout
@@ -64,7 +64,11 @@ export function MainLayout(props: ParentProps) {
       <div class="fixed bottom-4 left-0 right-0 z-50 flex items-center justify-between px-4 max-w-md mx-auto safe-bottom">
         {/* Left: User avatar */}
         <A href="/settings" class="floating-circle">
-          <Avatar name={authStore.user?.displayName ?? 'User'} size="md" />
+          <UserAvatar
+            userId={authStore.user?.id ?? 0}
+            name={authStore.user?.displayName ?? 'User'}
+            size="md"
+          />
         </A>
 
         {/* Center: Nav items */}

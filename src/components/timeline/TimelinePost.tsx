@@ -107,6 +107,7 @@ export function TimelinePost(props: TimelinePostProps) {
           preview={props.post.text}
           views={props.post.views}
           replies={props.post.replies}
+          reactions={props.post.reactions}
           onCommentClick={props.onCommentClick ?? handlePostClick}
         />
       </div>

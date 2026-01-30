@@ -135,9 +135,8 @@ export async function downloadMedia(
 /**
  * Download a channel/user profile photo
  *
- * For channels, we need to fetch the full Chat object first
- * because Telegram API requires access_hash for InputPeerChannel.
- * Then we use chat.photo.small or chat.photo.big to get the FileLocation.
+ * Handles both channels (via getChat) and users (via getUsers).
+ * Uses the photo.small or photo.big FileLocation to download.
  */
 export async function downloadProfilePhoto(
   peerId: number,
@@ -151,60 +150,41 @@ export async function downloadProfilePhoto(
   }
 
   const client = getTelegramClient()
-  const anyClient = client as any
 
   try {
-    // First, get the full peer object (Chat/User) which includes access_hash and photo
-    let peer: any = null
+    let peer: { photo?: { small: unknown; big: unknown } | null } | null = null
+
+    // Try to get as channel/chat first
     try {
       peer = await client.getChat(peerId)
     } catch {
-      // If getChat fails, try resolvePeer
+      // Not a chat/channel, try as user
       try {
-        peer = await anyClient.resolvePeer(peerId)
+        const users = await client.getUsers([peerId])
+        if (users && users.length > 0) {
+          peer = users[0] as typeof peer
+        }
       } catch {
+        // Failed to resolve peer
         return null
       }
     }
 
-    if (!peer) {
+    if (!peer || !peer.photo) {
       return null
     }
 
-    let buffer: Uint8Array | null = null
+    // photo.small and photo.big return ChatPhotoSize (extends FileLocation)
+    const photoLocation = size === 'big' ? peer.photo.big : peer.photo.small
 
-    // Method 1: Use chat.photo which is a ChatPhoto object with .small and .big
-    if (peer.photo) {
-      try {
-        // ChatPhoto has .small and .big which return ChatPhotoSize (extends FileLocation)
-        const photoLocation = size === 'big' ? peer.photo.big : peer.photo.small
-        if (photoLocation) {
-          // Download the file location
-          if (anyClient.downloadAsBuffer) {
-            buffer = await anyClient.downloadAsBuffer(photoLocation)
-          } else if (anyClient.downloadMedia) {
-            buffer = await anyClient.downloadMedia(photoLocation)
-          } else if (anyClient.downloadToBuffer) {
-            buffer = await anyClient.downloadToBuffer(photoLocation)
-          }
-        }
-      } catch {
-        // Method 1 failed, try alternatives
-      }
+    if (!photoLocation) {
+      return null
     }
 
-    // Method 2: Try downloadPeerPhoto if available
-    if (!buffer && anyClient.downloadPeerPhoto) {
-      try {
-        buffer = await anyClient.downloadPeerPhoto(peer, {
-          size: size === 'big' ? 'big' : 'small',
-        })
-      } catch {
-        // Silently fail
-      }
-    }
+    // Download the file location using downloadAsBuffer
+    const buffer = await client.downloadAsBuffer(photoLocation as Parameters<typeof client.downloadAsBuffer>[0])
 
-    if (!buffer) {
+    if (!buffer || buffer.length === 0) {
       return null
     }
 
@@ -214,7 +194,8 @@ export async function downloadProfilePhoto(
     mediaCache.set(cacheKey, url)
 
     return url
-  } catch {
+  } catch (error) {
+    console.warn(`Failed to download profile photo for ${peerId}:`, error)
     return null
   }
 }

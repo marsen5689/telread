@@ -1,5 +1,6 @@
-import { createSignal, Show } from 'solid-js'
+import { Show, For } from 'solid-js'
 import { bookmarksStore } from '@/lib/store'
+import type { MessageReaction } from '@/lib/telegram'
 
 interface PostActionsProps {
   channelId: number
@@ -8,19 +9,17 @@ interface PostActionsProps {
   preview: string
   views?: number
   replies?: number
+  reactions?: MessageReaction[]
   onCommentClick?: () => void
-  onShareClick?: () => void
 }
 
 /**
  * Post action buttons - pill-style like VK/Telegram
  *
  * Uses rounded pill buttons with subtle backgrounds.
- * Actions include: comments, views, bookmark, share.
+ * Actions include: comments, views, bookmark.
  */
 export function PostActions(props: PostActionsProps) {
-  const [showShareToast, setShowShareToast] = createSignal(false)
-
   const isBookmarked = () =>
     bookmarksStore.isBookmarked(props.channelId, props.messageId)
 
@@ -31,28 +30,6 @@ export function PostActions(props: PostActionsProps) {
       props.channelTitle,
       props.preview
     )
-  }
-
-  const handleShare = async () => {
-    const url = `https://t.me/c/${props.channelId}/${props.messageId}`
-
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: props.channelTitle,
-          text: props.preview.slice(0, 100),
-          url,
-        })
-      } catch {
-        // User cancelled or error
-      }
-    } else {
-      await navigator.clipboard.writeText(url)
-      setShowShareToast(true)
-      setTimeout(() => setShowShareToast(false), 2000)
-    }
-
-    props.onShareClick?.()
   }
 
   return (
@@ -114,26 +91,23 @@ export function PostActions(props: PostActionsProps) {
         </svg>
       </button>
 
-      {/* Share pill */}
-      <div class="relative">
-        <button onClick={handleShare} class="pill" title="Share">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="1.5"
-              d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-            />
-          </svg>
-        </button>
-
-        {/* Share toast */}
-        <Show when={showShareToast()}>
-          <div class="absolute bottom-full right-0 mb-2 px-3 py-1.5 rounded-full bg-[var(--color-text)] text-[var(--color-bg)] text-xs whitespace-nowrap animate-fade-in">
-            Copied!
-          </div>
-        </Show>
-      </div>
+      {/* Reactions - after buttons with separator */}
+      <Show when={props.reactions && props.reactions.length > 0}>
+        <div class="actions-divider" />
+        <div class="flex items-center gap-1.5">
+          <For each={props.reactions}>
+            {(reaction) => (
+              <div
+                class={`reaction-pill ${reaction.isPaid ? 'reaction-paid' : ''}`}
+                title={reaction.isPaid ? 'Paid reaction' : undefined}
+              >
+                <span class="reaction-emoji">{reaction.emoji}</span>
+                <span class="reaction-count">{formatCount(reaction.count)}</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
     </div>
   )
 }

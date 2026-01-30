@@ -4,6 +4,7 @@ export { GlassInput } from './GlassInput'
 export { GlassModal } from './GlassModal'
 export { Avatar } from './Avatar'
 export { ChannelAvatar } from './ChannelAvatar'
+export { UserAvatar } from './UserAvatar'
 export {
   Skeleton,
   AvatarSkeleton,

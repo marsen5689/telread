@@ -1,5 +1,5 @@
 import { createSignal, Show, createEffect } from 'solid-js'
-import { GlassButton, Avatar } from '@/components/ui'
+import { GlassButton, UserAvatar } from '@/components/ui'
 import { authStore } from '@/lib/store'
 
 interface CommentComposerProps {
@@ -58,7 +58,8 @@ export function CommentComposer(props: CommentComposerProps) {
     <div class="glass rounded-2xl p-4">
       <div class="flex gap-3">
         {/* User avatar */}
-        <Avatar
+        <UserAvatar
+          userId={authStore.user?.id ?? 0}
           name={authStore.user?.displayName ?? 'You'}
           size="md"
         />

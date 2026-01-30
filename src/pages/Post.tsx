@@ -126,6 +126,7 @@ export function Post() {
               preview={postQuery.data!.text}
               views={postQuery.data!.views}
               replies={postQuery.data!.replies}
+              reactions={postQuery.data!.reactions}
             />
           </div>
         </Motion.article>

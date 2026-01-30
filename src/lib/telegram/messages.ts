@@ -1,6 +1,12 @@
 import { getTelegramClient } from './client'
 import type { Message as TgMessage } from '@mtcute/web'
 
+export interface MessageReaction {
+  emoji: string
+  count: number
+  isPaid?: boolean
+}
+
 export interface Message {
   id: number
   channelId: number
@@ -19,6 +25,7 @@ export interface Message {
   entities?: MessageEntity[]
   replyTo?: number
   groupedId?: bigint
+  reactions?: MessageReaction[]
 }
 
 export interface MessageMedia {
@@ -254,7 +261,36 @@ export function mapMessage(msg: TgMessage, channelId: number): Message | null {
     entities: mapEntities(msg),
     replyTo: msg.replyToMessage?.id ?? undefined,
     groupedId: anyMsg.groupedId ? BigInt(anyMsg.groupedId.toString()) : undefined,
+    reactions: mapReactions(msg),
   }
+}
+
+function mapReactions(msg: TgMessage): MessageReaction[] | undefined {
+  // Access reactions through the mtcute Message class
+  const reactions = msg.reactions
+  if (!reactions) return undefined
+
+  const reactionCounts = reactions.reactions
+  if (!reactionCounts || reactionCounts.length === 0) return undefined
+
+  return reactionCounts.map((rc) => {
+    const emoji = rc.emoji
+    // emoji can be string (unicode) or tl.Long (custom emoji ID)
+    // For custom emoji, we display a placeholder or the paid star
+    let emojiStr: string
+    if (typeof emoji === 'string') {
+      emojiStr = emoji
+    } else {
+      // Custom emoji - use star as fallback (could be extended to load custom emoji)
+      emojiStr = '⭐'
+    }
+
+    return {
+      emoji: emojiStr,
+      count: rc.count,
+      isPaid: rc.isPaid,
+    }
+  })
 }
 
 function mapMedia(msg: TgMessage): MessageMedia | undefined {

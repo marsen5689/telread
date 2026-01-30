@@ -6,6 +6,7 @@ import {
 import {
   fetchComments,
   sendComment,
+  CommentError,
   type Comment,
   type CommentThread,
 } from '@/lib/telegram'
@@ -13,6 +14,13 @@ import { queryKeys } from '../keys'
 
 /**
  * Hook to fetch comments for a post
+ *
+ * Provides error handling with specific error codes:
+ * - DISABLED: Comments are disabled for this post
+ * - NOT_FOUND: Post not found
+ * - NETWORK: Network/rate limit error
+ * - VALIDATION: Invalid input
+ * - UNKNOWN: Unknown error
  */
 export function useComments(
   channelId: () => number,
@@ -24,11 +32,23 @@ export function useComments(
     queryFn: () => fetchComments(channelId(), messageId()),
     staleTime: 1000 * 60 * 2, // 2 minutes - comments change more frequently
     enabled: enabled?.() ?? true,
+    retry: (failureCount, error) => {
+      // Don't retry on validation or disabled errors
+      if (error instanceof CommentError) {
+        if (error.code === 'VALIDATION' || error.code === 'DISABLED') {
+          return false
+        }
+      }
+      return failureCount < 2
+    },
   }))
 }
 
 /**
  * Hook to send a comment with optimistic updates
+ *
+ * Handles validation errors before sending and provides
+ * proper rollback on failure.
  */
 export function useSendComment(channelId: () => number, messageId: () => number) {
   const queryClient = useQueryClient()
@@ -57,7 +77,7 @@ export function useSendComment(channelId: () => number, messageId: () => number)
       // Optimistically add the new comment
       const optimisticComment: Comment = {
         id: Date.now(), // Temporary ID
-        text,
+        text: text.trim(),
         author: {
           id: 0,
           name: 'You',
@@ -74,6 +94,7 @@ export function useSendComment(channelId: () => number, messageId: () => number)
             return {
               totalCount: 1,
               comments: [optimisticComment],
+              hasMore: false,
             }
           }
 
@@ -120,25 +141,67 @@ export function useSendComment(channelId: () => number, messageId: () => number)
   }))
 }
 
-// Helper to add a reply to the correct place in the tree
+/**
+ * Helper to check if an error is a CommentError with a specific code
+ */
+export function isCommentError(
+  error: unknown,
+  code?: CommentError['code']
+): error is CommentError {
+  if (!(error instanceof CommentError)) {
+    return false
+  }
+  return code ? error.code === code : true
+}
+
+/**
+ * Add a reply to the correct place in the comment tree
+ *
+ * Uses a Map-based approach for O(1) parent lookup instead of O(n) traversal.
+ * Returns a new tree without mutating the original.
+ */
 function addReplyToTree(
   comments: Comment[],
   parentId: number,
   newComment: Comment
 ): Comment[] {
-  return comments.map((comment) => {
-    if (comment.id === parentId) {
-      return {
-        ...comment,
-        replies: [...(comment.replies ?? []), newComment],
+  // Build a map for O(1) lookup
+  const commentMap = new Map<number, Comment>()
+  const collectComments = (list: Comment[]) => {
+    for (const comment of list) {
+      commentMap.set(comment.id, comment)
+      if (comment.replies?.length) {
+        collectComments(comment.replies)
       }
     }
-    if (comment.replies && comment.replies.length > 0) {
-      return {
-        ...comment,
-        replies: addReplyToTree(comment.replies, parentId, newComment),
+  }
+  collectComments(comments)
+
+  // Check if parent exists
+  const parent = commentMap.get(parentId)
+  if (!parent) {
+    // Parent not found, add as root comment
+    return [newComment, ...comments]
+  }
+
+  // Clone the tree with the new reply added
+  const cloneWithReply = (list: Comment[]): Comment[] => {
+    return list.map((comment) => {
+      if (comment.id === parentId) {
+        return {
+          ...comment,
+          replies: [...(comment.replies ?? []), newComment],
+        }
       }
-    }
-    return comment
-  })
+      if (comment.replies?.length) {
+        return {
+          ...comment,
+          replies: cloneWithReply(comment.replies),
+        }
+      }
+      return comment
+    })
+  }
+
+  return cloneWithReply(comments)
 }

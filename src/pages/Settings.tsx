@@ -1,7 +1,7 @@
 import { Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { Motion } from 'solid-motionone'
-import { GlassCard, GlassButton, Avatar } from '@/components/ui'
+import { GlassCard, GlassButton, UserAvatar } from '@/components/ui'
 import { themeStore, authStore, preferencesStore, type Theme } from '@/lib/store'
 import { logout } from '@/lib/telegram'
 
@@ -42,7 +42,8 @@ export function Settings() {
 
           <Show when={authStore.user}>
             <div class="flex items-center gap-4">
-              <Avatar
+              <UserAvatar
+                userId={authStore.user!.id}
                 name={authStore.user!.displayName}
                 size="lg"
               />

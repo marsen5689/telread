@@ -25,6 +25,7 @@ export {
   type Message,
   type MessageMedia,
   type MessageEntity,
+  type MessageReaction,
   type FetchMessagesOptions,
   type HistoryResult,
 } from './messages'
@@ -32,8 +33,12 @@ export {
   fetchComments,
   sendComment,
   hasCommentsEnabled,
+  CommentError,
   type Comment,
+  type CommentAuthor,
+  type CommentReaction,
   type CommentThread,
+  type FetchCommentsOptions,
 } from './comments'
 export {
   downloadMedia,
