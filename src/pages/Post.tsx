@@ -1,10 +1,10 @@
 import { useParams, useNavigate } from '@solidjs/router'
-import { createMemo, Show } from 'solid-js'
+import { Show } from 'solid-js'
 import { Motion } from 'solid-motionone'
 import { ChannelAvatar, PostSkeleton } from '@/components/ui'
 import { PostContent, PostMedia, PostActions } from '@/components/post'
 import { CommentSection } from '@/components/comments'
-import { usePost, useChannels } from '@/lib/query'
+import { usePost, useChannel } from '@/lib/query'
 
 /**
  * Post detail page with full content and comments
@@ -19,11 +19,7 @@ export function Post() {
   const messageId = () => parseInt(params.messageId ?? '0', 10)
 
   const postQuery = usePost(channelId, messageId)
-  const channelsQuery = useChannels()
-
-  const channel = createMemo(() =>
-    channelsQuery.data?.find((c) => c.id === channelId())
-  )
+  const channelQuery = useChannel(channelId)
 
   const handleBack = () => {
     if (window.history.length > 1) {
@@ -42,6 +38,7 @@ export function Post() {
       {/* Back button */}
       <div class="sticky top-0 z-30 px-4 pt-4">
         <button
+          type="button"
           onClick={handleBack}
           class="pill"
         >
@@ -57,17 +54,21 @@ export function Post() {
         </button>
       </div>
 
-      {/* Loading */}
-      <Show when={postQuery.isLoading}>
+      {/* Loading - only show if no error */}
+      <Show when={(postQuery.isLoading || channelQuery.isLoading) && !postQuery.isError && !channelQuery.isError}>
         <PostSkeleton />
       </Show>
 
-      {/* Error */}
-      <Show when={postQuery.isError}>
+      {/* Error - takes priority over loading */}
+      <Show when={postQuery.isError || channelQuery.isError}>
         <div class="p-4 text-center">
           <p class="text-[var(--danger)]">Failed to load post</p>
           <button
-            onClick={() => postQuery.refetch()}
+            type="button"
+            onClick={() => {
+              postQuery.refetch()
+              channelQuery.refetch()
+            }}
             class="mt-2 text-accent hover:underline"
           >
             Try again
@@ -75,8 +76,22 @@ export function Post() {
         </div>
       </Show>
 
+      {/* Channel not found - only after both queries complete without error */}
+      <Show when={!postQuery.isLoading && !channelQuery.isLoading && !postQuery.isError && !channelQuery.isError && postQuery.data && !channelQuery.data}>
+        <div class="p-4 text-center">
+          <p class="text-tertiary">Channel not found</p>
+          <button
+            type="button"
+            onClick={handleBack}
+            class="mt-2 text-accent hover:underline"
+          >
+            Go back
+          </button>
+        </div>
+      </Show>
+
       {/* Post content - same structure as timeline */}
-      <Show when={postQuery.data && channel()}>
+      <Show when={postQuery.data && channelQuery.data}>
         <Motion.article
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -84,10 +99,10 @@ export function Post() {
         >
           {/* Header */}
           <div class="post-header cursor-pointer" onClick={handleChannelClick}>
-            <ChannelAvatar channelId={channelId()} name={channel()!.title} size="md" />
+            <ChannelAvatar channelId={channelId()} name={channelQuery.data!.title} size="md" />
             <div class="flex-1 min-w-0">
               <p class="font-semibold text-primary hover:underline truncate">
-                {channel()!.title}
+                {channelQuery.data!.title}
               </p>
               <p class="text-sm text-tertiary">
                 {formatDate(postQuery.data!.date)}
@@ -122,7 +137,7 @@ export function Post() {
             <PostActions
               channelId={channelId()}
               messageId={messageId()}
-              channelTitle={channel()!.title}
+              channelTitle={channelQuery.data!.title}
               preview={postQuery.data!.text}
               views={postQuery.data!.views}
               replies={postQuery.data!.replies}

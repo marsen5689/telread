@@ -1,7 +1,7 @@
 import { getTelegramClient } from './client'
 import { mapMessage } from './messages'
 import { MAX_DIALOGS_TO_ITERATE, MAX_CHANNELS_TO_FETCH } from '@/config/constants'
-import type { Chat, Message as TgMessage } from '@mtcute/web'
+import type { Chat, Message as TgMessage, Dialog } from '@mtcute/web'
 import type { Message } from './messages'
 
 export interface Channel {
@@ -24,6 +24,11 @@ export interface ChannelWithLastMessage extends Channel {
 
 /**
  * Fetch all subscribed channels
+ *
+ * Channels are cached with staleTime: Infinity, so this only runs:
+ * - On first app load (no cache)
+ * - After cache expiry (7 days)
+ * - On explicit refresh by user
  */
 export async function fetchChannels(): Promise<Channel[]> {
   const client = getTelegramClient()
@@ -38,12 +43,11 @@ export async function fetchChannels(): Promise<Channel[]> {
       if (done) break
 
       dialogCount++
-      const anyDialog = dialog as any
-      const chat = anyDialog.chat ?? anyDialog.peer ?? dialog
+      const peer = dialog.peer
 
-      // Skip secret chats and invalid entries
-      if (!chat || chat.chatType === 'secret') continue
-
+      // Skip users and secret chats
+      if (peer.type !== 'chat') continue
+      const chat = peer as Chat
       if (chat.chatType === 'channel' && !isGroupChat(chat)) {
         channels.push(mapChatToChannel(chat))
       }
@@ -82,22 +86,20 @@ export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMe
       if (done) break
 
       dialogCount++
-      const anyDialog = dialog as any
-      const chat = anyDialog.chat ?? anyDialog.peer ?? dialog
+      const peer = dialog.peer
 
-      // Skip secret chats and invalid entries
-      if (!chat || chat.chatType === 'secret') continue
-
+      // Skip users and secret chats
+      if (peer.type !== 'chat') continue
+      const chat = peer as Chat
       if (chat.chatType === 'channel' && !isGroupChat(chat)) {
         const channel = mapChatToChannel(chat)
 
         // Extract lastMessage from dialog - KEY OPTIMIZATION
         // dialog.lastMessage is a high-level Message object from mtcute
-        const lastMessage = anyDialog.lastMessage
+        const lastMessage = dialog.lastMessage
         let mappedLastMessage: Message | undefined
 
-        // Only map if lastMessage exists and has expected structure
-        if (lastMessage && typeof lastMessage === 'object' && 'id' in lastMessage) {
+        if (lastMessage) {
           try {
             const mapped = mapMessage(lastMessage as TgMessage, channel.id)
             if (mapped) {
@@ -176,11 +178,7 @@ export async function joinChannel(usernameOrLink: string): Promise<Channel | nul
     const username = usernameOrLink.replace(/^@/, '').replace(/^https?:\/\/t\.me\//, '')
     const chat = await client.getChat(username)
     if (chat.chatType === 'channel') {
-      // Use joinChat method instead
-      const anyClient = client as any
-      if (anyClient.joinChat) {
-        await anyClient.joinChat(chat)
-      }
+      await client.joinChat(chat)
       return mapChatToChannel(chat)
     }
     return null
@@ -198,11 +196,7 @@ export async function leaveChannel(channelId: number): Promise<boolean> {
   try {
     const chat = await client.getChat(channelId)
     if (chat.chatType === 'channel') {
-      // Use leaveChat method instead
-      const anyClient = client as any
-      if (anyClient.leaveChat) {
-        await anyClient.leaveChat(chat)
-      }
+      await client.leaveChat(chat)
       return true
     }
     return false
@@ -213,19 +207,31 @@ export async function leaveChannel(channelId: number): Promise<boolean> {
 
 // Helpers
 
+/**
+ * Check if a chat is a group (supergroup/megagroup) rather than a broadcast channel
+ */
 function isGroupChat(chat: Chat): boolean {
-  return 'isMegagroup' in chat && (chat as any).isMegagroup === true
+  // chatType 'supergroup' or 'gigagroup' means it's a group, not a broadcast channel
+  return chat.chatType === 'supergroup' || chat.chatType === 'gigagroup'
 }
 
+/**
+ * Map mtcute Chat to our Channel interface
+ */
 function mapChatToChannel(chat: Chat): Channel {
-  const anyChat = chat as any
+  // Access accessHash from raw TL object if available
+  const raw = chat.raw
+  const accessHash = 'accessHash' in raw && raw.accessHash
+    ? BigInt(raw.accessHash.toString())
+    : BigInt(0)
+
   return {
     id: chat.id,
-    accessHash: BigInt(anyChat.accessHash?.toString() ?? '0'),
+    accessHash,
     title: chat.title ?? 'Unknown',
-    username: anyChat.username ?? undefined,
-    participantsCount: anyChat.participantsCount ?? undefined,
-    linkedChatId: anyChat.linkedChatId ?? undefined,
+    username: chat.username ?? undefined,
+    participantsCount: chat.membersCount ?? undefined,
+    linkedChatId: undefined, // Would need FullChat for this
   }
 }
 

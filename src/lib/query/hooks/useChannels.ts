@@ -1,18 +1,51 @@
 import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query'
-import { fetchChannels, joinChannel, leaveChannel, type Channel } from '@/lib/telegram'
+import { fetchChannels, joinChannel, leaveChannel, getChannel, type Channel } from '@/lib/telegram'
 import { queryKeys } from '../keys'
 
 /**
  * Hook to fetch all subscribed channels
  *
- * Uses long staleTime since channel list rarely changes.
+ * Channels are cached persistently and only refreshed:
+ * - On first load (if no cached data)
+ * - Via real-time updates when new messages arrive
+ * - Manually by user action
  */
 export function useChannels() {
   return createQuery(() => ({
     queryKey: queryKeys.channels.list(),
-    queryFn: fetchChannels,
-    // Channels rarely change - 1 hour staleTime
-    staleTime: 1000 * 60 * 60,
+    queryFn: () => fetchChannels(),
+    // Never auto-refetch - updates come from real-time listener
+    staleTime: Infinity,
+    // Keep in cache for 7 days
+    gcTime: 1000 * 60 * 60 * 24 * 7,
+  }))
+}
+
+/**
+ * Hook to fetch a single channel by ID
+ *
+ * First checks the cached channels list, then fetches if not found.
+ */
+export function useChannel(channelId: () => number) {
+  const queryClient = useQueryClient()
+
+  return createQuery(() => ({
+    queryKey: queryKeys.channels.detail(channelId()),
+    queryFn: async () => {
+      const id = channelId()
+
+      // First try to find in cached channels list
+      const cachedChannels = queryClient.getQueryData<Channel[]>(queryKeys.channels.list())
+      const cached = cachedChannels?.find((c) => c.id === id)
+      if (cached) return cached
+
+      // Otherwise fetch from API
+      const channel = await getChannel(id)
+      return channel
+    },
+    // Don't run query for invalid channel IDs
+    enabled: channelId() !== 0,
+    staleTime: 1000 * 60 * 60, // 1 hour
   }))
 }
 

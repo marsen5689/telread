@@ -10,15 +10,15 @@
 
 /**
  * Maximum dialogs to iterate when fetching channels
- * Set to avoid rate limits from Telegram API
+ * Covers most users while keeping initial load fast
  */
-export const MAX_DIALOGS_TO_ITERATE = 200
+export const MAX_DIALOGS_TO_ITERATE = 500
 
 /**
- * Maximum channels to fetch and display
- * Balance between completeness and performance
+ * Maximum channels to fetch for channel list
+ * Individual channels beyond this can still be accessed via useChannel
  */
-export const MAX_CHANNELS_TO_FETCH = 50
+export const MAX_CHANNELS_TO_FETCH = 200
 
 /**
  * Maximum concurrent media downloads

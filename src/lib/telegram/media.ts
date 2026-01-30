@@ -1,5 +1,6 @@
 import { getTelegramClient } from './client'
 import { MEDIA_CACHE_MAX_SIZE } from '@/config/constants'
+import { get, set } from 'idb-keyval'
 import type { Photo, Video, Document, Sticker, Audio, Voice } from '@mtcute/web'
 
 // Union type for media that supports thumbnails
@@ -92,6 +93,87 @@ class MediaLRUCache {
 // ============================================================================
 
 const mediaCache = new MediaLRUCache(MEDIA_CACHE_MAX_SIZE)
+
+// ============================================================================
+// Persistent Profile Photo Cache (IndexedDB)
+// ============================================================================
+
+const PROFILE_CACHE_PREFIX = 'profile-photo:'
+const PROFILE_CACHE_VERSION = 1
+const PROFILE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7 // 7 days
+
+interface CachedProfilePhoto {
+  data: string // base64
+  timestamp: number
+  version: number
+}
+
+/**
+ * Convert Uint8Array to base64 (chunked to avoid stack overflow)
+ */
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  const CHUNK_SIZE = 0x8000 // 32KB chunks
+  const chunks: string[] = []
+
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length))
+    chunks.push(String.fromCharCode.apply(null, chunk as unknown as number[]))
+  }
+
+  return btoa(chunks.join(''))
+}
+
+/**
+ * Convert base64 to Uint8Array
+ */
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
+}
+
+/**
+ * Get profile photo from persistent cache
+ */
+async function getCachedProfilePhoto(peerId: number, size: string): Promise<string | null> {
+  try {
+    const key = `${PROFILE_CACHE_PREFIX}${peerId}:${size}`
+    const cached = await get<CachedProfilePhoto>(key)
+
+    if (!cached) return null
+
+    // Check version and TTL
+    if (cached.version !== PROFILE_CACHE_VERSION) return null
+    if (Date.now() - cached.timestamp > PROFILE_CACHE_TTL) return null
+
+    // Convert base64 back to blob URL
+    const bytes = base64ToUint8Array(cached.data)
+    const blob = new Blob([bytes], { type: 'image/jpeg' })
+    return URL.createObjectURL(blob)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Save profile photo to persistent cache
+ */
+async function cacheProfilePhoto(peerId: number, size: string, buffer: Uint8Array): Promise<void> {
+  try {
+    const key = `${PROFILE_CACHE_PREFIX}${peerId}:${size}`
+    const cached: CachedProfilePhoto = {
+      data: uint8ArrayToBase64(buffer),
+      timestamp: Date.now(),
+      version: PROFILE_CACHE_VERSION,
+    }
+    await set(key, cached)
+  } catch {
+    // Ignore cache errors
+  }
+}
 
 // ============================================================================
 // Download Queue Management
@@ -399,7 +481,7 @@ export async function downloadMedia(
  * Download a channel/user profile photo
  *
  * Handles both channels (via getChat) and users (via getUsers).
- * Uses the photo.small or photo.big FileLocation to download.
+ * Uses persistent IndexedDB cache to avoid re-downloading on page reload.
  */
 export async function downloadProfilePhoto(
   peerId: number,
@@ -407,9 +489,17 @@ export async function downloadProfilePhoto(
 ): Promise<string | null> {
   const cacheKey = `profile:${peerId}:${size}`
 
-  const cached = mediaCache.get(cacheKey)
-  if (cached) {
-    return cached
+  // Check in-memory cache first
+  const memCached = mediaCache.get(cacheKey)
+  if (memCached) {
+    return memCached
+  }
+
+  // Check persistent cache (IndexedDB)
+  const persistedUrl = await getCachedProfilePhoto(peerId, size)
+  if (persistedUrl) {
+    mediaCache.set(cacheKey, persistedUrl)
+    return persistedUrl
   }
 
   const client = getTelegramClient()
@@ -434,13 +524,19 @@ export async function downloadProfilePhoto(
       DOWNLOAD_TIMEOUT,
       `profilePhoto(${peerId})`
     )
-    debugLog(`Profile photo downloaded, size: ${buffer?.length ?? 0} bytes`)
+
     if (!buffer || buffer.length === 0) {
       return null
     }
 
-    // Convert to regular array for Blob compatibility
-    const blob = new Blob([new Uint8Array(buffer)], { type: 'image/jpeg' })
+    // Convert to regular Uint8Array
+    const uint8Buffer = new Uint8Array(buffer)
+
+    // Save to persistent cache (async, don't await)
+    cacheProfilePhoto(peerId, size, uint8Buffer)
+
+    // Create blob URL for immediate use
+    const blob = new Blob([uint8Buffer], { type: 'image/jpeg' })
     const url = URL.createObjectURL(blob)
 
     mediaCache.set(cacheKey, url)

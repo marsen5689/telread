@@ -1,5 +1,12 @@
 import { getTelegramClient } from './client'
-import type { Message as TgMessage } from '@mtcute/web'
+import type {
+  Message as TgMessage,
+  MessageEntity as TgMessageEntity,
+  Photo,
+  Video,
+  Document as TgDocument,
+  Sticker,
+} from '@mtcute/web'
 
 export interface MessageReaction {
   emoji: string
@@ -240,17 +247,15 @@ export function mapMessage(msg: TgMessage, channelId: number): Message | null {
     return null
   }
 
-  const anyMsg = msg as any
-
   return {
     id: msg.id,
     channelId,
     text: msg.text ?? '',
     date: msg.date,
-    views: anyMsg.views ?? undefined,
-    forwards: anyMsg.forwards ?? undefined,
-    replies: anyMsg.replies?.count ?? undefined,
-    editDate: anyMsg.editDate ?? undefined,
+    views: msg.views ?? undefined,
+    forwards: msg.forwards ?? undefined,
+    replies: msg.replies?.count ?? undefined,
+    editDate: msg.editDate ?? undefined,
     author: msg.sender
       ? {
           id: msg.sender.id,
@@ -260,7 +265,7 @@ export function mapMessage(msg: TgMessage, channelId: number): Message | null {
     media: mapMedia(msg),
     entities: mapEntities(msg),
     replyTo: msg.replyToMessage?.id ?? undefined,
-    groupedId: anyMsg.groupedId ? BigInt(anyMsg.groupedId.toString()) : undefined,
+    groupedId: msg.groupedId ? BigInt(msg.groupedId.toString()) : undefined,
     reactions: mapReactions(msg),
   }
 }
@@ -296,40 +301,44 @@ function mapReactions(msg: TgMessage): MessageReaction[] | undefined {
 function mapMedia(msg: TgMessage): MessageMedia | undefined {
   if (!msg.media) return undefined
 
-  const anyMedia = msg.media as any
+  const media = msg.media
 
-  if (msg.media.type === 'photo') {
+  if (media.type === 'photo') {
+    const photo = media as Photo
     return {
       type: 'photo',
-      width: anyMedia.width,
-      height: anyMedia.height,
+      width: photo.width,
+      height: photo.height,
     }
   }
 
-  if (msg.media.type === 'video') {
+  if (media.type === 'video') {
+    const video = media as Video
     return {
       type: 'video',
-      width: anyMedia.width,
-      height: anyMedia.height,
-      duration: anyMedia.duration,
-      mimeType: anyMedia.mimeType,
+      width: video.width,
+      height: video.height,
+      duration: video.duration,
+      mimeType: video.mimeType,
     }
   }
 
-  if (msg.media.type === 'document') {
+  if (media.type === 'document') {
+    const doc = media as TgDocument
     return {
       type: 'document',
-      fileName: anyMedia.fileName,
-      mimeType: anyMedia.mimeType,
-      size: anyMedia.fileSize,
+      fileName: doc.fileName ?? undefined,
+      mimeType: doc.mimeType,
+      size: doc.fileSize,
     }
   }
 
-  if (msg.media.type === 'sticker') {
+  if (media.type === 'sticker') {
+    const sticker = media as Sticker
     return {
       type: 'sticker',
-      width: anyMedia.width,
-      height: anyMedia.height,
+      width: sticker.width,
+      height: sticker.height,
     }
   }
 
@@ -340,61 +349,50 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
 function mapEntities(msg: TgMessage): MessageEntity[] | undefined {
   if (!msg.entities || msg.entities.length === 0) return undefined
 
-  return msg.entities.map((entity) => {
+  return msg.entities.map((entity: TgMessageEntity) => {
     const base = {
       offset: entity.offset,
       length: entity.length,
     }
 
-    const anyEntity = entity as any
-    const entityType = anyEntity.type ?? anyEntity._
+    // Use mtcute's kind property for entity type
+    const kind = entity.kind
 
-    switch (entityType) {
+    switch (kind) {
       case 'bold':
-      case 'messageEntityBold':
         return { ...base, type: 'bold' as const }
       case 'italic':
-      case 'messageEntityItalic':
         return { ...base, type: 'italic' as const }
       case 'underline':
-      case 'messageEntityUnderline':
         return { ...base, type: 'underline' as const }
       case 'strikethrough':
-      case 'messageEntityStrike':
         return { ...base, type: 'strikethrough' as const }
       case 'code':
-      case 'messageEntityCode':
         return { ...base, type: 'code' as const }
       case 'pre':
-      case 'messageEntityPre':
         return {
           ...base,
           type: 'pre' as const,
-          language: anyEntity.language ?? undefined,
+          language: entity.is('pre') ? entity.params.language : undefined,
         }
       case 'text_link':
-      case 'messageEntityTextUrl':
         return {
           ...base,
           type: 'link' as const,
-          url: anyEntity.url ?? undefined,
+          url: entity.is('text_link') ? entity.params.url : undefined,
         }
       case 'mention':
-      case 'messageEntityMention':
         return { ...base, type: 'mention' as const }
       case 'hashtag':
-      case 'messageEntityHashtag':
         return { ...base, type: 'hashtag' as const }
       case 'email':
-      case 'messageEntityEmail':
         return { ...base, type: 'email' as const }
-      case 'phone':
-      case 'messageEntityPhone':
+      case 'phone_number':
         return { ...base, type: 'phone' as const }
       case 'spoiler':
-      case 'messageEntitySpoiler':
         return { ...base, type: 'spoiler' as const }
       default:
+        // For unknown types, return as bold (fallback)
         return { ...base, type: 'bold' as const }
     }
   })

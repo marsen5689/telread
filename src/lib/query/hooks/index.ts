@@ -1,4 +1,4 @@
-export { useChannels, useJoinChannel, useLeaveChannel } from './useChannels'
+export { useChannels, useChannel, useJoinChannel, useLeaveChannel } from './useChannels'
 export { useMessages, useInfiniteMessages, useOptimizedTimeline } from './useTimeline'
 export { usePost, usePrefetchPost } from './usePost'
 export { useComments, useSendComment } from './useComments'
