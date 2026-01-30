@@ -356,28 +356,22 @@ export async function downloadMedia(
 ): Promise<string | null> {
   const cacheKey = `${channelId}:${messageId}:${thumbSize ?? 'full'}`
 
-  debugLog(`downloadMedia called: channel=${channelId}, msg=${messageId}, thumb=${thumbSize}`)
-
   // Check memory cache first
   const cached = mediaCache.get(cacheKey)
   if (cached) {
-    debugLog(`Memory cache hit: ${cacheKey}`)
     return cached
   }
 
   // For thumbnails, check IndexedDB persistent cache
-  // Note: getCachedMediaThumbnail already stores in memory cache if found
   if (thumbSize) {
     const persistedUrl = await getCachedMediaThumbnail(channelId, messageId, thumbSize)
     if (persistedUrl) {
-      debugLog(`IndexedDB cache hit: ${cacheKey}`)
       return persistedUrl
     }
   }
 
   // Check if already aborted
   if (signal?.aborted) {
-    debugLog(`Already aborted: ${cacheKey}`)
     return null
   }
 
@@ -387,11 +381,9 @@ export async function downloadMedia(
   }
 
   const client = getTelegramClient()
-  debugLog(`Waiting for media slot... (active: ${mediaQueue.active}, queue: ${mediaQueue.pending})`)
 
   // Wait for available download slot
   await mediaQueue.acquire()
-  debugLog(`Got media slot (active: ${mediaQueue.active})`)
 
   // Check again after waiting for slot
   if (signal?.aborted) {
@@ -401,16 +393,13 @@ export async function downloadMedia(
 
   try {
     // Always fetch fresh message to get valid file references
-    debugLog(`Fetching message: channel=${channelId}, msg=${messageId}`)
     const messages = await withTimeout(
       client.getMessages(channelId, [messageId]),
       DOWNLOAD_TIMEOUT,
       `getMessages(${channelId}, ${messageId})`
     )
-    debugLog(`getMessages response:`, messages)
 
     if (signal?.aborted) {
-      debugLog(`Aborted after getMessages`)
       return null
     }
 
@@ -420,10 +409,8 @@ export async function downloadMedia(
     }
 
     const msg = messages[0]
-    debugLog(`Message found: id=${msg.id}, hasMedia=${!!msg.media}, mediaType=${msg.media?.type}`)
 
     if (!msg.media) {
-      debugLog(`Message has no media: channel=${channelId}, msg=${messageId}`)
       return null
     }
 
@@ -432,11 +419,8 @@ export async function downloadMedia(
     // Only downloadable media types
     const downloadableTypes = ['photo', 'video', 'document', 'sticker', 'animation', 'audio', 'voice']
     if (!downloadableTypes.includes(mediaType)) {
-      debugLog(`Media type not downloadable: ${mediaType}`)
       return null
     }
-
-    debugLog(`Downloading media: channel=${channelId}, msg=${messageId}, type=${mediaType}, thumb=${thumbSize}`)
 
     // Download using mtcute's downloadAsBuffer
     let buffer: Uint8Array | null = null
@@ -449,7 +433,6 @@ export async function downloadMedia(
 
     try {
       const media = msg.media as MediaWithThumbnails
-      debugLog(`Media object:`, { type: media.type, hasThumbnail: 'getThumbnail' in media })
 
       if (thumbType && 'getThumbnail' in media && typeof media.getThumbnail === 'function') {
         // For photos/videos/documents with thumbnails, get the thumbnail first
@@ -459,32 +442,26 @@ export async function downloadMedia(
           ?? media.getThumbnail('x')  // fallback to large
 
         if (thumbnail) {
-          debugLog(`Found thumbnail, downloading...`, { thumbType: thumbnail.type })
           buffer = await withTimeout(
             client.downloadAsBuffer(thumbnail),
             DOWNLOAD_TIMEOUT,
             `downloadThumbnail(${channelId}, ${messageId})`
           )
-          debugLog(`Thumbnail downloaded, size: ${buffer?.length ?? 0} bytes`)
         } else {
           // No thumbnail found - download full media
-          debugLog(`No thumbnail found, downloading full media...`)
           buffer = await withTimeout(
             client.downloadAsBuffer(media),
             DOWNLOAD_TIMEOUT,
             `downloadMedia(${channelId}, ${messageId})`
           )
-          debugLog(`Full media downloaded, size: ${buffer?.length ?? 0} bytes`)
         }
       } else {
         // Download full media (no getThumbnail method or no thumb requested)
-        debugLog(`Downloading full media (no thumb)...`)
         buffer = await withTimeout(
           client.downloadAsBuffer(media),
           DOWNLOAD_TIMEOUT,
           `downloadMedia(${channelId}, ${messageId})`
         )
-        debugLog(`Downloaded, size: ${buffer?.length ?? 0} bytes`)
       }
     } catch (downloadError) {
       if (signal?.aborted) {
@@ -558,10 +535,16 @@ export async function downloadMedia(
     }
 
     mediaCache.set(cacheKey, url)
-    debugLog(`Cached media: ${cacheKey} (cache size: ${mediaCache.size})`)
     return url
   } catch (error) {
     if (!signal?.aborted) {
+      // Silently ignore "channel is invalid" errors - user likely left the channel
+      // or channel was deleted, but posts remain in cache
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      if (errorMessage.includes('channel is invalid') || errorMessage.includes('CHANNEL_INVALID')) {
+        // Don't log - this is expected for cached posts from left channels
+        return null
+      }
       debugWarn(`Error downloading media: channel=${channelId}, msg=${messageId}`, error)
     }
     return null

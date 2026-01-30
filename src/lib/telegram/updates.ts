@@ -20,17 +20,11 @@ let listenerClientVersion = 0
 // No limit - we need to capture all messages from catchUp/getDifference
 const pendingMessages: TgMessage[] = []
 
-// isStoreReady is now imported from @/lib/store
-
 /**
  * Process pending messages that were queued before store was ready
  */
 function processPendingMessages(): void {
   if (pendingMessages.length === 0) return
-
-  if (import.meta.env.DEV) {
-    console.log(`[Updates] Processing ${pendingMessages.length} pending messages`)
-  }
 
   const messages = [...pendingMessages]
   pendingMessages.length = 0 // Clear queue
@@ -48,7 +42,6 @@ function processPendingMessages(): void {
     const mapped = mapMessage(message, chatId)
     if (mapped) {
       upsertPost(mapped)
-      // Also update TanStack Query cache for persistence
       addPostToCache(mapped)
     }
   }
@@ -74,14 +67,6 @@ export function startUpdatesListener(): UpdatesCleanup {
   const handleNewMessage = (message: TgMessage) => {
     if (getClientVersion() !== listenerClientVersion) return
 
-    if (import.meta.env.DEV) {
-      console.log('[Updates] New message received:', {
-        chatId: message.chat?.id,
-        messageId: message.id,
-        text: message.text?.slice(0, 50),
-      })
-    }
-
     try {
       const chatId = message.chat?.id
       if (!chatId) return
@@ -89,9 +74,6 @@ export function startUpdatesListener(): UpdatesCleanup {
       // Queue if store not ready yet
       if (!isStoreReady()) {
         pendingMessages.push(message)
-        if (import.meta.env.DEV) {
-          console.debug('[Updates] Queued message (store not ready):', chatId, message.id)
-        }
         return
       }
 
@@ -102,24 +84,13 @@ export function startUpdatesListener(): UpdatesCleanup {
       const chat = peer as Chat
       if (chat.chatType !== 'channel') return
 
-      if (import.meta.env.DEV) {
-        console.log('[Updates] Processing channel message:', {
-          chatId,
-          messageId: message.id,
-          channelTitle: chat.title,
-        })
-      }
-
       const mapped = mapMessage(message, chatId)
       if (mapped) {
         upsertPost(mapped)
-        // Also update TanStack Query cache for persistence across page reloads
         addPostToCache(mapped)
       }
     } catch (error) {
-      if (import.meta.env.DEV) {
-        console.error('[Updates] Error handling new message:', error)
-      }
+      console.error('[Updates] Error handling new message:', error)
     }
   }
 
@@ -130,12 +101,9 @@ export function startUpdatesListener(): UpdatesCleanup {
       const chatId = message.chat?.id
       if (!chatId) return
 
-      // Queue if store not ready yet (same as new messages)
+      // Queue if store not ready yet
       if (!isStoreReady()) {
         pendingMessages.push(message)
-        if (import.meta.env.DEV) {
-          console.debug('[Updates] Queued edited message (store not ready):', chatId, message.id)
-        }
         return
       }
 
@@ -147,13 +115,10 @@ export function startUpdatesListener(): UpdatesCleanup {
       const mapped = mapMessage(message, chatId)
       if (mapped) {
         upsertPost(mapped)
-        // Also update TanStack Query cache for persistence
         addPostToCache(mapped)
       }
     } catch (error) {
-      if (import.meta.env.DEV) {
-        console.error('[Updates] Error handling edit message:', error)
-      }
+      console.error('[Updates] Error handling edit message:', error)
     }
   }
 
@@ -165,12 +130,9 @@ export function startUpdatesListener(): UpdatesCleanup {
       if (channelId === null) return
 
       removePosts(channelId, update.messageIds)
-      // Also update TanStack Query cache for persistence
       removePostsFromCache(channelId, update.messageIds)
     } catch (error) {
-      if (import.meta.env.DEV) {
-        console.error('[Updates] Error handling delete message:', error)
-      }
+      console.error('[Updates] Error handling delete message:', error)
     }
   }
 
@@ -224,10 +186,8 @@ export function startUpdatesListener(): UpdatesCleanup {
         }
         return
       }
-    } catch (error) {
-      if (import.meta.env.DEV) {
-        console.debug('[Updates] Raw update error:', error)
-      }
+    } catch {
+      // Silently ignore raw update errors
     }
   }
 
@@ -238,14 +198,8 @@ export function startUpdatesListener(): UpdatesCleanup {
     client.onDeleteMessage?.add(handleDeleteMessage)
     client.onRawUpdate?.add(handleRawUpdate)
     isListenerActive = true
-
-    if (import.meta.env.DEV) {
-      console.log('[Updates] All handlers registered, listener active')
-    }
   } catch (error) {
-    if (import.meta.env.DEV) {
-      console.error('[Updates] Error registering handlers:', error)
-    }
+    console.error('[Updates] Error registering handlers:', error)
     isListenerActive = false
   }
 
@@ -256,9 +210,7 @@ export function startUpdatesListener(): UpdatesCleanup {
       client.onDeleteMessage?.remove(handleDeleteMessage)
       client.onRawUpdate?.remove(handleRawUpdate)
     } catch (error) {
-      if (import.meta.env.DEV) {
-        console.error('[Updates] Error removing handlers:', error)
-      }
+      console.error('[Updates] Error removing handlers:', error)
     } finally {
       isListenerActive = false
       if (activeCleanup === cleanup) {

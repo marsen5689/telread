@@ -288,34 +288,43 @@ async function backgroundSyncRecentHistory(
     .filter(c => c.lastMessage)
     .sort((a, b) => getTime(b.lastMessage!.date) - getTime(a.lastMessage!.date))
 
-  // Fetch in batches to avoid API spam
-  // Increased to fetch more history and fill gaps
-  const BATCH_SIZE = 5
+  // Fetch in batches to avoid API rate limits
+  // Conservative: 3 parallel requests, 300ms between batches
+  const BATCH_SIZE = 3
   const MESSAGES_PER_CHANNEL = 10
+  const BATCH_DELAY_MS = 300
 
   for (let i = 0; i < sortedChannels.length; i += BATCH_SIZE) {
     const batch = sortedChannels.slice(i, i + BATCH_SIZE)
 
-    const results = await Promise.allSettled(
-      batch.map(channel =>
-        fetchMessages(channel.id, { limit: MESSAGES_PER_CHANNEL })
+    try {
+      const results = await Promise.allSettled(
+        batch.map(channel =>
+          fetchMessages(channel.id, { limit: MESSAGES_PER_CHANNEL })
+        )
       )
-    )
 
-    const batchMessages: Message[] = []
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        batchMessages.push(...result.value)
+      const batchMessages: Message[] = []
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          batchMessages.push(...result.value)
+        }
       }
+
+      if (batchMessages.length > 0) {
+        onMessages(batchMessages)
+      }
+    } catch (error) {
+      // Rate limit or other error - stop background sync
+      if (import.meta.env.DEV) {
+        console.warn('[Timeline] Background sync stopped due to error:', error)
+      }
+      break
     }
 
-    if (batchMessages.length > 0) {
-      onMessages(batchMessages)
-    }
-
-    // Small delay between batches to be gentle on API
+    // Delay between batches to avoid rate limits
     if (i + BATCH_SIZE < sortedChannels.length) {
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS))
     }
   }
 
