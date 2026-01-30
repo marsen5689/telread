@@ -33,9 +33,16 @@ class MediaLRUCache {
   }
 
   set(key: string, value: string): void {
-    // If key exists, delete it first to update position
+    // If key exists, check if value is the same
     if (this.cache.has(key)) {
       const oldValue = this.cache.get(key)
+      if (oldValue === value) {
+        // Same value - just update position (move to end)
+        this.cache.delete(key)
+        this.cache.set(key, value)
+        return
+      }
+      // Different value - revoke old URL
       if (oldValue) {
         URL.revokeObjectURL(oldValue)
       }
@@ -111,13 +118,19 @@ interface CachedMedia {
 
 /**
  * Get media thumbnail from persistent cache
- * Returns blob URL created from cached binary data
+ * Returns blob URL - reuses from memory cache if available to prevent leaks
  */
 async function getCachedMediaThumbnail(
   channelId: number,
   messageId: number,
   size: string
 ): Promise<string | null> {
+  const cacheKey = `${channelId}:${messageId}:${size}`
+
+  // Check memory cache first to avoid creating duplicate blob URLs
+  const memCached = mediaCache.get(cacheKey)
+  if (memCached) return memCached
+
   try {
     const key = `${MEDIA_CACHE_PREFIX}${channelId}:${messageId}:${size}`
     const cached = await get<CachedMedia>(key)
@@ -126,9 +139,15 @@ async function getCachedMediaThumbnail(
     if (cached.version !== MEDIA_CACHE_VERSION) return null
     if (Date.now() - cached.timestamp > MEDIA_CACHE_TTL) return null
 
-    // Create blob URL from binary data
+    // Check memory cache again (another request might have populated it)
+    const memCachedAgain = mediaCache.get(cacheKey)
+    if (memCachedAgain) return memCachedAgain
+
+    // Create blob URL and store in memory cache
     const blob = new Blob([cached.data], { type: cached.mimeType })
-    return URL.createObjectURL(blob)
+    const url = URL.createObjectURL(blob)
+    mediaCache.set(cacheKey, url)
+    return url
   } catch {
     return null
   }
@@ -166,9 +185,10 @@ const PROFILE_CACHE_PREFIX = 'profile-photo:'
 const PROFILE_CACHE_VERSION = 2 // v2: binary data instead of base64
 const PROFILE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7 // 7 days
 
-// Separate in-memory cache for profile photos (no eviction)
-// Profile photos are small (~10KB), so keeping 200 in memory = ~2MB max
-const profilePhotoMemoryCache = new Map<string, string>()
+// LRU cache for profile photos - prevents unbounded memory growth
+// Profile photos are small (~10KB), 200 items = ~2MB max
+const PROFILE_CACHE_MAX_SIZE = 200
+const profilePhotoCache = new MediaLRUCache(PROFILE_CACHE_MAX_SIZE)
 
 interface CachedProfilePhoto {
   data: Uint8Array // Binary data
@@ -180,9 +200,15 @@ interface CachedProfilePhoto {
 
 /**
  * Get profile photo from persistent cache
- * Returns blob URL created from cached binary data
+ * Returns blob URL - reuses from memory cache if available to prevent leaks
  */
 async function getCachedProfilePhoto(peerId: number, size: string): Promise<string | null> {
+  const cacheKey = `profile:${peerId}:${size}`
+
+  // Check memory cache first to avoid creating duplicate blob URLs
+  const memCached = profilePhotoCache.get(cacheKey)
+  if (memCached) return memCached
+
   try {
     const key = `${PROFILE_CACHE_PREFIX}${peerId}:${size}`
     const cached = await get<CachedProfilePhoto>(key)
@@ -193,9 +219,15 @@ async function getCachedProfilePhoto(peerId: number, size: string): Promise<stri
     if (cached.version !== PROFILE_CACHE_VERSION) return null
     if (Date.now() - cached.timestamp > PROFILE_CACHE_TTL) return null
 
-    // Create blob URL from binary data
+    // Check memory cache again (another request might have populated it)
+    const memCachedAgain = profilePhotoCache.get(cacheKey)
+    if (memCachedAgain) return memCachedAgain
+
+    // Create blob URL and store in memory cache
     const blob = new Blob([cached.data], { type: 'image/jpeg' })
-    return URL.createObjectURL(blob)
+    const url = URL.createObjectURL(blob)
+    profilePhotoCache.set(cacheKey, url)
+    return url
   } catch {
     return null
   }
@@ -334,11 +366,11 @@ export async function downloadMedia(
   }
 
   // For thumbnails, check IndexedDB persistent cache
+  // Note: getCachedMediaThumbnail already stores in memory cache if found
   if (thumbSize) {
     const persistedUrl = await getCachedMediaThumbnail(channelId, messageId, thumbSize)
     if (persistedUrl) {
       debugLog(`IndexedDB cache hit: ${cacheKey}`)
-      mediaCache.set(cacheKey, persistedUrl)
       return persistedUrl
     }
   }
@@ -555,15 +587,15 @@ export async function downloadProfilePhoto(
   const cacheKey = `profile:${peerId}:${size}`
 
   // Check in-memory cache first (non-evicting, blob URLs stay valid)
-  const memCached = profilePhotoMemoryCache.get(cacheKey)
+  const memCached = profilePhotoCache.get(cacheKey)
   if (memCached) {
     return memCached
   }
 
   // Check persistent cache (IndexedDB)
+  // Note: getCachedProfilePhoto already stores in memory cache if found
   const persistedUrl = await getCachedProfilePhoto(peerId, size)
   if (persistedUrl) {
-    profilePhotoMemoryCache.set(cacheKey, persistedUrl)
     return persistedUrl
   }
 
@@ -610,7 +642,7 @@ export async function downloadProfilePhoto(
     const url = URL.createObjectURL(blob)
 
     // Store in non-evicting memory cache
-    profilePhotoMemoryCache.set(cacheKey, url)
+    profilePhotoCache.set(cacheKey, url)
     return url
   } catch (error) {
     debugWarn(`Failed to download profile photo: peer=${peerId}`, error)

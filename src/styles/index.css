@@ -389,6 +389,29 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
+     SPOILER TEXT
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  .spoiler-hidden {
+    background: var(--color-text);
+    color: transparent;
+    border-radius: 4px;
+    padding: 0 2px;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+    user-select: none;
+  }
+
+  .spoiler-hidden::selection {
+    background: transparent;
+  }
+
+  .spoiler-revealed {
+    background: transparent;
+    color: inherit;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
      POST - Clean without card wrapper
      ═══════════════════════════════════════════════════════════════════════ */
 

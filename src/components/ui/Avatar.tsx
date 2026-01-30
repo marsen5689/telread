@@ -1,4 +1,4 @@
-import { Show, createMemo, createSignal, createEffect } from 'solid-js'
+import { Show, createMemo } from 'solid-js'
 
 interface AvatarProps {
   src?: string | null
@@ -40,14 +40,6 @@ function getColorFromName(name: string): string {
  * with a solid background color based on the user's name.
  */
 export function Avatar(props: AvatarProps) {
-  // Track src changes with local signal for proper reactivity
-  const [imgSrc, setImgSrc] = createSignal<string | null>(props.src ?? null)
-
-  // Update local signal when props.src changes
-  createEffect(() => {
-    setImgSrc(props.src ?? null)
-  })
-
   const initials = createMemo(() => {
     if (!props.name) return '?'
     const parts = props.name.trim().split(/\s+/)
@@ -70,7 +62,7 @@ export function Avatar(props: AvatarProps) {
       onClick={props.onClick}
     >
       <Show
-        when={imgSrc()}
+        when={props.src}
         fallback={
           <div
             class="w-full h-full flex items-center justify-center font-medium text-white"
@@ -81,7 +73,7 @@ export function Avatar(props: AvatarProps) {
         }
       >
         <img
-          src={imgSrc()!}
+          src={props.src!}
           alt={props.name ?? 'Avatar'}
           class="w-full h-full object-cover"
         />

@@ -1,4 +1,5 @@
 import { For, createMemo } from 'solid-js'
+import type { JSX } from 'solid-js'
 import type { MessageEntity } from '@/lib/telegram'
 
 interface PostContentProps {
@@ -9,134 +10,170 @@ interface PostContentProps {
   maxLines?: number
 }
 
+interface TextSegment {
+  start: number
+  end: number
+  entities: MessageEntity[]
+}
+
 /**
  * Renders post text with Telegram entities (formatting)
  *
- * Supports bold, italic, links, mentions, hashtags, code, etc.
+ * Supports overlapping entities - e.g., bold + italic on same text.
+ * Uses interval-based algorithm to handle multiple formatting on same characters.
  */
 export function PostContent(props: PostContentProps) {
-  const renderedContent = createMemo(() => {
+  const segments = createMemo(() => {
     if (!props.text) return []
     if (!props.entities || props.entities.length === 0) {
-      return [{ type: 'text' as const, content: props.text }]
+      return [{ start: 0, end: props.text.length, entities: [] as MessageEntity[] }]
     }
 
-    // Sort entities by offset
-    const sortedEntities = [...props.entities].sort((a, b) => a.offset - b.offset)
-    const parts: Array<{ type: string; content: string; url?: string; language?: string }> = []
-
-    let lastOffset = 0
-
-    for (const entity of sortedEntities) {
-      // Add text before this entity
-      if (entity.offset > lastOffset) {
-        parts.push({
-          type: 'text',
-          content: props.text.slice(lastOffset, entity.offset),
-        })
-      }
-
-      // Add the entity
-      const entityText = props.text.slice(entity.offset, entity.offset + entity.length)
-      parts.push({
-        type: entity.type,
-        content: entityText,
-        url: entity.url,
-        language: entity.language,
-      })
-
-      lastOffset = entity.offset + entity.length
+    // Collect all unique boundary points
+    const points = new Set<number>([0, props.text.length])
+    for (const entity of props.entities) {
+      points.add(entity.offset)
+      points.add(entity.offset + entity.length)
     }
 
-    // Add remaining text
-    if (lastOffset < props.text.length) {
-      parts.push({
-        type: 'text',
-        content: props.text.slice(lastOffset),
-      })
+    // Sort points
+    const sortedPoints = [...points].sort((a, b) => a - b)
+
+    // Create segments between consecutive points
+    const result: TextSegment[] = []
+    for (let i = 0; i < sortedPoints.length - 1; i++) {
+      const start = sortedPoints[i]
+      const end = sortedPoints[i + 1]
+
+      if (start >= end) continue
+
+      // Find all entities that cover this segment
+      const activeEntities = props.entities.filter(
+        (e) => e.offset <= start && e.offset + e.length >= end
+      )
+
+      result.push({ start, end, entities: activeEntities })
     }
 
-    return parts
+    return result
   })
 
-  const renderPart = (part: { type: string; content: string; url?: string; language?: string }) => {
-    switch (part.type) {
+  // Wrap content with entity formatting (supports nesting)
+  const wrapWithEntities = (content: string, entities: MessageEntity[]): JSX.Element => {
+    if (entities.length === 0) {
+      return <>{content}</>
+    }
+
+    // Sort entities by priority for consistent nesting order
+    // Links should be outermost, then text styles
+    const priorityOrder: Record<string, number> = {
+      link: 0,
+      mention: 1,
+      hashtag: 2,
+      email: 3,
+      phone: 4,
+      spoiler: 5,
+      pre: 6,
+      code: 7,
+      bold: 8,
+      italic: 9,
+      underline: 10,
+      strikethrough: 11,
+    }
+
+    const sorted = [...entities].sort(
+      (a, b) => (priorityOrder[a.type] ?? 99) - (priorityOrder[b.type] ?? 99)
+    )
+
+    // Build nested structure from outside in
+    let result: JSX.Element = <>{content}</>
+
+    // Apply entities from innermost to outermost (reverse order)
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      const entity = sorted[i]
+      result = wrapSingle(result, entity)
+    }
+
+    return result
+  }
+
+  const wrapSingle = (children: JSX.Element, entity: MessageEntity): JSX.Element => {
+    switch (entity.type) {
       case 'bold':
-        return <strong class="font-semibold">{part.content}</strong>
+        return <strong class="font-semibold">{children}</strong>
       case 'italic':
-        return <em class="italic">{part.content}</em>
+        return <em class="italic">{children}</em>
       case 'underline':
-        return <span class="underline">{part.content}</span>
+        return <span class="underline">{children}</span>
       case 'strikethrough':
-        return <span class="line-through">{part.content}</span>
+        return <span class="line-through">{children}</span>
       case 'code':
         return (
           <code class="px-1.5 py-0.5 rounded bg-[var(--glass-bg)] font-mono text-sm text-accent">
-            {part.content}
+            {children}
           </code>
         )
       case 'pre':
         return (
           <pre class="my-2 p-3 rounded-lg bg-[var(--glass-bg)] overflow-x-auto max-w-full">
-            <code class="font-mono text-sm">{part.content}</code>
+            <code class="font-mono text-sm">{children}</code>
           </pre>
         )
       case 'link':
         return (
           <a
-            href={part.url || part.content}
+            href={entity.url || '#'}
             target="_blank"
             rel="noopener noreferrer"
-            class="text-accent hover:text-accent hover:underline transition-colors"
+            class="text-accent hover:underline transition-colors"
           >
-            {part.content}
+            {children}
           </a>
         )
       case 'mention':
         return (
           <span class="text-accent cursor-pointer hover:underline">
-            {part.content}
+            {children}
           </span>
         )
       case 'hashtag':
         return (
           <span class="text-accent cursor-pointer hover:underline">
-            {part.content}
+            {children}
           </span>
         )
       case 'email':
         return (
           <a
-            href={`mailto:${part.content}`}
+            href={`mailto:${typeof children === 'string' ? children : ''}`}
             class="text-accent hover:underline"
           >
-            {part.content}
+            {children}
           </a>
         )
       case 'phone':
         return (
           <a
-            href={`tel:${part.content}`}
+            href={`tel:${typeof children === 'string' ? children : ''}`}
             class="text-accent hover:underline"
           >
-            {part.content}
+            {children}
           </a>
         )
       case 'spoiler':
         return (
           <span
-            class="bg-[var(--color-text)] text-[var(--color-text)] hover:bg-transparent hover:text-inherit rounded px-1 transition-colors cursor-pointer"
+            class="spoiler-hidden"
             onClick={(e) => {
-              const target = e.currentTarget
-              target.style.background = 'transparent'
-              target.style.color = 'inherit'
+              e.currentTarget.classList.remove('spoiler-hidden')
+              e.currentTarget.classList.add('spoiler-revealed')
             }}
           >
-            {part.content}
+            {children}
           </span>
         )
       default:
-        return <span>{part.content}</span>
+        return <>{children}</>
     }
   }
 
@@ -159,7 +196,12 @@ export function PostContent(props: PostContentProps) {
         ${props.class ?? ''}
       `}
     >
-      <For each={renderedContent()}>{(part) => renderPart(part)}</For>
+      <For each={segments()}>
+        {(segment) => {
+          const text = props.text.slice(segment.start, segment.end)
+          return wrapWithEntities(text, segment.entities)
+        }}
+      </For>
     </div>
   )
 }

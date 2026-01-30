@@ -91,39 +91,72 @@ export interface TimelineData {
 }
 
 /**
+ * Binary search to find insertion index for a post (sorted by date descending)
+ * Returns the index where the post should be inserted to maintain sort order
+ */
+function findInsertionIndex(posts: Message[], postTime: number): number {
+  let low = 0
+  let high = posts.length
+
+  while (low < high) {
+    const mid = (low + high) >>> 1
+    if (getTime(posts[mid].date) > postTime) {
+      low = mid + 1
+    } else {
+      high = mid
+    }
+  }
+  return low
+}
+
+/**
  * Add a new post to the TanStack Query cache
  * Called when real-time updates arrive to persist new posts
+ * Uses binary insertion (O(n)) instead of full sort (O(n log n))
  */
 export function addPostToCache(post: Message): void {
   queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
     if (!old) return old
 
-    // Check if post already exists
+    const postTime = getTime(post.date)
+
+    // Check if post already exists using binary search for the time range
     const existingIndex = old.posts.findIndex(
       (p) => p.channelId === post.channelId && p.id === post.id
     )
 
     let newPosts: Message[]
     if (existingIndex >= 0) {
-      // Update existing post
+      // Update existing post in place
       newPosts = [...old.posts]
       newPosts[existingIndex] = post
     } else {
-      // Add new post and sort by date
-      newPosts = [post, ...old.posts].sort((a, b) => getTime(b.date) - getTime(a.date))
+      // Insert at correct position using binary search (O(n) instead of O(n log n))
+      const insertIndex = findInsertionIndex(old.posts, postTime)
+      newPosts = [
+        ...old.posts.slice(0, insertIndex),
+        post,
+        ...old.posts.slice(insertIndex)
+      ]
     }
 
-    // Update channel's lastMessage if this post is newer
-    const newChannels = old.channels.map((channel) => {
-      if (channel.id === post.channelId) {
-        const currentTime = channel.lastMessage ? getTime(channel.lastMessage.date) : 0
-        const newTime = getTime(post.date)
-        if (newTime > currentTime) {
-          return { ...channel, lastMessage: post }
-        }
-      }
-      return channel
-    })
+    // Update channel's lastMessage only if this post is from that channel and newer
+    const channelNeedsUpdate = old.channels.some(
+      (c) => c.id === post.channelId &&
+        (!c.lastMessage || getTime(c.lastMessage.date) < postTime)
+    )
+
+    const newChannels = channelNeedsUpdate
+      ? old.channels.map((channel) => {
+          if (channel.id === post.channelId) {
+            const currentTime = channel.lastMessage ? getTime(channel.lastMessage.date) : 0
+            if (postTime > currentTime) {
+              return { ...channel, lastMessage: post }
+            }
+          }
+          return channel
+        })
+      : old.channels
 
     return {
       ...old,

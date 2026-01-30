@@ -1,6 +1,6 @@
 import { createResource } from 'solid-js'
 import { Avatar } from './Avatar'
-import { downloadProfilePhoto } from '@/lib/telegram'
+import { downloadProfilePhoto, isClientReady } from '@/lib/telegram'
 
 interface UserAvatarProps {
   userId: number
@@ -18,11 +18,14 @@ interface UserAvatarProps {
  */
 export function UserAvatar(props: UserAvatarProps) {
   const [photoUrl] = createResource(
-    () => props.userId,
-    async (userId) => {
-      if (!userId || userId === 0) return null
+    // Include isClientReady in source to re-fetch when client becomes ready
+    () => ({ id: props.userId, ready: isClientReady() }),
+    async ({ id, ready }) => {
+      if (!id || id === 0) return null
+      // Return null if client not ready - will re-run when ready changes
+      if (!ready) return null
       try {
-        return await downloadProfilePhoto(userId, 'small')
+        return await downloadProfilePhoto(id, 'small')
       } catch {
         return null
       }
