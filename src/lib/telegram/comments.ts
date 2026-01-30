@@ -237,10 +237,10 @@ function processCommentsResponse(
       for (const chat of result.chats) {
         chats.set(chat.id, chat)
         // Get discussion chat ID (usually the first supergroup/channel)
-        // Convert to marked ID format that mtcute expects for getMessages
+        // Convert to marked ID format: -1000000000000 - rawId
         if (!discussionChatId && (chat._ === 'channel' || chat._ === 'channelForbidden')) {
-          // Channels/supergroups need -100 prefix for mtcute's getMessages
-          discussionChatId = -Number(`100${chat.id}`)
+          // Channels/supergroups use marked ID format
+          discussionChatId = -1000000000000 - chat.id
         } else if (!discussionChatId && (chat._ === 'chat' || chat._ === 'chatForbidden')) {
           // Regular chats use negative ID
           discussionChatId = -chat.id

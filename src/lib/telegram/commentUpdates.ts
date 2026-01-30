@@ -96,6 +96,7 @@ export function getSubscription(discussionChatId: number): CommentSubscription |
 
 /**
  * Find subscription by chatId, trying multiple ID formats
+ * Telegram uses "marked" IDs for channels/supergroups: -100XXXXXXXXXX
  */
 function findSubscription(chatId: number): CommentSubscription | undefined {
   // Direct match
@@ -107,8 +108,9 @@ function findSubscription(chatId: number): CommentSubscription | undefined {
   if (subscription) return subscription
   
   // Try converting raw to marked format (-100 prefix)
+  // Marked ID = -1000000000000 - rawId
   const rawId = Math.abs(chatId)
-  const markedId = -Number(`100${rawId}`)
+  const markedId = -1000000000000 - rawId
   subscription = activeSubscriptions.get(markedId)
   if (subscription) return subscription
   
