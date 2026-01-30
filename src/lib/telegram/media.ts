@@ -185,11 +185,11 @@ const PROFILE_CACHE_PREFIX = 'profile-photo:'
 const PROFILE_CACHE_VERSION = 2 // v2: binary data instead of base64
 const PROFILE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7 // 7 days
 
-// LRU cache for profile photos - prevents unbounded memory growth
-// Profile photos are small (~10KB), 200 items = ~2MB max
-// Keep low - IndexedDB provides persistence, memory cache just prevents duplicate blob URLs
-const PROFILE_CACHE_MAX_SIZE = 50
-const profilePhotoCache = new MediaLRUCache(PROFILE_CACHE_MAX_SIZE)
+// Simple cache for profile photo blob URLs - NO eviction/revocation
+// Blob URLs are tiny (~50 bytes), actual blob data is managed by browser
+// We don't revoke because Avatar components may still reference them
+// On page reload, this Map is cleared anyway
+const profilePhotoCache = new Map<string, string>()
 
 interface CachedProfilePhoto {
   data: Uint8Array // Binary data
@@ -711,6 +711,13 @@ export async function preloadThumbnails(
  */
 export function clearMediaCache(): void {
   mediaCache.clear()
+  
+  // Revoke profile photo blob URLs and clear cache
+  for (const url of profilePhotoCache.values()) {
+    URL.revokeObjectURL(url)
+  }
+  profilePhotoCache.clear()
+  
   debugLog('Media cache cleared')
 }
 

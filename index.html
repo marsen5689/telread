@@ -22,8 +22,8 @@
     <link rel="preconnect" href="https://cdn4.telegram-cdn.org" crossorigin />
     <link rel="dns-prefetch" href="https://cdn4.telegram-cdn.org" />
 
-    <!-- Preload WASM for faster crypto initialization -->
-    <link rel="preload" href="/mtcute.wasm" as="fetch" type="application/wasm" crossorigin />
+    <!-- Note: WASM preload removed - mtcute handles its own loading and
+         browser preload for WASM causes "not used" warnings -->
 
     <!-- Icons -->
     <link rel="icon" href="/favicon.ico" sizes="32x32" />

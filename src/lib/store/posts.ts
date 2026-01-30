@@ -17,6 +17,12 @@ import { getTime } from '@/lib/utils'
  */
 const MAX_POSTS = 150
 
+/**
+ * Maximum pending posts before auto-reveal
+ * Prevents unbounded growth if user never clicks "new posts"
+ */
+const MAX_PENDING = 50
+
 type PostKey = string
 
 function makeKey(channelId: number, messageId: number): PostKey {
@@ -100,6 +106,17 @@ export function upsertPost(post: Message): void {
       // New post - add to pending (Twitter-style)
       s.byId[key] = post
       s.pendingKeys = insertSorted(s.pendingKeys, key, s.byId)
+      
+      // Auto-reveal if too many pending (prevents unbounded growth)
+      if (s.pendingKeys.length > MAX_PENDING) {
+        // Move oldest pending posts to sorted
+        const overflow = s.pendingKeys.slice(MAX_PENDING)
+        s.pendingKeys = s.pendingKeys.slice(0, MAX_PENDING)
+        for (const k of overflow) {
+          s.sortedKeys = insertSorted(s.sortedKeys, k, s.byId)
+        }
+        trimToMaxPosts(s)
+      }
     }
   }))
 }
