@@ -58,7 +58,7 @@ export function CommentThread(props: CommentThreadProps) {
         isReplying={isReplying()}
         showThreadLine={showLine()}
         repliesContext={hasReplies() && !showReplies() ? {
-          hasReplies: hasReplies(),
+          hasReplies: hasReplies() ?? false,
           replyCount: replyCount(),
           showReplies: showReplies(),
           onShowReplies: () => setShowReplies(true),
