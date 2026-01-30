@@ -1,5 +1,5 @@
 import { createQuery, createInfiniteQuery } from '@tanstack/solid-query'
-import { createSignal, createEffect, on, createMemo } from 'solid-js'
+import { createSignal, createEffect, on, createMemo, onCleanup } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
 import {
   fetchMessages,
@@ -267,6 +267,64 @@ async function fetchTimelineHistory(
 }
 
 /**
+ * Background sync: fetch recent messages from channels after initial load
+ * This fills the gap between what user last saw and current state
+ *
+ * Runs once per session, fetches last 5 messages from each channel
+ */
+async function backgroundSyncRecentHistory(
+  channels: ChannelWithLastMessage[],
+  onMessages: (messages: Message[]) => void
+): Promise<void> {
+  if (channels.length === 0) return
+
+  const startTime = performance.now()
+  if (import.meta.env.DEV) {
+    console.log(`[Timeline] Background sync starting for ${channels.length} channels...`)
+  }
+
+  // Sort channels by last message date (most recent first)
+  const sortedChannels = [...channels]
+    .filter(c => c.lastMessage)
+    .sort((a, b) => getTime(b.lastMessage!.date) - getTime(a.lastMessage!.date))
+
+  // Fetch in batches to avoid API spam
+  // Increased to fetch more history and fill gaps
+  const BATCH_SIZE = 5
+  const MESSAGES_PER_CHANNEL = 10
+
+  for (let i = 0; i < sortedChannels.length; i += BATCH_SIZE) {
+    const batch = sortedChannels.slice(i, i + BATCH_SIZE)
+
+    const results = await Promise.allSettled(
+      batch.map(channel =>
+        fetchMessages(channel.id, { limit: MESSAGES_PER_CHANNEL })
+      )
+    )
+
+    const batchMessages: Message[] = []
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        batchMessages.push(...result.value)
+      }
+    }
+
+    if (batchMessages.length > 0) {
+      onMessages(batchMessages)
+    }
+
+    // Small delay between batches to be gentle on API
+    if (i + BATCH_SIZE < sortedChannels.length) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+  }
+
+  if (import.meta.env.DEV) {
+    console.log(`[Timeline] Background sync done in ${Math.round(performance.now() - startTime)}ms`)
+  }
+}
+
+/**
  * Optimized timeline hook
  *
  * Uses centralized posts store as single source of truth.
@@ -345,6 +403,34 @@ export function useOptimizedTimeline() {
       }
     )
   )
+
+  // Background sync: fetch recent history after initial load
+  // This runs ONCE per session to fill gaps from when user was offline
+  const [hasSynced, setHasSynced] = createSignal(false)
+
+  createEffect(
+    on(
+      () => initialQuery.data,
+      (data) => {
+        if (!data || hasSynced()) return
+
+        // Mark as synced immediately to prevent re-runs
+        setHasSynced(true)
+
+        // Run background sync after a short delay to not block UI
+        setTimeout(() => {
+          backgroundSyncRecentHistory(data.channels, (messages) => {
+            upsertPosts(messages)
+          })
+        }, 500)
+      }
+    )
+  )
+
+  // Cleanup on unmount
+  onCleanup(() => {
+    // Nothing to clean up currently, but good practice
+  })
 
   // Reactive timeline from centralized store
   // Direct access to postsState ensures SolidJS tracks the dependency

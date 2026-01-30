@@ -17,8 +17,8 @@ let activeCleanup: UpdatesCleanup | null = null
 let listenerClientVersion = 0
 
 // Queue for messages that arrive before store is ready
+// No limit - we need to capture all messages from catchUp/getDifference
 const pendingMessages: TgMessage[] = []
-const MAX_PENDING_MESSAGES = 100
 
 // isStoreReady is now imported from @/lib/store
 
@@ -88,11 +88,9 @@ export function startUpdatesListener(): UpdatesCleanup {
 
       // Queue if store not ready yet
       if (!isStoreReady()) {
-        if (pendingMessages.length < MAX_PENDING_MESSAGES) {
-          pendingMessages.push(message)
-          if (import.meta.env.DEV) {
-            console.debug('[Updates] Queued message (store not ready):', chatId, message.id)
-          }
+        pendingMessages.push(message)
+        if (import.meta.env.DEV) {
+          console.debug('[Updates] Queued message (store not ready):', chatId, message.id)
         }
         return
       }
@@ -134,11 +132,9 @@ export function startUpdatesListener(): UpdatesCleanup {
 
       // Queue if store not ready yet (same as new messages)
       if (!isStoreReady()) {
-        if (pendingMessages.length < MAX_PENDING_MESSAGES) {
-          pendingMessages.push(message)
-          if (import.meta.env.DEV) {
-            console.debug('[Updates] Queued edited message (store not ready):', chatId, message.id)
-          }
+        pendingMessages.push(message)
+        if (import.meta.env.DEV) {
+          console.debug('[Updates] Queued edited message (store not ready):', chatId, message.id)
         }
         return
       }

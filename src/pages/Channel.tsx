@@ -83,15 +83,28 @@ function Channel() {
         <Show
           when={channel()}
           fallback={
-            <div class="space-y-4">
-              <Skeleton class="h-28 rounded-t-3xl" />
-              <div class="glass-card p-4 -mt-8 mx-3">
+            <div class="relative overflow-hidden rounded-3xl">
+              {/* Banner skeleton */}
+              <Skeleton class="h-28 rounded-none" />
+              {/* Content card skeleton */}
+              <div class="relative glass-card -mt-8 mx-3 mb-3 p-4">
+                {/* Avatar and actions row */}
                 <div class="flex items-end gap-4 -mt-14 mb-3">
-                  <Skeleton class="w-20 h-20 rounded-full" />
+                  <Skeleton class="w-20 h-20 rounded-full ring-4 ring-[var(--bg-primary)] flex-shrink-0" />
+                  <div class="flex-1 flex justify-end gap-2">
+                    <Skeleton class="h-8 w-20 rounded-xl" />
+                  </div>
                 </div>
-                <Skeleton class="h-6 w-48 mb-2" />
-                <Skeleton class="h-4 w-32 mb-4" />
-                <Skeleton class="h-16 w-full" />
+                {/* Title and username */}
+                <Skeleton class="h-6 w-48 mb-1" />
+                <Skeleton class="h-4 w-28 mb-3" />
+                {/* Description */}
+                <Skeleton class="h-12 w-full mb-3" />
+                {/* Stats */}
+                <div class="flex items-center gap-4">
+                  <Skeleton class="h-4 w-24" />
+                  <Skeleton class="h-4 w-20" />
+                </div>
               </div>
             </div>
           }

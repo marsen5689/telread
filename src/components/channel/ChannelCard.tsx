@@ -1,5 +1,4 @@
 import { Show, createMemo, createResource, createSignal, createEffect } from 'solid-js'
-import { Motion } from 'solid-motionone'
 import { ChannelAvatar, GlassButton } from '@/components/ui'
 import { downloadProfilePhoto, isClientReady } from '@/lib/telegram'
 import type { ChannelFullInfo } from '@/lib/telegram'
@@ -156,12 +155,7 @@ export function ChannelCard(props: ChannelCardProps) {
   })
 
   return (
-    <Motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, easing: 'ease-out' }}
-      class={`relative overflow-hidden rounded-3xl ${props.class ?? ''}`}
-    >
+    <div class={`relative overflow-hidden rounded-3xl ${props.class ?? ''}`}>
       {/* Banner with blurred avatar background */}
       <div class="relative h-28 overflow-hidden">
         {/* Dynamic gradient based on avatar color */}
@@ -319,7 +313,7 @@ export function ChannelCard(props: ChannelCardProps) {
 
         </div>
       </div>
-    </Motion.div>
+    </div>
   )
 }
 
