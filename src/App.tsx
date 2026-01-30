@@ -179,23 +179,26 @@ export function App() {
 
   // Start/stop updates when auth state changes
   // This handles login from Login page and logout scenarios
+  // defer: true - don't run on initial value, only on changes
   createEffect(
     on(
       () => authStore.isAuthenticated,
-      (isAuth) => {
+      (isAuth, prevAuth) => {
         if (isAuth) {
           // Only start if not already active (might be started in onMount)
           if (!isUpdatesListenerActive()) {
             startUpdatesListener()
           }
-        } else {
-          // Cleanup on logout
+        } else if (prevAuth === true) {
+          // Only cleanup if was previously authenticated (actual logout)
+          // Don't cleanup on initial load when auth state is being restored
           stopUpdatesListener()
           clearPosts()
           clearMediaCache()
           queryClient.clear()
         }
-      }
+      },
+      { defer: true }
     )
   )
 

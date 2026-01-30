@@ -1,10 +1,17 @@
 import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query'
 import { getMessage, sendReaction, getAvailableReactions } from '@/lib/telegram'
-import { updatePostReactions } from '@/lib/store'
+import { updatePostReactions, getPost, upsertPosts } from '@/lib/store'
 import { queryKeys } from '../keys'
+import { queryClient } from '../client'
+import type { TimelineData } from './useTimeline'
 
 /**
  * Hook to fetch a single post/message
+ * Checks multiple cache levels before making API call:
+ * 1. postsState (RAM) - fastest
+ * 2. TanStack Query cache (may be from IndexedDB) 
+ * 3. Timeline channels lastMessage
+ * 4. API call (slowest)
  */
 export function usePost(
   channelId: () => number,
@@ -13,9 +20,35 @@ export function usePost(
 ) {
   return createQuery(() => ({
     queryKey: queryKeys.messages.detail(channelId(), messageId()),
-    queryFn: () => getMessage(channelId(), messageId()),
+    queryFn: async () => {
+      const cid = channelId()
+      const mid = messageId()
+      
+      // 1. Check postsState (RAM)
+      const fromStore = getPost(cid, mid)
+      if (fromStore) return fromStore
+      
+      // 2. Check timeline cache - might have this post as lastMessage
+      const timelineData = queryClient.getQueryData<TimelineData>(queryKeys.timeline.all)
+      if (timelineData) {
+        const channel = timelineData.channels.find(c => c.id === cid)
+        if (channel?.lastMessage?.id === mid) {
+          // Also add to postsState for future access
+          upsertPosts([channel.lastMessage])
+          return channel.lastMessage
+        }
+      }
+      
+      // 3. Fallback to API
+      const post = await getMessage(cid, mid)
+      if (post) {
+        upsertPosts([post])
+      }
+      return post
+    },
     enabled: enabled?.() ?? true,
-    staleTime: 1000 * 60 * 30, // 30 minutes - posts don't change
+    staleTime: 1000 * 60 * 30, // 30 minutes
+    refetchOnMount: false, // Use cache if available
   }))
 }
 

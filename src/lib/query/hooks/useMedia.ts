@@ -25,6 +25,7 @@ export function useMedia(
 
 /**
  * Hook to download a profile photo
+ * Cache is checked in downloadProfilePhoto: RAM -> IndexedDB -> API
  */
 export function useProfilePhoto(
   peerId: () => number,
@@ -34,9 +35,9 @@ export function useProfilePhoto(
   return createQuery(() => ({
     queryKey: queryKeys.media.profile(peerId(), size),
     queryFn: () => downloadProfilePhoto(peerId(), size),
-    staleTime: 1000 * 60 * 60, // 1 hour - profile photos rarely change
-    gcTime: 1000 * 60 * 30, // 30 min in memory
-    // Don't fetch for invalid peer IDs (client readiness checked in queryFn after cache check)
+    staleTime: Infinity, // Never stale - cache checked in queryFn
+    gcTime: 1000 * 60 * 60, // 1 hour in query cache
+    refetchOnMount: false, // Don't refetch - downloadProfilePhoto checks IndexedDB
     enabled: (enabled?.() ?? true) && peerId() !== 0,
   }))
 }

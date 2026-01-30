@@ -32,7 +32,8 @@ export function useMessages(channelId: () => number, enabled?: () => boolean) {
       return messages
     },
     enabled: enabled?.() ?? true,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 30, // 30 min - real-time updates handle new posts
+    refetchOnMount: false, // Use postsState if available
   }))
 
   // Memoized channel posts - only recalculates when sortedKeys change

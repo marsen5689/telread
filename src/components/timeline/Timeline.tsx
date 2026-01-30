@@ -1,10 +1,14 @@
-import { For, Show, createMemo, onCleanup, onMount } from 'solid-js'
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js'
 import { TimelinePost } from './TimelinePost'
 import { TimelineGroup } from './TimelineGroup'
 import { PostSkeleton } from '@/components/ui'
 import { INFINITE_SCROLL_THRESHOLD, SCROLL_THROTTLE_MS } from '@/config/constants'
 import type { Channel } from '@/lib/telegram'
 import type { TimelineItem } from '@/lib/utils'
+
+// Initial posts to render, then load more on scroll
+const INITIAL_RENDER_COUNT = 15
+const RENDER_BATCH_SIZE = 10
 
 interface TimelineProps {
   items: TimelineItem[]
@@ -91,6 +95,22 @@ function getScrollParent(element: HTMLElement | null): HTMLElement | null {
 export function Timeline(props: TimelineProps) {
   let containerRef: HTMLDivElement | undefined
   let scrollParent: HTMLElement | null = null
+
+  // Incremental rendering - start with few items, render more on scroll
+  const [renderCount, setRenderCount] = createSignal(INITIAL_RENDER_COUNT)
+  
+  // Items to actually render (limited for performance)
+  const visibleItems = createMemo(() => {
+    const items = props.items ?? []
+    const count = renderCount()
+    return items.slice(0, count)
+  })
+  
+  // Check if we need to render more items
+  const hasMoreToRender = createMemo(() => {
+    const items = props.items ?? []
+    return renderCount() < items.length
+  })
 
   // Channel lookup map
   const channelMap = createMemo(() => {

@@ -50,9 +50,9 @@ export function useChannel(channelId: () => number) {
       const channel = await getChannel(id)
       return channel
     },
-    // Don't run query for invalid channel IDs
     enabled: channelId() !== 0,
     staleTime: 1000 * 60 * 60, // 1 hour
+    refetchOnMount: false, // Use cache if available
   }))
 }
 
@@ -103,7 +103,8 @@ export function useChannelInfo(channelId: () => number) {
     queryKey: queryKeys.channels.fullInfo(channelId()),
     queryFn: () => getChannelFullInfo(channelId()),
     enabled: channelId() !== 0,
-    staleTime: 1000 * 60 * 5, // 5 minutes - balance freshness vs API calls
-    gcTime: 1000 * 60 * 30, // Keep in cache for 30 minutes
+    staleTime: 1000 * 60 * 30, // 30 minutes - channel info rarely changes
+    gcTime: 1000 * 60 * 60, // 1 hour in cache
+    refetchOnMount: false, // Use cache if available
   }))
 }
