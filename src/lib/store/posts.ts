@@ -1,9 +1,11 @@
 /**
- * Centralized posts store
+ * Centralized posts store - Telegram Web style
  *
- * Single source of truth for all posts across the app.
- * Both timeline and channel views read from this store.
- * Updates from Telegram and API fetches write to this store.
+ * Simple architecture:
+ * - Single source of truth for all posts
+ * - New real-time posts go to pendingKeys (Twitter-style "N new posts")
+ * - User clicks to reveal pending posts
+ * - Batching only for high-frequency updates (views, reactions)
  */
 import { createStore, produce } from 'solid-js/store'
 import type { Message } from '@/lib/telegram'
@@ -11,13 +13,10 @@ import { getTime } from '@/lib/utils'
 
 /**
  * Maximum posts to keep in memory
- * ~500 posts * ~2KB average = ~1MB
+ * ~150 posts * ~2KB average = ~300KB
  */
-const MAX_POSTS = 500
+const MAX_POSTS = 150
 
-/**
- * Post key format: "channelId:messageId"
- */
 type PostKey = string
 
 function makeKey(channelId: number, messageId: number): PostKey {
@@ -25,15 +24,10 @@ function makeKey(channelId: number, messageId: number): PostKey {
 }
 
 interface PostsState {
-  /** All posts indexed by key */
   byId: Record<PostKey, Message>
-  /** Post keys sorted by date (newest first) - visible in timeline */
   sortedKeys: PostKey[]
-  /** New posts waiting to be revealed (like Twitter's "N new posts" button) */
+  /** New posts waiting to be revealed (Twitter-style "N new posts" button) */
   pendingKeys: PostKey[]
-  /** Last update timestamp */
-  lastUpdated: number
-  /** Whether the store has been initialized (timeline loaded, even if empty) */
   isInitialized: boolean
 }
 
@@ -41,336 +35,149 @@ const [state, setState] = createStore<PostsState>({
   byId: {},
   sortedKeys: [],
   pendingKeys: [],
-  lastUpdated: 0,
   isInitialized: false,
 })
 
 /**
- * Sort keys by date (newest first)
+ * Binary search insertion for sorted keys (newest first)
  */
-function sortKeysByDate(keys: PostKey[], byId: Record<PostKey, Message>): PostKey[] {
-  return [...keys].sort((a, b) => {
-    const postA = byId[a]
-    const postB = byId[b]
-    if (!postA || !postB) return 0
-    return getTime(postB.date) - getTime(postA.date)
-  })
+function insertSorted(keys: PostKey[], key: PostKey, byId: Record<PostKey, Message>): PostKey[] {
+  const post = byId[key]
+  if (!post) return keys
+  
+  const postTime = getTime(post.date)
+  let low = 0
+  let high = keys.length
+
+  while (low < high) {
+    const mid = (low + high) >>> 1
+    const midPost = byId[keys[mid]]
+    if (midPost && getTime(midPost.date) > postTime) {
+      low = mid + 1
+    } else {
+      high = mid
+    }
+  }
+
+  const result = [...keys]
+  result.splice(low, 0, key)
+  return result
 }
 
 /**
- * Trim store to MAX_POSTS, removing oldest posts
- * Called after adding new posts to prevent unbounded growth
+ * Trim to MAX_POSTS
  */
 function trimToMaxPosts(s: PostsState): void {
   if (s.sortedKeys.length <= MAX_POSTS) return
-
-  // Remove from end (oldest posts)
+  
   const keysToRemove = s.sortedKeys.slice(MAX_POSTS)
   s.sortedKeys = s.sortedKeys.slice(0, MAX_POSTS)
-
-  // Clean up byId
+  
   for (const key of keysToRemove) {
     delete s.byId[key]
   }
 }
 
 /**
- * Add or update a single post (from real-time updates)
- * New posts go to pending queue, updates modify in place
+ * Add or update a single post - new posts go to pending (Twitter-style)
  */
 export function upsertPost(post: Message): void {
   const key = makeKey(post.channelId, post.id)
-  const existing = state.byId[key]
-
-  // Skip if post hasn't changed (based on editDate or date)
-  if (existing) {
-    const existingTime = existing.editDate ?? existing.date
-    const newTime = post.editDate ?? post.date
-    if (getTime(existingTime) >= getTime(newTime)) {
-      return
-    }
-    // Update existing post in place
-    setState('byId', key, post)
-    return
-  }
-
-  // Check if already in sortedKeys (from initial load/fetch)
-  if (state.sortedKeys.includes(key)) {
-    setState('byId', key, post)
-    return
-  }
-
-  // New post - add to pending queue (Twitter-style)
-  setState(
-    produce((s) => {
+  
+  setState(produce((s) => {
+    const existing = s.byId[key]
+    
+    if (existing) {
+      // Update only if newer
+      const existingTime = getTime(existing.editDate ?? existing.date)
+      const newTime = getTime(post.editDate ?? post.date)
+      if (newTime <= existingTime) return
       s.byId[key] = post
-      // Add to pending if not already there
-      if (!s.pendingKeys.includes(key)) {
-        s.pendingKeys = sortKeysByDate([key, ...s.pendingKeys], s.byId)
-      }
-      s.lastUpdated = Date.now()
-    })
-  )
+    } else if (s.sortedKeys.includes(key) || s.pendingKeys.includes(key)) {
+      // Already tracked - just update
+      s.byId[key] = post
+    } else {
+      // New post - add to pending (Twitter-style)
+      s.byId[key] = post
+      s.pendingKeys = insertSorted(s.pendingKeys, key, s.byId)
+    }
+  }))
 }
 
 /**
- * Add or update multiple posts to pending queue (batch operation)
- * Used for real-time updates - adds to pending like Twitter's "N new posts"
- * More efficient than calling upsertPost() in a loop
- */
-export function upsertPostsToPending(posts: Message[]): void {
-  if (posts.length === 0) return
-
-  setState(
-    produce((s) => {
-      const newPendingKeys: PostKey[] = []
-
-      for (const post of posts) {
-        const key = makeKey(post.channelId, post.id)
-        const existing = s.byId[key]
-
-        if (existing) {
-          // Update existing - check if newer
-          const existingTime = existing.editDate ?? existing.date
-          const newTime = post.editDate ?? post.date
-          if (getTime(existingTime) >= getTime(newTime)) {
-            continue
-          }
-          // Update in place (no need to add to pending)
-          s.byId[key] = post
-        } else {
-          // New post - add to pending
-          s.byId[key] = post
-          if (!s.pendingKeys.includes(key)) {
-            newPendingKeys.push(key)
-          }
-        }
-      }
-
-      // Sort and merge new pending keys
-      if (newPendingKeys.length > 0) {
-        s.pendingKeys = sortKeysByDate([...newPendingKeys, ...s.pendingKeys], s.byId)
-      }
-      s.lastUpdated = Date.now()
-    })
-  )
-}
-
-/**
- * Add or update multiple posts (batch operation)
- * Used for initial load and fetching - adds directly to visible timeline
+ * Add or update multiple posts - batch operation
  */
 export function upsertPosts(posts: Message[]): void {
   if (posts.length === 0) return
 
-  let hasChanges = false
-  const newKeys: PostKey[] = []
+  setState(produce((s) => {
+    const newKeys: PostKey[] = []
 
-  setState(
-    produce((s) => {
-      for (const post of posts) {
-        const key = makeKey(post.channelId, post.id)
-        const existing = s.byId[key]
+    for (const post of posts) {
+      const key = makeKey(post.channelId, post.id)
+      const existing = s.byId[key]
 
-        if (existing) {
-          const existingTime = existing.editDate ?? existing.date
-          const newTime = post.editDate ?? post.date
-          if (getTime(existingTime) >= getTime(newTime)) {
-            continue
-          }
-          hasChanges = true
+      if (existing) {
+        const existingTime = getTime(existing.editDate ?? existing.date)
+        const newTime = getTime(post.editDate ?? post.date)
+        if (newTime <= existingTime) continue
+      } else {
+        newKeys.push(key)
+      }
+      
+      s.byId[key] = post
+    }
+
+    // Batch insert new keys
+    if (newKeys.length > 0) {
+      // Sort new keys by date
+      newKeys.sort((a, b) => {
+        const postA = s.byId[a]
+        const postB = s.byId[b]
+        if (!postA || !postB) return 0
+        return getTime(postB.date) - getTime(postA.date)
+      })
+      
+      // Merge with existing (both sorted, merge sort style)
+      const merged: PostKey[] = []
+      let i = 0, j = 0
+      
+      while (i < s.sortedKeys.length && j < newKeys.length) {
+        const existingPost = s.byId[s.sortedKeys[i]]
+        const newPost = s.byId[newKeys[j]]
+        
+        if (!existingPost) { i++; continue }
+        if (!newPost) { j++; continue }
+        
+        if (getTime(existingPost.date) >= getTime(newPost.date)) {
+          merged.push(s.sortedKeys[i++])
         } else {
-          hasChanges = true
-          newKeys.push(key)
+          merged.push(newKeys[j++])
         }
-
-        s.byId[key] = post
       }
-
-      // Add new keys to visible timeline (not pending)
-      if (newKeys.length > 0) {
-        s.sortedKeys = sortKeysByDate([...s.sortedKeys, ...newKeys], s.byId)
-      }
-
-      // Trim old posts to prevent unbounded memory growth
+      
+      while (i < s.sortedKeys.length) merged.push(s.sortedKeys[i++])
+      while (j < newKeys.length) merged.push(newKeys[j++])
+      
+      s.sortedKeys = merged
       trimToMaxPosts(s)
-
-      if (hasChanges) {
-        s.lastUpdated = Date.now()
-      }
-    })
-  )
+    }
+  }))
 }
 
 /**
- * Remove a post
- */
-export function removePost(channelId: number, messageId: number): void {
-  const key = makeKey(channelId, messageId)
-  if (!state.byId[key]) return
-
-  setState(
-    produce((s) => {
-      delete s.byId[key]
-      s.sortedKeys = s.sortedKeys.filter((k) => k !== key)
-      s.lastUpdated = Date.now()
-    })
-  )
-}
-
-/**
- * Remove multiple posts
+ * Remove posts
  */
 export function removePosts(channelId: number, messageIds: number[]): void {
   const keysToRemove = new Set(messageIds.map((id) => makeKey(channelId, id)))
 
-  setState(
-    produce((s) => {
-      for (const key of keysToRemove) {
-        delete s.byId[key]
-      }
-      s.sortedKeys = s.sortedKeys.filter((k) => !keysToRemove.has(k))
-      s.pendingKeys = s.pendingKeys.filter((k) => !keysToRemove.has(k))
-      s.lastUpdated = Date.now()
-    })
-  )
-}
-
-/**
- * Pending views updates - batched for performance
- */
-const pendingViewsUpdates = new Map<PostKey, number>()
-let viewsUpdateTimer: ReturnType<typeof setTimeout> | null = null
-
-function flushViewsUpdates(): void {
-  if (pendingViewsUpdates.size === 0) return
-
-  const updates = new Map(pendingViewsUpdates)
-  pendingViewsUpdates.clear()
-  viewsUpdateTimer = null
-
-  for (const [key, views] of updates) {
-    const post = state.byId[key]
-    if (post && post.views !== views) {
-      setState('byId', key, 'views', views)
+  setState(produce((s) => {
+    for (const key of keysToRemove) {
+      delete s.byId[key]
     }
-  }
-}
-
-/**
- * Update views count for a post
- * Batched every 1s to prevent excessive updates
- */
-export function updatePostViews(channelId: number, messageId: number, views: number): void {
-  const key = makeKey(channelId, messageId)
-  const post = state.byId[key]
-  if (!post) return
-
-  // Queue update
-  pendingViewsUpdates.set(key, views)
-
-  // Schedule flush
-  if (!viewsUpdateTimer) {
-    viewsUpdateTimer = setTimeout(flushViewsUpdates, 1000)
-  }
-}
-
-/**
- * Pending reactions updates - batched for performance
- */
-const pendingReactionsUpdates = new Map<PostKey, Message['reactions']>()
-let reactionsUpdateTimer: ReturnType<typeof setTimeout> | null = null
-
-function flushReactionsUpdates(): void {
-  if (pendingReactionsUpdates.size === 0) return
-
-  const updates = new Map(pendingReactionsUpdates)
-  pendingReactionsUpdates.clear()
-  reactionsUpdateTimer = null
-
-  for (const [key, reactions] of updates) {
-    const post = state.byId[key]
-    if (post) {
-      setState('byId', key, 'reactions', reactions ?? [])
-    }
-  }
-}
-
-/**
- * Update reactions for a post
- * Batched every 1s to prevent excessive updates
- */
-export function updatePostReactions(
-  channelId: number,
-  messageId: number,
-  reactions: Message['reactions']
-): void {
-  const key = makeKey(channelId, messageId)
-  const post = state.byId[key]
-  if (!post) return
-
-  // Queue update
-  pendingReactionsUpdates.set(key, reactions)
-
-  // Schedule flush
-  if (!reactionsUpdateTimer) {
-    reactionsUpdateTimer = setTimeout(flushReactionsUpdates, 1000)
-  }
-}
-
-/**
- * Get a single post
- */
-export function getPost(channelId: number, messageId: number): Message | undefined {
-  return state.byId[makeKey(channelId, messageId)]
-}
-
-/**
- * Get all posts for timeline (sorted by date)
- */
-export function getTimelinePosts(): Message[] {
-  return state.sortedKeys.map((key) => state.byId[key]).filter(Boolean) as Message[]
-}
-
-/**
- * Get posts for a specific channel (sorted by date)
- */
-export function getChannelPosts(channelId: number): Message[] {
-  return state.sortedKeys
-    .map((key) => state.byId[key])
-    .filter((post): post is Message => post?.channelId === channelId)
-}
-
-/**
- * Check if we have any posts
- */
-export function hasPosts(): boolean {
-  return state.sortedKeys.length > 0
-}
-
-/**
- * Check if the store has been initialized (timeline loaded)
- * This is different from hasPosts - store can be initialized but empty
- */
-export function isStoreReady(): boolean {
-  return state.isInitialized
-}
-
-/**
- * Mark the store as initialized
- * Called when timeline data is first loaded (even if empty)
- */
-export function markStoreInitialized(): void {
-  if (!state.isInitialized) {
-    setState('isInitialized', true)
-  }
-}
-
-/**
- * Get count of pending (new) posts
- */
-export function getPendingCount(): number {
-  return state.pendingKeys.length
+    s.sortedKeys = s.sortedKeys.filter((k) => !keysToRemove.has(k))
+    s.pendingKeys = s.pendingKeys.filter((k) => !keysToRemove.has(k))
+  }))
 }
 
 /**
@@ -380,84 +187,128 @@ export function getPendingCount(): number {
 export function revealPendingPosts(): void {
   if (state.pendingKeys.length === 0) return
 
-  setState(
-    produce((s) => {
-      // Merge pending into sorted, maintaining sort order
-      // Use Set to prevent duplicates (edge case protection)
-      const allKeys = [...new Set([...s.pendingKeys, ...s.sortedKeys])]
-      s.sortedKeys = sortKeysByDate(allKeys, s.byId)
-      s.pendingKeys = []
-
-      // Trim old posts to prevent unbounded memory growth
-      trimToMaxPosts(s)
-
-      s.lastUpdated = Date.now()
-    })
-  )
+  setState(produce((s) => {
+    // Merge pending into sorted (both are already sorted)
+    const merged: PostKey[] = []
+    let i = 0, j = 0
+    
+    while (i < s.pendingKeys.length && j < s.sortedKeys.length) {
+      const pendingPost = s.byId[s.pendingKeys[i]]
+      const sortedPost = s.byId[s.sortedKeys[j]]
+      
+      if (!pendingPost) { i++; continue }
+      if (!sortedPost) { j++; continue }
+      
+      if (getTime(pendingPost.date) >= getTime(sortedPost.date)) {
+        merged.push(s.pendingKeys[i++])
+      } else {
+        merged.push(s.sortedKeys[j++])
+      }
+    }
+    
+    while (i < s.pendingKeys.length) merged.push(s.pendingKeys[i++])
+    while (j < s.sortedKeys.length) merged.push(s.sortedKeys[j++])
+    
+    s.sortedKeys = merged
+    s.pendingKeys = []
+    trimToMaxPosts(s)
+  }))
 }
 
-/**
- * Direct access to the reactive store state
- * Use this in createMemo/createEffect for proper dependency tracking
- */
+// ============================================================================
+// Batched updates for high-frequency changes (views, reactions)
+// ============================================================================
+
+const pendingViewsUpdates = new Map<PostKey, number>()
+let viewsTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushViews(): void {
+  if (pendingViewsUpdates.size === 0) return
+  const updates = new Map(pendingViewsUpdates)
+  pendingViewsUpdates.clear()
+  viewsTimer = null
+
+  for (const [key, views] of updates) {
+    if (state.byId[key]) {
+      setState('byId', key, 'views', views)
+    }
+  }
+}
+
+export function updatePostViews(channelId: number, messageId: number, views: number): void {
+  const key = makeKey(channelId, messageId)
+  if (!state.byId[key]) return
+  
+  pendingViewsUpdates.set(key, views)
+  if (!viewsTimer) {
+    viewsTimer = setTimeout(flushViews, 2000) // 2s batch window
+  }
+}
+
+const pendingReactionsUpdates = new Map<PostKey, Message['reactions']>()
+let reactionsTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushReactions(): void {
+  if (pendingReactionsUpdates.size === 0) return
+  const updates = new Map(pendingReactionsUpdates)
+  pendingReactionsUpdates.clear()
+  reactionsTimer = null
+
+  for (const [key, reactions] of updates) {
+    if (state.byId[key]) {
+      setState('byId', key, 'reactions', reactions ?? [])
+    }
+  }
+}
+
+export function updatePostReactions(
+  channelId: number,
+  messageId: number,
+  reactions: Message['reactions']
+): void {
+  const key = makeKey(channelId, messageId)
+  if (!state.byId[key]) return
+  
+  pendingReactionsUpdates.set(key, reactions)
+  if (!reactionsTimer) {
+    reactionsTimer = setTimeout(flushReactions, 2000) // 2s batch window
+  }
+}
+
+// ============================================================================
+// Accessors
+// ============================================================================
+
+export function getPost(channelId: number, messageId: number): Message | undefined {
+  return state.byId[makeKey(channelId, messageId)]
+}
+
+export function isStoreReady(): boolean {
+  return state.isInitialized
+}
+
+export function markStoreInitialized(): void {
+  if (!state.isInitialized) {
+    setState('isInitialized', true)
+  }
+}
+
 export const postsState = state
 
-/**
- * Get the store state (for reactive access in components)
- */
-export function usePostsStore() {
-  return {
-    get byId() {
-      return state.byId
-    },
-    get sortedKeys() {
-      return state.sortedKeys
-    },
-    get pendingKeys() {
-      return state.pendingKeys
-    },
-    get lastUpdated() {
-      return state.lastUpdated
-    },
-    get count() {
-      return state.sortedKeys.length
-    },
-    get pendingCount() {
-      return state.pendingKeys.length
-    },
-  }
-}
+// ============================================================================
+// Cleanup
+// ============================================================================
 
-/**
- * Clear all pending batch timers
- * Called on logout to prevent memory leaks and stale updates
- */
-function clearPendingTimers(): void {
-  if (viewsUpdateTimer) {
-    clearTimeout(viewsUpdateTimer)
-    viewsUpdateTimer = null
-  }
-  if (reactionsUpdateTimer) {
-    clearTimeout(reactionsUpdateTimer)
-    reactionsUpdateTimer = null
-  }
+export function clearPosts(): void {
+  if (viewsTimer) { clearTimeout(viewsTimer); viewsTimer = null }
+  if (reactionsTimer) { clearTimeout(reactionsTimer); reactionsTimer = null }
   pendingViewsUpdates.clear()
   pendingReactionsUpdates.clear()
-}
-
-/**
- * Clear all posts (for logout)
- * Also resets isInitialized so updates will be queued until timeline loads again
- */
-export function clearPosts(): void {
-  // Clear pending batch timers first to prevent stale updates
-  clearPendingTimers()
 
   setState({
     byId: {},
     sortedKeys: [],
     pendingKeys: [],
-    lastUpdated: Date.now(),
     isInitialized: false,
   })
 }

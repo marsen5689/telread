@@ -1,6 +1,7 @@
 /**
  * Shared date utilities
  */
+import { createSignal } from 'solid-js'
 
 /**
  * Get timestamp from Date or string
@@ -9,6 +10,59 @@
 export function getTime(date: Date | string): number {
   return date instanceof Date ? date.getTime() : new Date(date).getTime()
 }
+
+/**
+ * Global time signal that updates every minute.
+ * Use this in createMemo to make relative time computations reactive.
+ *
+ * Example:
+ * ```
+ * const timeAgo = createMemo(() => {
+ *   globalNow() // Subscribe to time updates
+ *   return formatTimeAgo(props.post.date)
+ * })
+ * ```
+ */
+const [_globalNow, _setGlobalNow] = createSignal(Date.now())
+
+// Update every 60 seconds - only when tab is visible to save resources
+let timeUpdateInterval: ReturnType<typeof setInterval> | null = null
+
+function startTimeUpdates() {
+  if (timeUpdateInterval) return
+  timeUpdateInterval = setInterval(() => {
+    _setGlobalNow(Date.now())
+  }, 60_000)
+}
+
+function stopTimeUpdates() {
+  if (timeUpdateInterval) {
+    clearInterval(timeUpdateInterval)
+    timeUpdateInterval = null
+  }
+}
+
+// Start/stop based on visibility
+if (typeof document !== 'undefined') {
+  const handleVisibility = () => {
+    if (document.visibilityState === 'visible') {
+      // Update immediately when becoming visible (time may have passed)
+      _setGlobalNow(Date.now())
+      startTimeUpdates()
+    } else {
+      stopTimeUpdates()
+    }
+  }
+
+  document.addEventListener('visibilitychange', handleVisibility)
+
+  // Start if currently visible
+  if (document.visibilityState === 'visible') {
+    startTimeUpdates()
+  }
+}
+
+export const globalNow = _globalNow
 
 /**
  * Format relative time (e.g., "2 hours ago")

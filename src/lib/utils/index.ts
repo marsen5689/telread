@@ -1,4 +1,4 @@
-export { getTime, formatRelativeTime, formatTimeAgo } from './date'
+export { getTime, formatRelativeTime, formatTimeAgo, globalNow } from './date'
 export {
   groupPostsByMediaGroup,
   getPrimaryPost,

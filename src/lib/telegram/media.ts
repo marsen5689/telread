@@ -187,7 +187,8 @@ const PROFILE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7 // 7 days
 
 // LRU cache for profile photos - prevents unbounded memory growth
 // Profile photos are small (~10KB), 200 items = ~2MB max
-const PROFILE_CACHE_MAX_SIZE = 200
+// Keep low - IndexedDB provides persistence, memory cache just prevents duplicate blob URLs
+const PROFILE_CACHE_MAX_SIZE = 50
 const profilePhotoCache = new MediaLRUCache(PROFILE_CACHE_MAX_SIZE)
 
 interface CachedProfilePhoto {

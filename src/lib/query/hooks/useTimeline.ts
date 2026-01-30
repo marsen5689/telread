@@ -11,8 +11,8 @@ import {
 import {
   upsertPosts,
   postsState,
-  revealPendingPosts,
   markStoreInitialized,
+  revealPendingPosts,
 } from '@/lib/store'
 import { getTime, groupPostsByMediaGroup } from '@/lib/utils'
 import { queryKeys } from '../keys'
@@ -105,74 +105,24 @@ export function useInfiniteMessages(channelId: () => number) {
 }
 
 /**
- * Timeline data structure (for channels info)
+ * Timeline data structure - channels only (posts are in postsState)
  */
 export interface TimelineData {
-  posts: Message[]
   channels: ChannelWithLastMessage[]
   channelMap: Map<number, ChannelWithLastMessage>
 }
 
 /**
- * Binary search to find insertion index for a post (sorted by date descending)
- * Returns the index where the post should be inserted to maintain sort order
- */
-function findInsertionIndex(posts: Message[], postTime: number): number {
-  let low = 0
-  let high = posts.length
-
-  while (low < high) {
-    const mid = (low + high) >>> 1
-    if (getTime(posts[mid].date) > postTime) {
-      low = mid + 1
-    } else {
-      high = mid
-    }
-  }
-  return low
-}
-
-/**
- * Add or update a post in TanStack Query cache
- * Called when real-time updates arrive to persist new/edited posts
- * Uses binary insertion for new posts, timestamp check for updates
+ * Update channel's lastMessage when a new post arrives
  */
 export function addPostToCache(post: Message): void {
   queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
     if (!old) return old
 
-    const postTime = getTime(post.date)
-    const postEffectiveTime = getTime(post.editDate ?? post.date)
-
-    // Check if post already exists
-    const existingIndex = old.posts.findIndex(
-      (p) => p.channelId === post.channelId && p.id === post.id
-    )
-
-    let newPosts: Message[]
-    if (existingIndex >= 0) {
-      const existing = old.posts[existingIndex]
-      const existingEffectiveTime = getTime(existing.editDate ?? existing.date)
-
-      // Only update if new post is actually newer (handles out-of-order updates)
-      if (postEffectiveTime <= existingEffectiveTime) {
-        return old // No changes needed
-      }
-
-      // Update existing post in place
-      newPosts = [...old.posts]
-      newPosts[existingIndex] = post
-    } else {
-      // Insert at correct position using binary search
-      const insertIndex = findInsertionIndex(old.posts, postTime)
-      newPosts = [
-        ...old.posts.slice(0, insertIndex),
-        post,
-        ...old.posts.slice(insertIndex)
-      ]
-    }
+    const postTime = getTime(post.editDate ?? post.date)
 
     // Update channel's lastMessage only if this post is newer
+    let hasChange = false
     const newChannels = old.channels.map((channel) => {
       if (channel.id !== post.channelId) return channel
 
@@ -180,24 +130,19 @@ export function addPostToCache(post: Message): void {
         ? getTime(channel.lastMessage.editDate ?? channel.lastMessage.date)
         : 0
 
-      if (postEffectiveTime > currentTime) {
+      if (postTime > currentTime) {
+        hasChange = true
         return { ...channel, lastMessage: post }
       }
       return channel
     })
 
-    return {
-      ...old,
-      posts: newPosts,
-      channels: newChannels,
-    }
+    return hasChange ? { ...old, channels: newChannels } : old
   })
 }
 
 /**
- * Remove posts from TanStack Query cache
- * Called when posts are deleted
- * Also clears channel.lastMessage if the deleted post was the last message
+ * Update channel's lastMessage when posts are deleted
  */
 export function removePostsFromCache(channelId: number, messageIds: number[]): void {
   queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
@@ -205,35 +150,27 @@ export function removePostsFromCache(channelId: number, messageIds: number[]): v
 
     const idsSet = new Set(messageIds)
 
-    // Remove deleted posts
-    const newPosts = old.posts.filter(
-      (p) => !(p.channelId === channelId && idsSet.has(p.id))
-    )
-
     // Clear channel.lastMessage if it was deleted
+    let hasChange = false
     const newChannels = old.channels.map((channel) => {
       if (channel.id !== channelId) return channel
       if (!channel.lastMessage) return channel
 
-      // If lastMessage was deleted, find the next most recent post for this channel
-      // Posts are sorted by date descending, so first match is the newest
       if (idsSet.has(channel.lastMessage.id)) {
-        const nextLastMessage = newPosts.find((p) => p.channelId === channelId)
-        return { ...channel, lastMessage: nextLastMessage }
+        hasChange = true
+        // Set to undefined - we don't have a replacement readily available
+        return { ...channel, lastMessage: undefined }
       }
       return channel
     })
 
-    return {
-      ...old,
-      posts: newPosts,
-      channels: newChannels,
-    }
+    return hasChange ? { ...old, channels: newChannels } : old
   })
 }
 
 /**
  * Fetch initial timeline data - channels with their last messages
+ * Posts are added directly to postsState (not stored in TanStack Query)
  */
 async function fetchInitialTimeline(): Promise<TimelineData> {
   const startTime = performance.now()
@@ -250,16 +187,20 @@ async function fetchInitialTimeline(): Promise<TimelineData> {
   const channelMap = new Map<number, ChannelWithLastMessage>()
   channels.forEach((c) => channelMap.set(c.id, c))
 
+  // Extract posts and add to store (not to TanStack Query)
   const posts = channels
     .filter((c) => c.lastMessage)
     .map((c) => c.lastMessage!)
-    .sort((a, b) => getTime(b.date) - getTime(a.date))
+  
+  if (posts.length > 0) {
+    upsertPosts(posts)
+  }
 
   if (import.meta.env.DEV) {
     console.log(`[Timeline] fetchInitialTimeline done: ${posts.length} posts in ${Math.round(performance.now() - startTime)}ms`)
   }
 
-  return { posts, channels, channelMap }
+  return { channels, channelMap }
 }
 
 /**
@@ -393,18 +334,10 @@ export function useOptimizedTimeline() {
         setChannels(reconcile(data.channels))
         setChannelMap(data.channelMap)
 
-        // Only process posts once
+        // Mark store as initialized once (posts already added in fetchInitialTimeline)
         if (!initialDataProcessed) {
           initialDataProcessed = true
-
-          // Populate posts store
-          if (data.posts.length > 0) {
-            upsertPosts(data.posts)
-          }
-
-          // Mark store as initialized (even if empty)
           markStoreInitialized()
-
           // Process messages that arrived before timeline was ready
           onTimelineLoaded()
         }
@@ -469,16 +402,14 @@ export function useOptimizedTimeline() {
     return groupPostsByMediaGroup(posts)
   })
 
-  // Memoized pending count - only recalculates when pendingKeys change
-  // Uses untrack for byId to avoid re-renders on views/reactions updates
+  // Pending count - grouped by media group for accurate count
   const pendingCount = createMemo(() => {
     const keys = postsState.pendingKeys
     if (keys.length === 0) return 0
-    // untrack byId access - we only care about the count, not individual post changes
-    const pendingPosts = untrack(() =>
+    const posts = untrack(() =>
       keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
     )
-    return groupPostsByMediaGroup(pendingPosts).length
+    return groupPostsByMediaGroup(posts).length
   })
 
   return {
@@ -492,11 +423,10 @@ export function useOptimizedTimeline() {
       return channelMap()
     },
     get isLoading() {
-      // Show loading while we don't have posts and haven't errored
-      const hasPosts = postsState.sortedKeys.length > 0
-      if (hasPosts) return false
+      // Show loading until store is initialized (even if empty) or errored
+      if (postsState.isInitialized) return false
       if (initialQuery.isError) return false
-      return true
+      return !initialQuery.isSuccess
     },
     get isLoadingMore() {
       return historyQuery.isFetchingNextPage
@@ -510,7 +440,7 @@ export function useOptimizedTimeline() {
     get isInitialized() {
       return initialQuery.isSuccess
     },
-    /** Number of new items (posts/albums) waiting to be shown (Twitter-style) */
+    /** Number of new posts waiting to be shown */
     get pendingCount() {
       return pendingCount()
     },
@@ -528,7 +458,7 @@ export function useOptimizedTimeline() {
         initialQuery.refetch()
       }
     },
-    /** Reveal pending posts in timeline (when user clicks "N new posts") */
+    /** Reveal pending posts (when user clicks "N new posts" button) */
     showNewPosts: revealPendingPosts,
   }
 }

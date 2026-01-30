@@ -213,15 +213,13 @@ export function Timeline(props: TimelineProps) {
         <For each={[1, 2, 3]}>{() => <PostSkeleton />}</For>
       </Show>
 
-      {/* New posts button */}
+      {/* New posts button - Twitter style */}
       <Show when={props.pendingCount && props.pendingCount > 0}>
         <div class="sticky top-0 z-10 flex justify-center py-3 pointer-events-none">
           <button
             type="button"
             onClick={() => {
-              // Reveal pending posts
               props.onShowNewPosts?.()
-              // Scroll to top (like Twitter)
               scrollParent?.scrollTo({ top: 0, behavior: 'smooth' })
             }}
             class="new-posts-btn pointer-events-auto"

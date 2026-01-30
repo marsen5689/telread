@@ -42,8 +42,8 @@ export const queryKeys = {
     all: ['media'] as const,
     download: (channelId: number, messageId: number, size?: string) =>
       [...queryKeys.media.all, 'download', channelId, messageId, size] as const,
-    profile: (peerId: number) =>
-      [...queryKeys.media.all, 'profile', peerId] as const,
+    profile: (peerId: number, size: 'small' | 'big' = 'small') =>
+      [...queryKeys.media.all, 'profile', peerId, size] as const,
   },
 
   // User

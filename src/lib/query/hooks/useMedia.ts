@@ -28,12 +28,12 @@ export function useMedia(
  */
 export function useProfilePhoto(
   peerId: () => number,
-  size?: 'small' | 'big',
+  size: 'small' | 'big' = 'small',
   enabled?: () => boolean
 ) {
   return createQuery(() => ({
-    queryKey: queryKeys.media.profile(peerId()),
-    queryFn: () => downloadProfilePhoto(peerId(), size ?? 'small'),
+    queryKey: queryKeys.media.profile(peerId(), size),
+    queryFn: () => downloadProfilePhoto(peerId(), size),
     staleTime: 1000 * 60 * 60, // 1 hour - profile photos rarely change
     gcTime: 1000 * 60 * 30, // 30 min in memory
     // Don't fetch for invalid peer IDs (client readiness checked in queryFn after cache check)

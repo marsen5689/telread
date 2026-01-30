@@ -1,7 +1,7 @@
 import { getTelegramClient, getClientVersion } from './client'
 import { mapMessage, type MessageReaction, type Message } from './messages'
 import {
-  upsertPostsToPending,
+  upsertPost,
   removePosts,
   updatePostViews,
   updatePostReactions,
@@ -19,7 +19,8 @@ let listenerClientVersion = 0
 let isPaused = false
 
 // Queue for messages that arrive before store is ready
-// No limit - we need to capture all messages from catchUp/getDifference
+// Limited to prevent memory issues during initial sync
+const MAX_PENDING_MESSAGES = 500
 const pendingMessages: TgMessage[] = []
 
 // ============================================================================
@@ -73,16 +74,14 @@ function processBatch(): void {
 
   if (mapped.length === 0) return
 
-  // Batch update store
-  upsertPostsToPending(mapped)
-
-  // Update TanStack Query cache
+  // Add each post to pending (Twitter-style)
   for (const post of mapped) {
+    upsertPost(post)
     addPostToCache(post)
   }
 
   if (import.meta.env.DEV && mapped.length > 1) {
-    console.log(`[Updates] Batched ${mapped.length} messages`)
+    console.log(`[Updates] Processed ${mapped.length} messages`)
   }
 }
 
@@ -170,9 +169,9 @@ function processPendingMessages(): void {
 
   if (mapped.length === 0) return
 
-  // Batch update
-  upsertPostsToPending(mapped)
+  // Add to pending (these are real-time updates that arrived before store was ready)
   for (const post of mapped) {
+    upsertPost(post)
     addPostToCache(post)
   }
 }
@@ -214,6 +213,10 @@ export function startUpdatesListener(): UpdatesCleanup {
 
       // Queue if store not ready yet
       if (!isStoreReady()) {
+        // Limit queue size to prevent memory issues
+        if (pendingMessages.length >= MAX_PENDING_MESSAGES) {
+          pendingMessages.shift() // Drop oldest
+        }
         pendingMessages.push(message)
         return
       }
@@ -241,6 +244,10 @@ export function startUpdatesListener(): UpdatesCleanup {
 
       // Queue if store not ready yet
       if (!isStoreReady()) {
+        // Limit queue size to prevent memory issues
+        if (pendingMessages.length >= MAX_PENDING_MESSAGES) {
+          pendingMessages.shift() // Drop oldest
+        }
         pendingMessages.push(message)
         return
       }
@@ -350,6 +357,18 @@ export function startUpdatesListener(): UpdatesCleanup {
       // Stop visibility listener
       stopVisibilityListener()
 
+      // Clear batch timer and process remaining messages
+      if (batchTimer) {
+        clearTimeout(batchTimer)
+        batchTimer = null
+      }
+      if (pendingBatch.messages.length > 0) {
+        processBatch()
+      }
+
+      // Reset pause state
+      isPaused = false
+
       // Remove Telegram event handlers
       client.onNewMessage?.remove(handleNewMessage)
       client.onEditMessage?.remove(handleEditMessage)
@@ -370,20 +389,6 @@ export function startUpdatesListener(): UpdatesCleanup {
 }
 
 export function stopUpdatesListener(): void {
-  // Stop visibility listener
-  stopVisibilityListener()
-
-  // Clear batch timer
-  if (batchTimer) {
-    clearTimeout(batchTimer)
-    batchTimer = null
-  }
-
-  // Process any remaining messages
-  if (pendingBatch.messages.length > 0) {
-    processBatch()
-  }
-
   if (activeCleanup) {
     activeCleanup()
     activeCleanup = null

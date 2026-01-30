@@ -38,8 +38,9 @@ export const MAX_COMMENT_LENGTH = 4096
 /**
  * Maximum items in media LRU cache
  * Each item holds a blob URL reference
+ * Keep low to save memory - IndexedDB provides persistence
  */
-export const MEDIA_CACHE_MAX_SIZE = 100
+export const MEDIA_CACHE_MAX_SIZE = 30
 
 /**
  * Query cache stale time in milliseconds (30 minutes)

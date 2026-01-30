@@ -2,7 +2,7 @@ import { Show, createMemo } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { ChannelAvatar } from '@/components/ui'
 import { PostContent, PostMedia, PostActions } from '@/components/post'
-import { formatTimeAgo } from '@/lib/utils'
+import { formatTimeAgo, globalNow } from '@/lib/utils'
 import type { Message } from '@/lib/telegram'
 
 interface TimelinePostProps {
@@ -45,8 +45,11 @@ export function TimelinePost(props: TimelinePostProps) {
     navigate(channelUrl())
   }
 
-  // Memoize to avoid recalculating on every render
-  const timeAgo = createMemo(() => formatTimeAgo(props.post.date))
+  // Memoize with global time signal for periodic updates
+  const timeAgo = createMemo(() => {
+    globalNow() // Subscribe to minute-by-minute time updates
+    return formatTimeAgo(props.post.date)
+  })
 
   // Check if text is long enough to be truncated
   const isTruncated = createMemo(() => {
