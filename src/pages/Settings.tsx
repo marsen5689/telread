@@ -25,8 +25,8 @@ export function Settings() {
   ]
 
   return (
-    <div class="p-4 space-y-6">
-      <h1 class="text-2xl font-display font-semibold text-primary">
+    <div class="p-4 space-y-6 h-full overflow-y-auto custom-scrollbar">
+      <h1 class="text-2xl font-semibold text-primary">
         Settings
       </h1>
 
@@ -93,11 +93,11 @@ export function Settings() {
                   <button
                     onClick={() => themeStore.setTheme(option.value)}
                     class={`
-                      p-3 rounded-xl text-sm font-medium transition-all
+                      p-3 rounded-2xl text-sm font-medium transition-all
                       ${
                         themeStore.theme === option.value
-                          ? 'bg-liquid-500 text-white'
-                          : 'liquid-surface hover:bg-[var(--glass-bg-hover)]'
+                          ? 'bg-[var(--accent)] text-white shadow-[0_2px_8px_rgba(0,122,255,0.3)]'
+                          : 'bg-[var(--pill-bg)] hover:bg-[var(--pill-bg-hover)] text-secondary'
                       }
                     `}
                   >
@@ -162,11 +162,11 @@ export function Settings() {
 
           <div class="space-y-2 text-sm">
             <p class="text-secondary">
-              <span class="text-liquid-gradient font-display font-bold">TelRead</span>
+              <span class="text-accent font-semibold">TelRead</span>
               {' '}v1.0.0
             </p>
             <p class="text-tertiary">
-              Twitter-like Telegram Channel Reader with Liquid Glass design
+              Telegram Channel Reader with Apple Liquid Glass design
             </p>
             <p class="text-tertiary">
               Built with SolidJS, TanStack Query, and mtcute
@@ -188,17 +188,19 @@ function ToggleSwitch(props: { checked: boolean; onChange: (value: boolean) => v
       aria-checked={props.checked}
       onClick={() => props.onChange(!props.checked)}
       class={`
-        relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full
-        transition-colors duration-200 ease-in-out
-        ${props.checked ? 'bg-liquid-500' : 'bg-[var(--glass-border)]'}
+        relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full
+        transition-all duration-200 ease-in-out
+        ${props.checked
+          ? 'bg-[var(--accent)] shadow-[0_2px_8px_rgba(0,122,255,0.3)]'
+          : 'bg-[var(--pill-bg)]'}
       `}
     >
       <span
         class={`
           pointer-events-none inline-block h-5 w-5 transform rounded-full
-          bg-white shadow ring-0 transition duration-200 ease-in-out
-          ${props.checked ? 'translate-x-5' : 'translate-x-0.5'}
-          mt-0.5
+          bg-white shadow-md ring-0 transition-transform duration-200 ease-in-out
+          ${props.checked ? 'translate-x-6' : 'translate-x-1'}
+          mt-1
         `}
       />
     </button>

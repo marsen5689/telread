@@ -116,7 +116,7 @@ export function CommentThread(props: CommentThreadProps) {
           <Show when={hiddenRepliesCount() > 0}>
             <button
               onClick={() => setShowAllReplies(true)}
-              class="ml-[60px] py-2 text-sm text-liquid-500 hover:text-liquid-400 transition-colors flex items-center gap-1"
+              class="ml-[60px] py-2 text-sm text-accent hover:text-accent/80 transition-colors flex items-center gap-1"
               style={{ "margin-left": `${(depth() + 1) * 44}px` }}
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -136,7 +136,7 @@ export function CommentThread(props: CommentThreadProps) {
       {/* Show "Continue thread" for deep nesting */}
       <Show when={hasReplies() && depth() >= maxDepth()}>
         <button
-          class="text-sm text-liquid-500 hover:text-liquid-400 transition-colors py-2"
+          class="text-sm text-accent hover:text-accent/80 transition-colors py-2"
           style={{ "margin-left": `${(depth() + 1) * 44}px` }}
         >
           Continue thread ({props.comment.replies!.length} {props.comment.replies!.length === 1 ? 'reply' : 'replies'})

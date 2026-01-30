@@ -1,9 +1,4 @@
-import {
-  type ParentProps,
-  splitProps,
-  createSignal,
-  Show,
-} from 'solid-js'
+import { type ParentProps, splitProps, Show } from 'solid-js'
 
 type ButtonVariant = 'default' | 'primary' | 'ghost' | 'danger'
 type ButtonSize = 'sm' | 'md' | 'lg' | 'icon'
@@ -19,26 +14,23 @@ interface GlassButtonProps extends ParentProps {
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
-  default: 'liquid-btn',
-  primary: 'liquid-btn liquid-btn-primary',
-  ghost:
-    'px-3 py-2 rounded-xl hover:bg-[var(--glass-bg)] transition-colors duration-200',
-  danger:
-    'liquid-btn bg-red-500/20 border-red-500/30 text-red-400 hover:bg-red-500/30',
+  default: 'glass-btn',
+  primary: 'glass-btn glass-btn-primary',
+  ghost: 'px-3 py-2 rounded-2xl text-secondary hover:text-primary hover:bg-[var(--pill-bg)] transition-all',
+  danger: 'glass-btn text-[var(--danger)] bg-[rgba(255,59,48,0.12)] hover:bg-[rgba(255,59,48,0.2)]',
 }
 
 const sizeStyles: Record<ButtonSize, string> = {
   sm: 'px-3 py-1.5 text-xs gap-1.5',
-  md: 'px-4 py-2 text-sm gap-2',
+  md: 'px-4 py-2.5 text-sm gap-2',
   lg: 'px-6 py-3 text-base gap-2.5',
   icon: 'p-2.5 aspect-square',
 }
 
 /**
- * GlassButton - Interactive liquid glass button
+ * GlassButton - Clean glassmorphism button
  *
- * Features ripple effect on click, smooth hover animations,
- * and variants for different actions.
+ * Simple hover states without ripple or glow effects.
  */
 export function GlassButton(props: GlassButtonProps) {
   const [local, rest] = splitProps(props, [
@@ -52,59 +44,24 @@ export function GlassButton(props: GlassButtonProps) {
     'onClick',
   ])
 
-  const [ripple, setRipple] = createSignal<{
-    x: number
-    y: number
-    key: number
-  } | null>(null)
-
-  const handleClick = (e: MouseEvent) => {
-    if (local.disabled || local.loading) return
-
-    // Create ripple effect
-    const button = e.currentTarget as HTMLButtonElement
-    const rect = button.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-    setRipple({ x, y, key: Date.now() })
-
-    setTimeout(() => setRipple(null), 600)
-
-    local.onClick?.(e)
-  }
-
   return (
     <button
       type={local.type ?? 'button'}
       disabled={local.disabled || local.loading}
       class={`
         relative inline-flex items-center justify-center font-medium
-        transition-all duration-300 ease-smooth
         disabled:opacity-50 disabled:cursor-not-allowed
         ${variantStyles[local.variant ?? 'default']}
         ${sizeStyles[local.size ?? 'md']}
         ${local.class ?? ''}
       `}
-      onClick={handleClick}
+      onClick={(e) => {
+        if (!local.disabled && !local.loading) {
+          local.onClick?.(e)
+        }
+      }}
       {...rest}
     >
-      {/* Ripple effect */}
-      <Show when={ripple()}>
-        {(r) => (
-          <span
-            class="absolute rounded-full bg-white/30 animate-ripple pointer-events-none"
-            style={{
-              left: `${r().x}px`,
-              top: `${r().y}px`,
-              width: '10px',
-              height: '10px',
-              transform: 'translate(-50%, -50%)',
-            }}
-          />
-        )}
-      </Show>
-
-      {/* Loading spinner */}
       <Show when={local.loading}>
         <svg
           class="animate-spin -ml-1 mr-2 h-4 w-4"
@@ -117,7 +74,7 @@ export function GlassButton(props: GlassButtonProps) {
             cy="12"
             r="10"
             stroke="currentColor"
-            stroke-width="4"
+            stroke-width="3"
           />
           <path
             class="opacity-75"
@@ -126,7 +83,6 @@ export function GlassButton(props: GlassButtonProps) {
           />
         </svg>
       </Show>
-
       {local.children}
     </button>
   )

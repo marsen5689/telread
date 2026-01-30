@@ -1,5 +1,7 @@
 import { getTelegramClient } from './client'
-import type { Chat } from '@mtcute/web'
+import { mapMessage } from './messages'
+import type { Chat, Message as TgMessage } from '@mtcute/web'
+import type { Message } from './messages'
 
 export interface Channel {
   id: number
@@ -10,6 +12,13 @@ export interface Channel {
   participantsCount?: number
   description?: string
   linkedChatId?: number
+}
+
+/**
+ * Channel with optional lastMessage - used for optimized timeline initialization
+ */
+export interface ChannelWithLastMessage extends Channel {
+  lastMessage?: Message
 }
 
 /**
@@ -45,6 +54,71 @@ export async function fetchChannels(): Promise<Channel[]> {
         continue
       }
       // For rate limits or other errors, stop
+      break
+    }
+  }
+
+  return channels
+}
+
+/**
+ * Fetch all subscribed channels WITH their last messages
+ *
+ * This is the optimized version - extracts lastMessage from dialogs
+ * instead of making separate API calls for each channel.
+ *
+ * PERFORMANCE: 1 API call instead of 10+ calls
+ */
+export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMessage[]> {
+  const client = getTelegramClient()
+  const channels: ChannelWithLastMessage[] = []
+
+  const iterator = client.iterDialogs()[Symbol.asyncIterator]()
+  let dialogCount = 0
+  const maxDialogs = 200
+  const maxChannels = 50
+
+  while (dialogCount < maxDialogs && channels.length < maxChannels) {
+    try {
+      const { value: dialog, done } = await iterator.next()
+      if (done) break
+
+      dialogCount++
+      const anyDialog = dialog as any
+      const chat = anyDialog.chat ?? anyDialog.peer ?? dialog
+
+      // Skip secret chats and invalid entries
+      if (!chat || chat.chatType === 'secret') continue
+
+      if (chat.chatType === 'channel' && !isGroupChat(chat)) {
+        const channel = mapChatToChannel(chat)
+
+        // Extract lastMessage from dialog - KEY OPTIMIZATION
+        // dialog.lastMessage is a high-level Message object from mtcute
+        const lastMessage = anyDialog.lastMessage
+        let mappedLastMessage: Message | undefined
+
+        // Only map if lastMessage exists and has expected structure
+        if (lastMessage && typeof lastMessage === 'object' && 'id' in lastMessage) {
+          try {
+            const mapped = mapMessage(lastMessage as TgMessage, channel.id)
+            if (mapped) {
+              mappedLastMessage = mapped
+            }
+          } catch {
+            // Skip messages that fail to map
+          }
+        }
+
+        channels.push({
+          ...channel,
+          lastMessage: mappedLastMessage,
+        })
+      }
+    } catch (e: any) {
+      if (e?.message?.includes('Secret') || e?.message?.includes('Unsupported')) {
+        continue
+      }
       break
     }
   }

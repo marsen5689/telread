@@ -65,23 +65,15 @@ export function CodeInput(props: CodeInputProps) {
 
   return (
     <div class="space-y-6">
-      <button
-        onClick={props.onBack}
-        class="flex items-center gap-2 text-secondary hover:text-primary transition-colors"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M15 19l-7-7 7-7"
-          />
+      <button onClick={props.onBack} class="pill">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
         </svg>
         Back
       </button>
 
       <div class="text-center space-y-2">
-        <h2 class="text-2xl font-display font-semibold text-primary">
+        <h2 class="text-2xl font-semibold text-primary">
           Enter Code
         </h2>
         <p class="text-secondary">
@@ -105,9 +97,9 @@ export function CodeInput(props: CodeInputProps) {
                 onKeyDown={(e) => handleKeyDown(index(), e)}
                 class={`
                   w-12 h-14 text-center text-2xl font-mono
-                  liquid-input rounded-xl
-                  focus:ring-2 focus:ring-liquid-500/50
-                  ${props.error ? 'border-red-500/50' : ''}
+                  glass-input rounded-xl
+                  focus:ring-2 focus:ring-[var(--accent)]/30
+                  ${props.error ? 'border-[var(--danger)]/50' : ''}
                 `}
               />
             )}
@@ -116,14 +108,14 @@ export function CodeInput(props: CodeInputProps) {
 
         {/* Error message */}
         {props.error && (
-          <p class="text-sm text-red-400 text-center">{props.error}</p>
+          <p class="text-sm text-[var(--danger)] text-center">{props.error}</p>
         )}
 
         {/* Resend code */}
         <p class="text-sm text-center text-secondary">
           Didn't receive a code?{' '}
           <button
-            class="text-liquid-500 hover:underline"
+            class="text-accent hover:underline"
             onClick={props.onBack}
           >
             Try again

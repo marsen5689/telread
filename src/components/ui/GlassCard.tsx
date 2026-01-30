@@ -1,4 +1,4 @@
-import { type JSX, type ParentProps, splitProps } from 'solid-js'
+import { type ParentProps, splitProps } from 'solid-js'
 import { Motion } from 'solid-motionone'
 
 interface GlassCardProps extends ParentProps {
@@ -6,14 +6,13 @@ interface GlassCardProps extends ParentProps {
   hover?: boolean
   animate?: boolean
   onClick?: () => void
-  as?: keyof JSX.IntrinsicElements
 }
 
 /**
- * GlassCard - A liquid glass surface component
+ * GlassCard - Glassmorphism container component
  *
- * Features prismatic light refraction, wet glass edge highlights,
- * and smooth hover transitions with a subtle glow effect.
+ * Clean frosted glass effect with subtle shadow.
+ * No excessive glow or prismatic effects.
  */
 export function GlassCard(props: GlassCardProps) {
   const [local, rest] = splitProps(props, [
@@ -22,22 +21,21 @@ export function GlassCard(props: GlassCardProps) {
     'hover',
     'animate',
     'onClick',
-    'as',
   ])
 
-  const baseClass = `
-    liquid-surface rounded-2xl overflow-hidden
-    ${local.hover !== false ? 'cursor-pointer' : ''}
+  const baseClass = () => `
+    glass-card
+    ${local.hover !== false && local.onClick ? 'cursor-pointer' : ''}
     ${local.class ?? ''}
   `.trim()
 
   if (local.animate) {
     return (
       <Motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.4, easing: [0.16, 1, 0.3, 1] }}
-        class={baseClass}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, easing: 'ease-out' }}
+        class={baseClass()}
         onClick={local.onClick}
         {...rest}
       >
@@ -47,7 +45,7 @@ export function GlassCard(props: GlassCardProps) {
   }
 
   return (
-    <div class={baseClass} onClick={local.onClick} {...rest}>
+    <div class={baseClass()} onClick={local.onClick} {...rest}>
       {local.children}
     </div>
   )

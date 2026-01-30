@@ -47,7 +47,7 @@ export function CommentItem(props: CommentItemProps) {
             onClick={() => props.onReply?.(props.comment.id)}
             class={`
               text-xs flex items-center gap-1 transition-colors
-              ${props.isReplying ? 'text-liquid-500' : 'text-tertiary hover:text-liquid-500'}
+              ${props.isReplying ? 'text-accent' : 'text-tertiary hover:text-accent'}
             `}
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

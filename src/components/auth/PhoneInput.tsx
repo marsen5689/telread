@@ -34,7 +34,7 @@ export function PhoneInput(props: PhoneInputProps) {
   return (
     <div class="space-y-6">
       <div class="text-center space-y-2">
-        <h2 class="text-2xl font-display font-semibold text-primary">
+        <h2 class="text-2xl font-semibold text-primary">
           Welcome to TelRead
         </h2>
         <p class="text-secondary">
@@ -104,7 +104,7 @@ export function PhoneInput(props: PhoneInputProps) {
           href="https://telegram.org/tos"
           target="_blank"
           rel="noopener"
-          class="text-liquid-500 hover:underline"
+          class="text-accent hover:underline"
         >
           Terms of Service
         </a>

@@ -9,19 +9,24 @@ export {
 } from './auth'
 export {
   fetchChannels,
+  fetchChannelsWithLastMessages,
   getChannel,
   joinChannel,
   leaveChannel,
   type Channel,
+  type ChannelWithLastMessage,
 } from './channels'
 export {
   fetchMessages,
   getMessage,
   fetchTimeline,
+  fetchMoreHistory,
+  mapMessage,
   type Message,
   type MessageMedia,
   type MessageEntity,
   type FetchMessagesOptions,
+  type HistoryResult,
 } from './messages'
 export {
   fetchComments,
@@ -37,3 +42,9 @@ export {
   preloadThumbnails,
   clearMediaCache,
 } from './media'
+export {
+  startUpdatesListener,
+  stopUpdatesListener,
+  isUpdatesListenerActive,
+  type UpdatesCleanup,
+} from './updates'

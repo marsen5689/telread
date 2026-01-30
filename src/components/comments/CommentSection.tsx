@@ -94,10 +94,10 @@ export function CommentSection(props: CommentSectionProps) {
           {/* Error state */}
           <Show when={commentsQuery.isError}>
             <div class="text-center py-4">
-              <p class="text-sm text-red-400">Failed to load comments</p>
+              <p class="text-sm text-[var(--danger)]">Failed to load comments</p>
               <button
                 onClick={() => commentsQuery.refetch()}
-                class="mt-2 text-sm text-liquid-500 hover:underline"
+                class="mt-2 text-sm text-accent hover:underline"
               >
                 Try again
               </button>

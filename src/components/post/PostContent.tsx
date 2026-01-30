@@ -71,7 +71,7 @@ export function PostContent(props: PostContentProps) {
         return <span class="line-through">{part.content}</span>
       case 'code':
         return (
-          <code class="px-1.5 py-0.5 rounded bg-[var(--glass-bg)] font-mono text-sm text-liquid-400">
+          <code class="px-1.5 py-0.5 rounded bg-[var(--glass-bg)] font-mono text-sm text-accent">
             {part.content}
           </code>
         )
@@ -87,20 +87,20 @@ export function PostContent(props: PostContentProps) {
             href={part.url || part.content}
             target="_blank"
             rel="noopener noreferrer"
-            class="text-liquid-500 hover:text-liquid-400 hover:underline transition-colors"
+            class="text-accent hover:text-accent hover:underline transition-colors"
           >
             {part.content}
           </a>
         )
       case 'mention':
         return (
-          <span class="text-liquid-500 cursor-pointer hover:underline">
+          <span class="text-accent cursor-pointer hover:underline">
             {part.content}
           </span>
         )
       case 'hashtag':
         return (
-          <span class="text-liquid-500 cursor-pointer hover:underline">
+          <span class="text-accent cursor-pointer hover:underline">
             {part.content}
           </span>
         )
@@ -108,7 +108,7 @@ export function PostContent(props: PostContentProps) {
         return (
           <a
             href={`mailto:${part.content}`}
-            class="text-liquid-500 hover:underline"
+            class="text-accent hover:underline"
           >
             {part.content}
           </a>
@@ -117,7 +117,7 @@ export function PostContent(props: PostContentProps) {
         return (
           <a
             href={`tel:${part.content}`}
-            class="text-liquid-500 hover:underline"
+            class="text-accent hover:underline"
           >
             {part.content}
           </a>
@@ -140,11 +140,22 @@ export function PostContent(props: PostContentProps) {
     }
   }
 
+  // Use fixed line-clamp classes for Tailwind to generate
+  const lineClampClass = () => {
+    if (!props.truncate) return ''
+    const lines = props.maxLines ?? 4
+    if (lines <= 2) return 'line-clamp-2'
+    if (lines <= 3) return 'line-clamp-3'
+    if (lines <= 4) return 'line-clamp-4'
+    if (lines <= 5) return 'line-clamp-5'
+    return 'line-clamp-6'
+  }
+
   return (
     <div
       class={`
         whitespace-pre-wrap break-words text-primary leading-relaxed
-        ${props.truncate ? `line-clamp-${props.maxLines ?? 3}` : ''}
+        ${lineClampClass()}
         ${props.class ?? ''}
       `}
     >

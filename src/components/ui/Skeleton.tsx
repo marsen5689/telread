@@ -68,13 +68,13 @@ export function TextSkeleton(props: { lines?: number; class?: string }) {
 }
 
 /**
- * Skeleton for post card
+ * Skeleton for post - matches .post structure without card wrapper
  */
 export function PostSkeleton() {
   return (
-    <div class="liquid-surface rounded-2xl p-4 space-y-4">
+    <div class="post">
       {/* Header */}
-      <div class="flex items-center gap-3">
+      <div class="post-header">
         <AvatarSkeleton />
         <div class="flex-1 space-y-2">
           <Skeleton width="40%" height="0.875rem" />
@@ -83,16 +83,20 @@ export function PostSkeleton() {
       </div>
 
       {/* Content */}
-      <TextSkeleton lines={3} />
+      <div class="post-content">
+        <TextSkeleton lines={3} />
+      </div>
 
       {/* Media placeholder */}
-      <Skeleton height="200px" rounded="xl" class="w-full" />
+      <div class="post-media">
+        <Skeleton height="200px" rounded="xl" class="mx-4" />
+      </div>
 
       {/* Actions */}
-      <div class="flex gap-4 pt-2">
-        <Skeleton width="60px" height="1.5rem" rounded="lg" />
-        <Skeleton width="60px" height="1.5rem" rounded="lg" />
-        <Skeleton width="60px" height="1.5rem" rounded="lg" />
+      <div class="post-actions">
+        <Skeleton width="70px" height="28px" rounded="full" />
+        <Skeleton width="70px" height="28px" rounded="full" />
+        <Skeleton width="40px" height="28px" rounded="full" />
       </div>
     </div>
   )

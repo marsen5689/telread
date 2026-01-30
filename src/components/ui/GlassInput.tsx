@@ -1,10 +1,4 @@
-import {
-  type JSX,
-  splitProps,
-  createSignal,
-  Show,
-  mergeProps,
-} from 'solid-js'
+import { type JSX, splitProps, createSignal, Show, mergeProps } from 'solid-js'
 
 interface GlassInputProps {
   value?: string
@@ -30,16 +24,12 @@ interface GlassInputProps {
 }
 
 /**
- * GlassInput - Liquid glass styled input field
+ * GlassInput - Clean glassmorphism input field
  *
- * Features focus glow effect, floating label support,
- * error states, and optional auto-resize for textareas.
+ * Simple focus border, no glow effects.
  */
 export function GlassInput(props: GlassInputProps) {
-  const merged = mergeProps(
-    { type: 'text' as const, rows: 1 },
-    props
-  )
+  const merged = mergeProps({ type: 'text' as const, rows: 1 }, props)
 
   const [local] = splitProps(merged, [
     'value',
@@ -66,14 +56,10 @@ export function GlassInput(props: GlassInputProps) {
 
   const [focused, setFocused] = createSignal(false)
 
-  const handleInput: JSX.EventHandler<
-    HTMLInputElement | HTMLTextAreaElement,
-    InputEvent
-  > = (e) => {
+  const handleInput: JSX.EventHandler<HTMLInputElement | HTMLTextAreaElement, InputEvent> = (e) => {
     const value = e.currentTarget.value
     local.onInput?.(value)
 
-    // Auto-resize textarea
     if (local.autoResize && e.currentTarget.tagName === 'TEXTAREA') {
       e.currentTarget.style.height = 'auto'
       e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`
@@ -94,7 +80,7 @@ export function GlassInput(props: GlassInputProps) {
 
   const inputClasses = `
     w-full bg-transparent outline-none
-    text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)]
+    text-primary placeholder:text-tertiary
     ${local.icon ? 'pl-10' : 'pl-4'}
     ${local.suffix ? 'pr-12' : 'pr-4'}
     py-3
@@ -102,16 +88,14 @@ export function GlassInput(props: GlassInputProps) {
   `
 
   const wrapperClasses = `
-    relative rounded-xl overflow-hidden
-    transition-all duration-300 ease-smooth
-    ${
-      focused()
-        ? 'bg-[var(--glass-bg-hover)] border-[var(--accent-primary)] shadow-[0_0_0_3px_rgba(14,165,233,0.15),0_4px_20px_var(--liquid-glow)]'
-        : 'bg-[var(--glass-bg)] border-[var(--glass-border)]'
-    }
-    ${local.error ? 'border-red-500/50' : ''}
+    relative rounded-2xl overflow-hidden
+    transition-all duration-200
+    border
+    ${focused()
+      ? 'bg-[var(--glass-bg-elevated)] border-[var(--accent)] shadow-[0_0_0_3px_rgba(0,122,255,0.15)]'
+      : 'bg-[var(--glass-bg)] border-[var(--glass-border)]'}
+    ${local.error ? 'border-[var(--danger)] shadow-[0_0_0_3px_rgba(255,59,48,0.15)]' : ''}
     ${local.disabled ? 'opacity-50 cursor-not-allowed' : ''}
-    border backdrop-blur-xl
     ${local.class ?? ''}
   `
 
@@ -124,14 +108,12 @@ export function GlassInput(props: GlassInputProps) {
       </Show>
 
       <div class={wrapperClasses}>
-        {/* Icon */}
         <Show when={local.icon}>
-          <div class="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]">
+          <div class="absolute left-3 top-1/2 -translate-y-1/2 text-tertiary">
             {local.icon}
           </div>
         </Show>
 
-        {/* Input or Textarea */}
         {isTextarea ? (
           <textarea
             ref={local.ref as (el: HTMLTextAreaElement) => void}
@@ -164,7 +146,6 @@ export function GlassInput(props: GlassInputProps) {
           />
         )}
 
-        {/* Suffix */}
         <Show when={local.suffix}>
           <div class="absolute right-3 top-1/2 -translate-y-1/2">
             {local.suffix}
@@ -172,9 +153,8 @@ export function GlassInput(props: GlassInputProps) {
         </Show>
       </div>
 
-      {/* Error message */}
       <Show when={local.error}>
-        <p class="text-xs text-red-400 pl-1">{local.error}</p>
+        <p class="text-xs text-[var(--danger)] pl-1">{local.error}</p>
       </Show>
     </div>
   )

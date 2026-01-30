@@ -46,7 +46,7 @@ export function ReplyComposer(props: ReplyComposerProps) {
   })
 
   return (
-    <div class="liquid-surface rounded-xl p-3">
+    <div class="glass rounded-xl p-3">
       <textarea
         ref={textareaRef}
         value={text()}

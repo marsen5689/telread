@@ -166,7 +166,7 @@ export function AuthFlow(props: AuthFlowProps) {
 
         {/* Logo */}
         <div class="mt-8 text-center">
-          <span class="text-liquid-gradient font-display font-bold text-xl">
+          <span class="text-accent font-semibold text-xl">
             TelRead
           </span>
         </div>

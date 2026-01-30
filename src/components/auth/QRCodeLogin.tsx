@@ -35,23 +35,15 @@ export function QRCodeLogin(props: QRCodeLoginProps) {
 
   return (
     <div class="space-y-6">
-      <button
-        onClick={props.onBack}
-        class="flex items-center gap-2 text-secondary hover:text-primary transition-colors"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M15 19l-7-7 7-7"
-          />
+      <button onClick={props.onBack} class="pill">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
         </svg>
         Back
       </button>
 
       <div class="text-center space-y-2">
-        <h2 class="text-2xl font-display font-semibold text-primary">
+        <h2 class="text-2xl font-semibold text-primary">
           Login with QR Code
         </h2>
         <p class="text-secondary">
@@ -62,12 +54,12 @@ export function QRCodeLogin(props: QRCodeLoginProps) {
       <div class="flex flex-col items-center gap-6">
         {/* QR Code display */}
         <div class="relative">
-          <div class="liquid-surface rounded-2xl p-4">
+          <div class="glass rounded-2xl p-4">
             <Show
               when={qrDataUrl()}
               fallback={
                 <div class="w-64 h-64 flex items-center justify-center">
-                  <div class="animate-spin w-8 h-8 border-2 border-liquid-500 border-t-transparent rounded-full" />
+                  <div class="animate-spin w-8 h-8 border-2 border-[var(--accent)] border-t-transparent rounded-full" />
                 </div>
               }
             >
@@ -92,7 +84,7 @@ export function QRCodeLogin(props: QRCodeLoginProps) {
         {/* Instructions */}
         <div class="space-y-3 text-sm">
           <div class="flex items-start gap-3">
-            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-liquid-500/20 text-liquid-500 flex items-center justify-center text-xs font-medium">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--accent)]/15 text-accent flex items-center justify-center text-xs font-medium">
               1
             </span>
             <span class="text-secondary">
@@ -100,7 +92,7 @@ export function QRCodeLogin(props: QRCodeLoginProps) {
             </span>
           </div>
           <div class="flex items-start gap-3">
-            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-liquid-500/20 text-liquid-500 flex items-center justify-center text-xs font-medium">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--accent)]/15 text-accent flex items-center justify-center text-xs font-medium">
               2
             </span>
             <span class="text-secondary">
@@ -108,7 +100,7 @@ export function QRCodeLogin(props: QRCodeLoginProps) {
             </span>
           </div>
           <div class="flex items-start gap-3">
-            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-liquid-500/20 text-liquid-500 flex items-center justify-center text-xs font-medium">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--accent)]/15 text-accent flex items-center justify-center text-xs font-medium">
               3
             </span>
             <span class="text-secondary">
@@ -118,7 +110,7 @@ export function QRCodeLogin(props: QRCodeLoginProps) {
         </div>
 
         <Show when={props.error}>
-          <p class="text-sm text-red-400 text-center">{props.error}</p>
+          <p class="text-sm text-[var(--danger)] text-center">{props.error}</p>
         </Show>
       </div>
     </div>

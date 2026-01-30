@@ -2,6 +2,7 @@ import { createSignal, Show, Match, Switch, createEffect, onCleanup, onMount, cr
 import { Motion } from 'solid-motionone'
 import { downloadMedia } from '@/lib/telegram'
 import type { MessageMedia } from '@/lib/telegram'
+import { useMedia } from '@/lib/query'
 import { Skeleton } from '@/components/ui'
 
 // Simple in-memory cache for media URLs
@@ -88,11 +89,11 @@ export function PostMedia(props: PostMediaProps) {
       <Switch>
         {/* Photo */}
         <Match when={props.media.type === 'photo'}>
-          <div class="relative" style={containerStyle()}>
+          <div class="relative w-full" style={containerStyle()}>
             <Show
               when={thumbnailUrl()}
               fallback={
-                <Skeleton class="absolute inset-0" rounded="none" />
+                <div class="absolute inset-0 skeleton rounded-none" />
               }
             >
               <img
@@ -113,11 +114,11 @@ export function PostMedia(props: PostMediaProps) {
 
         {/* Video */}
         <Match when={props.media.type === 'video' || props.media.type === 'animation'}>
-          <div class="relative" style={containerStyle()}>
+          <div class="relative w-full" style={containerStyle()}>
             <Show
               when={thumbnailUrl()}
               fallback={
-                <Skeleton class="absolute inset-0" rounded="none" />
+                <div class="absolute inset-0 skeleton rounded-none" />
               }
             >
               <div class="relative w-full h-full">
@@ -155,10 +156,10 @@ export function PostMedia(props: PostMediaProps) {
 
         {/* Document */}
         <Match when={props.media.type === 'document'}>
-          <div class="liquid-surface rounded-xl p-4 flex items-center gap-4">
-            <div class="w-12 h-12 rounded-lg bg-liquid-500/20 flex items-center justify-center">
+          <div class="glass rounded-xl p-4 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center">
               <svg
-                class="w-6 h-6 text-liquid-500"
+                class="w-6 h-6 text-accent"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"

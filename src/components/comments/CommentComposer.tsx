@@ -55,7 +55,7 @@ export function CommentComposer(props: CommentComposerProps) {
   })
 
   return (
-    <div class="liquid-surface rounded-2xl p-4">
+    <div class="glass rounded-2xl p-4">
       <div class="flex gap-3">
         {/* User avatar */}
         <Avatar

@@ -25,25 +25,17 @@ export function TwoFactorInput(props: TwoFactorInputProps) {
 
   return (
     <div class="space-y-6">
-      <button
-        onClick={props.onBack}
-        class="flex items-center gap-2 text-secondary hover:text-primary transition-colors"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M15 19l-7-7 7-7"
-          />
+      <button onClick={props.onBack} class="pill">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
         </svg>
         Back
       </button>
 
       <div class="text-center space-y-2">
-        <div class="mx-auto w-16 h-16 rounded-2xl bg-liquid-500/20 flex items-center justify-center mb-4">
+        <div class="mx-auto w-16 h-16 rounded-2xl bg-[var(--accent)]/15 flex items-center justify-center mb-4">
           <svg
-            class="w-8 h-8 text-liquid-500"
+            class="w-8 h-8 text-accent"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -56,7 +48,7 @@ export function TwoFactorInput(props: TwoFactorInputProps) {
             />
           </svg>
         </div>
-        <h2 class="text-2xl font-display font-semibold text-primary">
+        <h2 class="text-2xl font-semibold text-primary">
           Two-Factor Authentication
         </h2>
         <p class="text-secondary">

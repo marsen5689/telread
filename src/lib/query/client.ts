@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/solid-query'
-import { persistQueryClient } from '@tanstack/query-persist-client-core'
+import { persistQueryClient, type PersistedClient, type Persister } from '@tanstack/query-persist-client-core'
 import { get, set, del } from 'idb-keyval'
 
 export const queryClient = new QueryClient({
@@ -49,13 +49,13 @@ const deserialize = (str: string): unknown => {
   })
 }
 
-const idbPersister = {
-  persistClient: async (client: unknown) => {
+const idbPersister: Persister = {
+  persistClient: async (client: PersistedClient) => {
     await set(IDB_KEY, serialize(client))
   },
-  restoreClient: async () => {
+  restoreClient: async (): Promise<PersistedClient | undefined> => {
     const data = await get<string>(IDB_KEY)
-    return data ? deserialize(data) : undefined
+    return data ? (deserialize(data) as PersistedClient) : undefined
   },
   removeClient: async () => {
     await del(IDB_KEY)

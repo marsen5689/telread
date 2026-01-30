@@ -26,10 +26,10 @@ export function Bookmarks() {
   }
 
   return (
-    <div class="p-4 space-y-4">
+    <div class="p-4 space-y-4 h-full overflow-y-auto custom-scrollbar">
       {/* Header */}
       <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-display font-semibold text-primary">
+        <h1 class="text-2xl font-semibold text-primary">
           Bookmarks
         </h1>
         <Show when={bookmarksStore.bookmarks.length > 0}>
@@ -46,9 +46,9 @@ export function Bookmarks() {
       {/* Empty state */}
       <Show when={bookmarksStore.bookmarks.length === 0}>
         <div class="text-center py-12">
-          <div class="w-16 h-16 rounded-2xl bg-liquid-500/20 flex items-center justify-center mx-auto mb-4">
+          <div class="w-16 h-16 rounded-2xl bg-[var(--accent)]/15 flex items-center justify-center mx-auto mb-4">
             <svg
-              class="w-8 h-8 text-liquid-500"
+              class="w-8 h-8 text-accent"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -97,7 +97,7 @@ export function Bookmarks() {
                     </div>
                     <button
                       onClick={(e) => handleRemove(e, bookmark.channelId, bookmark.messageId)}
-                      class="p-2 rounded-lg text-tertiary hover:text-red-400 hover:bg-red-500/10
+                      class="p-2 rounded-full text-tertiary hover:text-[var(--danger)] hover:bg-[var(--danger)]/10
                              opacity-0 group-hover:opacity-100 transition-all"
                     >
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

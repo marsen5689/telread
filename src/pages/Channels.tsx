@@ -31,10 +31,10 @@ export function Channels() {
   }
 
   return (
-    <div class="p-4 space-y-4">
+    <div class="p-4 space-y-4 h-full overflow-y-auto custom-scrollbar">
       {/* Header */}
       <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-display font-semibold text-primary">
+        <h1 class="text-2xl font-semibold text-primary">
           Channels
         </h1>
         <GlassButton
@@ -83,7 +83,7 @@ export function Channels() {
             </GlassButton>
           </div>
           <Show when={joinMutation.isError}>
-            <p class="text-sm text-red-400">
+            <p class="text-sm text-[var(--danger)]">
               Failed to join channel. Check the username and try again.
             </p>
           </Show>
@@ -112,9 +112,9 @@ export function Channels() {
       {/* Empty state */}
       <Show when={!channelsQuery.isLoading && channelsQuery.data?.length === 0}>
         <div class="text-center py-12">
-          <div class="w-16 h-16 rounded-2xl bg-liquid-500/20 flex items-center justify-center mx-auto mb-4">
+          <div class="w-16 h-16 rounded-2xl bg-[var(--accent)]/15 flex items-center justify-center mx-auto mb-4">
             <svg
-              class="w-8 h-8 text-liquid-500"
+              class="w-8 h-8 text-accent"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

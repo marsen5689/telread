@@ -16,25 +16,28 @@ const sizeStyles = {
   xl: 'w-16 h-16 text-lg',
 }
 
-// Generate consistent colors based on name
+// Telegram-style solid colors for avatars
+const avatarColors = [
+  '#e17076', // red
+  '#7bc862', // green
+  '#e5ca77', // yellow
+  '#65aadd', // blue
+  '#a695e7', // purple
+  '#ee7aae', // pink
+  '#6ec9cb', // cyan
+  '#faa774', // orange
+]
+
 function getColorFromName(name: string): string {
-  const colors = [
-    'from-cyan-400 to-blue-500',
-    'from-violet-400 to-purple-500',
-    'from-pink-400 to-rose-500',
-    'from-orange-400 to-amber-500',
-    'from-emerald-400 to-teal-500',
-    'from-sky-400 to-indigo-500',
-  ]
   const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  return colors[hash % colors.length]
+  return avatarColors[hash % avatarColors.length]
 }
 
 /**
- * Avatar - User avatar with liquid glass styling
+ * Avatar - User avatar with Telegram-style coloring
  *
  * Shows image if available, otherwise displays initials
- * with a gradient background based on the user's name.
+ * with a solid background color based on the user's name.
  */
 export function Avatar(props: AvatarProps) {
   const initials = createMemo(() => {
@@ -46,7 +49,7 @@ export function Avatar(props: AvatarProps) {
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase()
   })
 
-  const gradientColor = createMemo(() => getColorFromName(props.name ?? ''))
+  const bgColor = createMemo(() => getColorFromName(props.name ?? ''))
 
   return (
     <div
@@ -62,11 +65,8 @@ export function Avatar(props: AvatarProps) {
         when={props.src}
         fallback={
           <div
-            class={`
-              w-full h-full flex items-center justify-center
-              bg-gradient-to-br ${gradientColor()}
-              font-medium text-white
-            `}
+            class="w-full h-full flex items-center justify-center font-medium text-white"
+            style={{ background: bgColor() }}
           >
             {initials()}
           </div>

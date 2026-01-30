@@ -17,20 +17,16 @@ const sizeStyles = {
 }
 
 /**
- * GlassModal - Liquid glass modal dialog
+ * GlassModal - Clean glassmorphism modal dialog
  *
- * Features smooth entrance/exit animations, backdrop blur,
- * keyboard escape handling, and click-outside-to-close.
+ * Smooth animations, backdrop blur, escape key handling.
  */
 export function GlassModal(props: GlassModalProps) {
-  // Handle escape key
   createEffect(() => {
     if (!props.open) return
 
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        props.onClose()
-      }
+      if (e.key === 'Escape') props.onClose()
     }
 
     document.addEventListener('keydown', handleEscape)
@@ -46,12 +42,12 @@ export function GlassModal(props: GlassModalProps) {
     <Portal>
       <Presence>
         <Show when={props.open}>
-          {/* Backdrop */}
+          {/* Backdrop - darker with blur for depth */}
           <Motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.25 }}
             class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
             onClick={props.onClose}
           />
@@ -59,40 +55,30 @@ export function GlassModal(props: GlassModalProps) {
           {/* Modal container */}
           <div class="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
             <Motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ duration: 0.3, easing: [0.16, 1, 0.3, 1] }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.2, easing: 'ease-out' }}
               class={`
                 w-full ${sizeStyles[props.size ?? 'md']}
-                liquid-surface rounded-2xl
+                glass-elevated rounded-3xl
                 pointer-events-auto
-                max-h-[90vh] overflow-hidden flex flex-col
+                max-h-[85vh] overflow-hidden flex flex-col
               `}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
               <Show when={props.title}>
-                <div class="flex items-center justify-between px-6 py-4 border-b border-[var(--glass-border)]">
-                  <h2 class="text-lg font-display font-semibold text-primary">
+                <div class="flex items-center justify-between px-6 py-5 border-b border-[var(--glass-border)]">
+                  <h2 class="text-lg font-semibold text-primary">
                     {props.title}
                   </h2>
                   <button
                     onClick={props.onClose}
-                    class="p-2 rounded-lg hover:bg-[var(--glass-bg)] transition-colors text-secondary hover:text-primary"
+                    class="pill p-2.5"
                   >
-                    <svg
-                      class="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M6 18L18 6M6 6l12 12"
-                      />
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
