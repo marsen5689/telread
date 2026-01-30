@@ -1,6 +1,8 @@
 export {
   getTelegramClient,
   getClientVersion,
+  isClientReady,
+  setClientReady,
   isAuthenticated,
   getCurrentUser,
   logout,

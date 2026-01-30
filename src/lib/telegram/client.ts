@@ -1,4 +1,5 @@
 import { TelegramClient } from '@mtcute/web'
+import { createSignal } from 'solid-js'
 import { TELEGRAM_CONFIG, validateConfig } from '@/config/telegram'
 
 let clientInstance: TelegramClient | null = null
@@ -8,6 +9,12 @@ let clientInstance: TelegramClient | null = null
  * Used to invalidate stale event handlers and callbacks
  */
 let clientVersion = 0
+
+/**
+ * Reactive signal for client readiness
+ * Used by queries to wait for client to be ready
+ */
+const [clientReady, setClientReadySignal] = createSignal(false)
 
 /**
  * Log level constants (matching mtcute LogManager)
@@ -133,6 +140,25 @@ export function getClientVersion(): number {
 }
 
 /**
+ * Check if client is ready for API calls (reactive)
+ * Returns true after successful connection and authentication
+ */
+export function isClientReady(): boolean {
+  return clientReady()
+}
+
+/**
+ * Mark client as ready for API calls
+ * Called after successful connect() and authentication
+ */
+export function setClientReady(ready: boolean): void {
+  setClientReadySignal(ready)
+  if (import.meta.env.DEV) {
+    console.log('[TelRead] Client ready state:', ready)
+  }
+}
+
+/**
  * Set mtcute log level dynamically
  *
  * @param level - 0=OFF, 1=ERROR, 2=WARN, 3=INFO, 4=DEBUG, 5=VERBOSE
@@ -196,6 +222,7 @@ export async function logout(): Promise<void> {
   if (clientInstance) {
     // Increment version before cleanup to signal handlers
     clientVersion++
+    setClientReadySignal(false)
 
     if (import.meta.env.DEV) {
       console.log('[TelRead] Logging out (version:', clientVersion, ')')
@@ -220,6 +247,7 @@ export async function logout(): Promise<void> {
  */
 export function resetClient(): void {
   clientVersion++
+  setClientReadySignal(false)
   clientInstance = null
 
   if (import.meta.env.DEV) {

@@ -114,9 +114,9 @@ persistQueryClient({
   dehydrateOptions: {
     shouldDehydrateQuery: (query) => {
       const key = query.queryKey as string[]
-      // Don't persist media downloads (post images) - too large
-      // But DO persist profile photos - they use data URLs now
-      if (key[0] === 'media' && key[1] === 'download') return false
+      // Don't persist media queries - they use blob URLs (session-only)
+      // Media persistence is handled by separate IndexedDB cache in media.ts
+      if (key[0] === 'media') return false
       return query.state.status === 'success'
     },
   },

@@ -1,5 +1,6 @@
+import { createResource } from 'solid-js'
 import { Avatar } from './Avatar'
-import { useProfilePhoto } from '@/lib/query'
+import { downloadProfilePhoto } from '@/lib/telegram'
 
 interface UserAvatarProps {
   userId: number
@@ -12,18 +13,25 @@ interface UserAvatarProps {
 /**
  * UserAvatar - Avatar that automatically loads user profile photo
  *
- * Uses useProfilePhoto hook to fetch and cache the user's avatar.
+ * Uses createResource for direct async loading with proper SolidJS reactivity.
  * Falls back to initials-based avatar while loading or if no photo exists.
  */
 export function UserAvatar(props: UserAvatarProps) {
-  const photoQuery = useProfilePhoto(
+  const [photoUrl] = createResource(
     () => props.userId,
-    'small'
+    async (userId) => {
+      if (!userId || userId === 0) return null
+      try {
+        return await downloadProfilePhoto(userId, 'small')
+      } catch {
+        return null
+      }
+    }
   )
 
   return (
     <Avatar
-      src={photoQuery.data}
+      src={photoUrl()}
       name={props.name}
       size={props.size}
       class={props.class}

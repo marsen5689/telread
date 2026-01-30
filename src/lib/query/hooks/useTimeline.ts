@@ -16,6 +16,7 @@ import {
 } from '@/lib/store'
 import { getTime, groupPostsByMediaGroup } from '@/lib/utils'
 import { queryKeys } from '../keys'
+import { queryClient } from '../client'
 
 /**
  * Hook to fetch messages from a single channel
@@ -87,6 +88,69 @@ export interface TimelineData {
   posts: Message[]
   channels: ChannelWithLastMessage[]
   channelMap: Map<number, ChannelWithLastMessage>
+}
+
+/**
+ * Add a new post to the TanStack Query cache
+ * Called when real-time updates arrive to persist new posts
+ */
+export function addPostToCache(post: Message): void {
+  queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
+    if (!old) return old
+
+    // Check if post already exists
+    const existingIndex = old.posts.findIndex(
+      (p) => p.channelId === post.channelId && p.id === post.id
+    )
+
+    let newPosts: Message[]
+    if (existingIndex >= 0) {
+      // Update existing post
+      newPosts = [...old.posts]
+      newPosts[existingIndex] = post
+    } else {
+      // Add new post and sort by date
+      newPosts = [post, ...old.posts].sort((a, b) => getTime(b.date) - getTime(a.date))
+    }
+
+    // Update channel's lastMessage if this post is newer
+    const newChannels = old.channels.map((channel) => {
+      if (channel.id === post.channelId) {
+        const currentTime = channel.lastMessage ? getTime(channel.lastMessage.date) : 0
+        const newTime = getTime(post.date)
+        if (newTime > currentTime) {
+          return { ...channel, lastMessage: post }
+        }
+      }
+      return channel
+    })
+
+    return {
+      ...old,
+      posts: newPosts,
+      channels: newChannels,
+    }
+  })
+}
+
+/**
+ * Remove posts from TanStack Query cache
+ * Called when posts are deleted
+ */
+export function removePostsFromCache(channelId: number, messageIds: number[]): void {
+  queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
+    if (!old) return old
+
+    const idsSet = new Set(messageIds)
+    const newPosts = old.posts.filter(
+      (p) => !(p.channelId === channelId && idsSet.has(p.id))
+    )
+
+    return {
+      ...old,
+      posts: newPosts,
+    }
+  })
 }
 
 /**

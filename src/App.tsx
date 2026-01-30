@@ -5,6 +5,7 @@ import { queryClient } from '@/lib/query'
 import { authStore } from '@/lib/store'
 import {
   getTelegramClient,
+  setClientReady,
   startUpdatesListener,
   stopUpdatesListener,
 } from '@/lib/telegram'
@@ -138,6 +139,8 @@ export function App() {
 
       if (user) {
         authStore.setUser(user)
+        // Mark client as ready for API calls (media downloads, etc.)
+        setClientReady(true)
         client.startUpdatesLoop().then(() => {
           if (import.meta.env.DEV) {
             console.log('[App] Updates loop started')

@@ -7,6 +7,7 @@ import {
   updatePostReactions,
   hasPosts,
 } from '@/lib/store'
+import { addPostToCache, removePostsFromCache } from '@/lib/query/hooks'
 import type { Message as TgMessage, RawUpdateInfo, Chat } from '@mtcute/web'
 
 export type UpdatesCleanup = () => void
@@ -52,6 +53,8 @@ function processPendingMessages(): void {
     const mapped = mapMessage(message, chatId)
     if (mapped) {
       upsertPost(mapped)
+      // Also update TanStack Query cache for persistence
+      addPostToCache(mapped)
     }
   }
 }
@@ -117,6 +120,8 @@ export function startUpdatesListener(): UpdatesCleanup {
       const mapped = mapMessage(message, chatId)
       if (mapped) {
         upsertPost(mapped)
+        // Also update TanStack Query cache for persistence across page reloads
+        addPostToCache(mapped)
       }
     } catch (error) {
       if (import.meta.env.DEV) {
@@ -140,6 +145,8 @@ export function startUpdatesListener(): UpdatesCleanup {
       const mapped = mapMessage(message, chatId)
       if (mapped) {
         upsertPost(mapped)
+        // Also update TanStack Query cache for persistence
+        addPostToCache(mapped)
       }
     } catch (error) {
       if (import.meta.env.DEV) {
@@ -156,6 +163,8 @@ export function startUpdatesListener(): UpdatesCleanup {
       if (channelId === null) return
 
       removePosts(channelId, update.messageIds)
+      // Also update TanStack Query cache for persistence
+      removePostsFromCache(channelId, update.messageIds)
     } catch (error) {
       if (import.meta.env.DEV) {
         console.error('[Updates] Error handling delete message:', error)

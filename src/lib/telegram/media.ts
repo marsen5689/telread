@@ -1,4 +1,4 @@
-import { getTelegramClient } from './client'
+import { getTelegramClient, isClientReady } from './client'
 import { MEDIA_CACHE_MAX_SIZE } from '@/config/constants'
 import { get, set } from 'idb-keyval'
 import type { Photo, Video, Document, Sticker, Audio, Voice } from '@mtcute/web'
@@ -95,11 +95,75 @@ class MediaLRUCache {
 const mediaCache = new MediaLRUCache(MEDIA_CACHE_MAX_SIZE)
 
 // ============================================================================
+// Persistent Media Cache (IndexedDB)
+// ============================================================================
+
+const MEDIA_CACHE_PREFIX = 'media-thumb:'
+const MEDIA_CACHE_VERSION = 2 // v2: binary data instead of base64
+const MEDIA_CACHE_TTL = 1000 * 60 * 60 * 24 * 7 // 7 days
+
+interface CachedMedia {
+  data: Uint8Array // Binary data (IndexedDB supports this natively)
+  mimeType: string
+  timestamp: number
+  version: number
+}
+
+/**
+ * Get media thumbnail from persistent cache
+ * Returns blob URL created from cached binary data
+ */
+async function getCachedMediaThumbnail(
+  channelId: number,
+  messageId: number,
+  size: string
+): Promise<string | null> {
+  try {
+    const key = `${MEDIA_CACHE_PREFIX}${channelId}:${messageId}:${size}`
+    const cached = await get<CachedMedia>(key)
+
+    if (!cached) return null
+    if (cached.version !== MEDIA_CACHE_VERSION) return null
+    if (Date.now() - cached.timestamp > MEDIA_CACHE_TTL) return null
+
+    // Create blob URL from binary data
+    const blob = new Blob([cached.data], { type: cached.mimeType })
+    return URL.createObjectURL(blob)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Save media thumbnail to persistent cache (binary data)
+ */
+async function cacheMediaThumbnail(
+  channelId: number,
+  messageId: number,
+  size: string,
+  buffer: Uint8Array,
+  mimeType: string
+): Promise<void> {
+  try {
+    const key = `${MEDIA_CACHE_PREFIX}${channelId}:${messageId}:${size}`
+    const cached: CachedMedia = {
+      data: buffer, // Store binary directly
+      mimeType,
+      timestamp: Date.now(),
+      version: MEDIA_CACHE_VERSION,
+    }
+    await set(key, cached)
+  } catch {
+    // Ignore cache errors
+  }
+}
+
+// ============================================================================
 // Persistent Profile Photo Cache (IndexedDB)
 // ============================================================================
 
 const PROFILE_CACHE_PREFIX = 'profile-photo:'
-const PROFILE_CACHE_VERSION = 1
+const PROFILE_CACHE_VERSION = 2 // v2: binary data instead of base64
 const PROFILE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7 // 7 days
 
 // Separate in-memory cache for profile photos (no eviction)
@@ -107,30 +171,16 @@ const PROFILE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7 // 7 days
 const profilePhotoMemoryCache = new Map<string, string>()
 
 interface CachedProfilePhoto {
-  data: string // base64
+  data: Uint8Array // Binary data
   timestamp: number
   version: number
 }
 
-/**
- * Convert Uint8Array to base64 (chunked to avoid stack overflow)
- */
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  const CHUNK_SIZE = 0x8000 // 32KB chunks
-  const chunks: string[] = []
-
-  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length))
-    chunks.push(String.fromCharCode.apply(null, chunk as unknown as number[]))
-  }
-
-  return btoa(chunks.join(''))
-}
-
-// base64ToUint8Array removed - no longer needed since we use data URLs directly
+// Binary data is stored directly in IndexedDB - no base64 conversion needed
 
 /**
  * Get profile photo from persistent cache
+ * Returns blob URL created from cached binary data
  */
 async function getCachedProfilePhoto(peerId: number, size: string): Promise<string | null> {
   try {
@@ -143,21 +193,22 @@ async function getCachedProfilePhoto(peerId: number, size: string): Promise<stri
     if (cached.version !== PROFILE_CACHE_VERSION) return null
     if (Date.now() - cached.timestamp > PROFILE_CACHE_TTL) return null
 
-    // Return data URL (base64) - can be persisted
-    return `data:image/jpeg;base64,${cached.data}`
+    // Create blob URL from binary data
+    const blob = new Blob([cached.data], { type: 'image/jpeg' })
+    return URL.createObjectURL(blob)
   } catch {
     return null
   }
 }
 
 /**
- * Save profile photo to persistent cache
+ * Save profile photo to persistent cache (binary data)
  */
 async function cacheProfilePhoto(peerId: number, size: string, buffer: Uint8Array): Promise<void> {
   try {
     const key = `${PROFILE_CACHE_PREFIX}${peerId}:${size}`
     const cached: CachedProfilePhoto = {
-      data: uint8ArrayToBase64(buffer),
+      data: buffer, // Store binary directly
       timestamp: Date.now(),
       version: PROFILE_CACHE_VERSION,
     }
@@ -275,17 +326,32 @@ export async function downloadMedia(
 
   debugLog(`downloadMedia called: channel=${channelId}, msg=${messageId}, thumb=${thumbSize}`)
 
-  // Check cache first
+  // Check memory cache first
   const cached = mediaCache.get(cacheKey)
   if (cached) {
-    debugLog(`Cache hit: ${cacheKey}`)
+    debugLog(`Memory cache hit: ${cacheKey}`)
     return cached
+  }
+
+  // For thumbnails, check IndexedDB persistent cache
+  if (thumbSize) {
+    const persistedUrl = await getCachedMediaThumbnail(channelId, messageId, thumbSize)
+    if (persistedUrl) {
+      debugLog(`IndexedDB cache hit: ${cacheKey}`)
+      mediaCache.set(cacheKey, persistedUrl)
+      return persistedUrl
+    }
   }
 
   // Check if already aborted
   if (signal?.aborted) {
     debugLog(`Already aborted: ${cacheKey}`)
     return null
+  }
+
+  // Check if client is ready for API calls - throw to trigger retry
+  if (!isClientReady()) {
+    throw new Error('Client not ready')
   }
 
   const client = getTelegramClient()
@@ -448,9 +514,16 @@ export async function downloadMedia(
 
     // Thumbnails are always JPEG images
     const mimeType = thumbSize ? 'image/jpeg' : getMimeType(msg.media)
-    // Note: new Uint8Array wrapper needed for TypeScript compatibility with mtcute's buffer type
-    const blob = new Blob([new Uint8Array(buffer)], { type: mimeType })
+    const uint8Buffer = new Uint8Array(buffer)
+
+    // Create blob URL
+    const blob = new Blob([uint8Buffer], { type: mimeType })
     const url = URL.createObjectURL(blob)
+
+    // For thumbnails: persist binary to IndexedDB (async, don't await)
+    if (thumbSize) {
+      cacheMediaThumbnail(channelId, messageId, thumbSize, uint8Buffer, mimeType)
+    }
 
     mediaCache.set(cacheKey, url)
     debugLog(`Cached media: ${cacheKey} (cache size: ${mediaCache.size})`)
@@ -490,9 +563,13 @@ export async function downloadProfilePhoto(
   // Check persistent cache (IndexedDB)
   const persistedUrl = await getCachedProfilePhoto(peerId, size)
   if (persistedUrl) {
-    // Store in memory cache (no eviction = blob URL stays valid)
     profilePhotoMemoryCache.set(cacheKey, persistedUrl)
     return persistedUrl
+  }
+
+  // No cache - check if client is ready for API calls
+  if (!isClientReady()) {
+    throw new Error('Client not ready')
   }
 
   const client = getTelegramClient()
@@ -528,13 +605,13 @@ export async function downloadProfilePhoto(
     // Save to persistent cache (async, don't await)
     cacheProfilePhoto(peerId, size, uint8Buffer)
 
-    // Return data URL (base64) - can be persisted by TanStack Query
-    const base64 = uint8ArrayToBase64(uint8Buffer)
-    const dataUrl = `data:image/jpeg;base64,${base64}`
+    // Create blob URL
+    const blob = new Blob([uint8Buffer], { type: 'image/jpeg' })
+    const url = URL.createObjectURL(blob)
 
     // Store in non-evicting memory cache
-    profilePhotoMemoryCache.set(cacheKey, dataUrl)
-    return dataUrl
+    profilePhotoMemoryCache.set(cacheKey, url)
+    return url
   } catch (error) {
     debugWarn(`Failed to download profile photo: peer=${peerId}`, error)
     return null
