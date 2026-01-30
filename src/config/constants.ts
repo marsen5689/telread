@@ -39,9 +39,10 @@ export const MAX_COMMENT_LENGTH = 4096
 /**
  * Maximum items in media LRU cache
  * Each item holds a blob URL reference
- * Keep low to save memory - IndexedDB provides persistence
+ * Note: We don't revoke URLs on eviction (components may still reference them)
+ * so browser GC handles cleanup. IndexedDB provides persistence.
  */
-export const MEDIA_CACHE_MAX_SIZE = 30
+export const MEDIA_CACHE_MAX_SIZE = 100
 
 /**
  * Query cache stale time in milliseconds (30 minutes)

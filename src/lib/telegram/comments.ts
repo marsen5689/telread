@@ -547,8 +547,10 @@ function mapTLMedia(media: TLMedia | undefined): MessageMedia | undefined {
     const videoAttr = attrs.find((a) => a._ === 'documentAttributeVideo')
     if (videoAttr) {
       const isAnimation = attrs.some((a) => a._ === 'documentAttributeAnimated')
+      // Check for round video (video note / кружок)
+      const isRound = 'roundMessage' in videoAttr && videoAttr.roundMessage
       return {
-        type: isAnimation ? 'animation' : 'video',
+        type: isAnimation ? 'animation' : isRound ? 'video_note' : 'video',
         width: videoAttr.w,
         height: videoAttr.h,
         duration: videoAttr.duration,
@@ -574,10 +576,23 @@ function mapTLMedia(media: TLMedia | undefined): MessageMedia | undefined {
     const stickerAttr = attrs.find((a) => a._ === 'documentAttributeSticker')
     if (stickerAttr) {
       const imageAttr = attrs.find((a) => a._ === 'documentAttributeImageSize')
+      const videoAttrForSticker = attrs.find((a) => a._ === 'documentAttributeVideo')
+      
+      // Determine sticker type based on mime and attributes
+      let stickerType: 'static' | 'animated' | 'video' = 'static'
+      if (doc.mimeType === 'application/x-tgsticker') {
+        stickerType = 'animated'
+      } else if (doc.mimeType === 'video/webm' || videoAttrForSticker) {
+        stickerType = 'video'
+      }
+      
       return {
         type: 'sticker',
-        width: imageAttr?.w,
-        height: imageAttr?.h,
+        width: imageAttr?.w ?? videoAttrForSticker?.w,
+        height: imageAttr?.h ?? videoAttrForSticker?.h,
+        stickerType,
+        stickerEmoji: 'alt' in stickerAttr ? String(stickerAttr.alt) : undefined,
+        mimeType: doc.mimeType,
       }
     }
 

@@ -43,21 +43,18 @@ class MediaLRUCache {
         this.cache.set(key, value)
         return
       }
-      // Different value - revoke old URL
-      if (oldValue) {
-        URL.revokeObjectURL(oldValue)
-      }
+      // Different value - just remove from cache, don't revoke
+      // Components may still be rendering the old blob URL
       this.cache.delete(key)
     }
 
     // Evict oldest entries if at capacity
+    // NOTE: We intentionally do NOT revoke blob URLs here because React components
+    // may still be rendering them. The browser will garbage collect blobs
+    // automatically when there are no more references.
     while (this.cache.size >= this.maxSize) {
       const oldestKey = this.cache.keys().next().value
       if (oldestKey) {
-        const oldestValue = this.cache.get(oldestKey)
-        if (oldestValue) {
-          URL.revokeObjectURL(oldestValue)
-        }
         this.cache.delete(oldestKey)
       }
     }

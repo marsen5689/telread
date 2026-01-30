@@ -1,10 +1,10 @@
-import { createSignal, Show, Match, Switch, For, onCleanup, onMount, createMemo } from 'solid-js'
+import { createSignal, Show, Match, Switch, For, onCleanup, onMount, createMemo, createEffect } from 'solid-js'
 import { Motion } from 'solid-motionone'
 import { DEFAULT_ASPECT_RATIO } from '@/config/constants'
 import type { MessageMedia } from '@/lib/telegram'
 import { useMedia } from '@/lib/query'
 import { Skeleton } from '@/components/ui'
-import { Play, FileText, Music, MapPin, User, ExternalLink, X } from 'lucide-solid'
+import { Play, Pause, FileText, Music, MapPin, User, ExternalLink, X, Maximize2 } from 'lucide-solid'
 
 interface PostMediaProps {
   channelId: number
@@ -119,53 +119,26 @@ export function PostMedia(props: PostMediaProps) {
           </div>
         </Match>
 
-        {/* Video - Threads style */}
+        {/* Video - Inline player */}
         <Match when={props.media.type === 'video'}>
-          <div 
-            class="relative rounded-2xl overflow-hidden flex-shrink-0 shadow-sm hover:shadow-md transition-shadow" 
-            style={containerStyle()}
-          >
-            <Show
-              when={mediaQuery.data}
-              fallback={<div class="absolute inset-0 skeleton" />}
-            >
-              {(url) => (
-                <div class="relative w-full h-full">
-                  <img
-                    src={url()}
-                    alt="Video thumbnail"
-                    class="w-full h-full object-cover"
-                  />
-                  {/* Play button overlay */}
-                  <div
-                    class="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setIsExpanded(true)
-                    }}
-                  >
-                    <button
-                      type="button"
-                      aria-label="Play video"
-                      class="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center
-                             shadow-lg hover:bg-white hover:scale-105 transition-all
-                             focus:outline-none focus:ring-2 focus:ring-accent"
-                    >
-                      <Play size={24} class="text-gray-900 ml-0.5" fill="currentColor" />
-                    </button>
-                  </div>
-                  {/* Duration badge */}
-                  <Show when={props.media.duration}>
-                    {(duration) => (
-                      <div class="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/60 text-white text-xs font-medium backdrop-blur-sm">
-                        {formatDuration(duration())}
-                      </div>
-                    )}
-                  </Show>
-                </div>
-              )}
-            </Show>
-          </div>
+          <InlineVideoPlayer
+            channelId={props.channelId}
+            messageId={props.messageId}
+            media={props.media}
+            containerStyle={containerStyle()}
+            isVisible={isVisible}
+            onExpand={() => setIsExpanded(true)}
+          />
+        </Match>
+
+        {/* Video Note (кружок) - Circular player */}
+        <Match when={props.media.type === 'video_note'}>
+          <InlineVideoNote
+            channelId={props.channelId}
+            messageId={props.messageId}
+            media={props.media}
+            isVisible={isVisible}
+          />
         </Match>
 
         {/* GIF/Animation - plays inline automatically */}
@@ -198,88 +171,32 @@ export function PostMedia(props: PostMediaProps) {
 
         {/* Sticker */}
         <Match when={props.media.type === 'sticker'}>
-          <div class="w-40 h-40">
-            <Show
-              when={mediaQuery.data}
-              fallback={<Skeleton class="w-full h-full" rounded="lg" />}
-            >
-              {(url) => (
-                <img
-                  src={url()}
-                  alt="Sticker"
-                  class="w-full h-full object-contain drop-shadow-md"
-                />
-              )}
-            </Show>
-          </div>
+          <StickerPlayer
+            channelId={props.channelId}
+            messageId={props.messageId}
+            media={props.media}
+            isVisible={isVisible}
+          />
         </Match>
 
-        {/* Audio */}
+        {/* Audio - Inline player */}
         <Match when={props.media.type === 'audio'}>
-          <div class="glass rounded-xl p-4 flex items-center gap-4">
-            <div class="w-12 h-12 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center flex-shrink-0">
-              <Music size={24} class="text-accent" />
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium text-primary truncate">
-                {props.media.title || props.media.fileName || 'Audio'}
-              </p>
-              <p class="text-xs text-tertiary truncate">
-                {props.media.performer || formatDuration(props.media.duration ?? 0)}
-                {props.media.performer && props.media.duration && ` • ${formatDuration(props.media.duration)}`}
-              </p>
-            </div>
-            <button
-              type="button"
-              aria-label="Play audio"
-              onClick={(e) => {
-                e.stopPropagation()
-                setIsExpanded(true)
-              }}
-              class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center flex-shrink-0
-                     hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-accent"
-            >
-              <Play size={20} class="text-white ml-0.5" fill="currentColor" />
-            </button>
-          </div>
+          <InlineAudioPlayer
+            channelId={props.channelId}
+            messageId={props.messageId}
+            media={props.media}
+            isVisible={isVisible}
+          />
         </Match>
 
-        {/* Voice */}
+        {/* Voice - Inline player with waveform */}
         <Match when={props.media.type === 'voice'}>
-          <div class="glass rounded-xl p-3 flex items-center gap-3">
-            <button
-              type="button"
-              aria-label="Play voice message"
-              onClick={(e) => {
-                e.stopPropagation()
-                setIsExpanded(true)
-              }}
-              class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center flex-shrink-0
-                     hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-accent"
-            >
-              <Play size={20} class="text-white ml-0.5" fill="currentColor" />
-            </button>
-            {/* Waveform visualization */}
-            <div class="flex-1 flex items-center gap-0.5 h-8">
-              <Show when={props.media.waveform} fallback={
-                <div class="w-full h-4 bg-[var(--accent)]/20 rounded" />
-              }>
-                {(waveform) => (
-                  <For each={waveform().slice(0, 50)}>
-                    {(value) => (
-                      <div
-                        class="w-1 bg-[var(--accent)]/60 rounded-full"
-                        style={{ height: `${Math.max(4, (value / 31) * 100)}%` }}
-                      />
-                    )}
-                  </For>
-                )}
-              </Show>
-            </div>
-            <span class="text-xs text-tertiary flex-shrink-0">
-              {formatDuration(props.media.duration ?? 0)}
-            </span>
-          </div>
+          <InlineVoicePlayer
+            channelId={props.channelId}
+            messageId={props.messageId}
+            media={props.media}
+            isVisible={isVisible}
+          />
         </Match>
 
         {/* Poll */}
@@ -437,7 +354,7 @@ export function PostMedia(props: PostMediaProps) {
         </Match>
       </Switch>
 
-      {/* Fullscreen modal */}
+      {/* Fullscreen modal - only for photos now */}
       <Show when={isExpanded()}>
         <MediaModal
           channelId={props.channelId}
@@ -445,6 +362,606 @@ export function PostMedia(props: PostMediaProps) {
           media={props.media}
           onClose={() => setIsExpanded(false)}
         />
+      </Show>
+    </div>
+  )
+}
+
+/**
+ * Inline Voice Player with interactive waveform
+ */
+function InlineVoicePlayer(props: {
+  channelId: number
+  messageId: number
+  media: MessageMedia
+  isVisible: () => boolean
+}) {
+  const [isPlaying, setIsPlaying] = createSignal(false)
+  const [currentTime, setCurrentTime] = createSignal(0)
+  const [duration, setDuration] = createSignal(props.media.duration ?? 0)
+  let audioRef: HTMLAudioElement | undefined
+
+  // Load full audio file
+  const audioQuery = useMedia(
+    () => props.channelId,
+    () => props.messageId,
+    () => undefined,
+    props.isVisible
+  )
+
+  const progress = () => duration() > 0 ? (currentTime() / duration()) * 100 : 0
+  const waveform = () => props.media.waveform ?? []
+  const barCount = 40
+
+  // Normalize waveform to barCount bars
+  const normalizedWaveform = createMemo(() => {
+    const w = waveform()
+    if (w.length === 0) return Array(barCount).fill(4)
+    
+    const step = w.length / barCount
+    const result: number[] = []
+    for (let i = 0; i < barCount; i++) {
+      const idx = Math.floor(i * step)
+      result.push(w[idx] ?? 4)
+    }
+    return result
+  })
+
+  const handlePlayPause = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (!audioRef) return
+    
+    if (isPlaying()) {
+      audioRef.pause()
+    } else {
+      audioRef.play()
+    }
+  }
+
+  const handleWaveformClick = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (!audioRef || duration() === 0) return
+    
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const percent = x / rect.width
+    audioRef.currentTime = percent * duration()
+  }
+
+  const displayTime = () => {
+    if (isPlaying() || currentTime() > 0) {
+      return formatDuration(currentTime())
+    }
+    return formatDuration(duration())
+  }
+
+  return (
+    <div class="glass rounded-xl p-3 flex items-center gap-3">
+      {/* Play/Pause button */}
+      <button
+        type="button"
+        aria-label={isPlaying() ? 'Pause' : 'Play voice message'}
+        onClick={handlePlayPause}
+        disabled={!audioQuery.data}
+        class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center flex-shrink-0
+               hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-accent
+               disabled:opacity-50"
+      >
+        <Show when={isPlaying()} fallback={
+          <Play size={20} class="text-white ml-0.5" fill="currentColor" />
+        }>
+          <Pause size={20} class="text-white" fill="currentColor" />
+        </Show>
+      </button>
+
+      {/* Interactive Waveform */}
+      <div 
+        class="flex-1 flex items-center gap-0.5 h-8 cursor-pointer"
+        onClick={handleWaveformClick}
+      >
+        <For each={normalizedWaveform()}>
+          {(value, index) => {
+            const barProgress = () => (index() / barCount) * 100
+            const isPlayed = () => barProgress() < progress()
+            return (
+              <div
+                class={`w-1 rounded-full transition-colors ${
+                  isPlayed() ? 'bg-[var(--accent)]' : 'bg-[var(--accent)]/30'
+                }`}
+                style={{ height: `${Math.max(12, (value / 31) * 100)}%` }}
+              />
+            )
+          }}
+        </For>
+      </div>
+
+      {/* Duration / Current time */}
+      <span class="text-xs text-tertiary flex-shrink-0 min-w-[36px] text-right">
+        {displayTime()}
+      </span>
+
+      {/* Hidden audio element */}
+      <Show when={audioQuery.data}>
+        {(url) => (
+          <audio
+            ref={audioRef}
+            src={url()}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => {
+              setIsPlaying(false)
+              setCurrentTime(0)
+            }}
+            onTimeUpdate={() => setCurrentTime(audioRef?.currentTime ?? 0)}
+            onLoadedMetadata={() => setDuration(audioRef?.duration ?? props.media.duration ?? 0)}
+            preload="metadata"
+          />
+        )}
+      </Show>
+    </div>
+  )
+}
+
+/**
+ * Inline Video Note (кружок) - Circular video player like Telegram
+ */
+function InlineVideoNote(props: {
+  channelId: number
+  messageId: number
+  media: MessageMedia
+  isVisible: () => boolean
+}) {
+  const [isPlaying, setIsPlaying] = createSignal(false)
+  const [currentTime, setCurrentTime] = createSignal(0)
+  const [duration, setDuration] = createSignal(props.media.duration ?? 0)
+  let videoRef: HTMLVideoElement | undefined
+
+  // Load full video file
+  const videoQuery = useMedia(
+    () => props.channelId,
+    () => props.messageId,
+    () => undefined,
+    props.isVisible
+  )
+
+  const progress = () => duration() > 0 ? (currentTime() / duration()) * 100 : 0
+  
+  // Size - кружки зазвичай маленькі
+  const size = 200
+
+  const handleClick = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (!videoRef) return
+    
+    if (isPlaying()) {
+      videoRef.pause()
+    } else {
+      videoRef.play()
+    }
+  }
+
+  // Calculate stroke dash for circular progress
+  const circumference = 2 * Math.PI * 96 // radius = 96
+  const strokeDashoffset = () => circumference - (progress() / 100) * circumference
+
+  return (
+    <div 
+      class="relative cursor-pointer group"
+      style={{ width: `${size}px`, height: `${size}px` }}
+      onClick={handleClick}
+    >
+      {/* Circular video container */}
+      <div class="w-full h-full rounded-full overflow-hidden bg-black/20">
+        <Show
+          when={videoQuery.data}
+          fallback={
+            <div class="w-full h-full skeleton rounded-full" />
+          }
+        >
+          {(url) => (
+            <video
+              ref={videoRef}
+              src={url()}
+              class="w-full h-full object-cover"
+              loop
+              playsinline
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onTimeUpdate={() => setCurrentTime(videoRef?.currentTime ?? 0)}
+              onLoadedMetadata={() => setDuration(videoRef?.duration ?? props.media.duration ?? 0)}
+              preload="metadata"
+            />
+          )}
+        </Show>
+      </div>
+
+      {/* Circular progress ring */}
+      <svg 
+        class="absolute inset-0 -rotate-90 pointer-events-none"
+        width={size} 
+        height={size}
+      >
+        {/* Background ring */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={96}
+          fill="none"
+          stroke="rgba(255,255,255,0.2)"
+          stroke-width="3"
+        />
+        {/* Progress ring */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={96}
+          fill="none"
+          stroke="var(--accent)"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-dasharray={String(circumference)}
+          stroke-dashoffset={strokeDashoffset()}
+          class="transition-all duration-100"
+        />
+      </svg>
+
+      {/* Play overlay (when not playing) */}
+      <Show when={!isPlaying()}>
+        <div class="absolute inset-0 flex items-center justify-center bg-black/30 rounded-full group-hover:bg-black/40 transition-colors">
+          <div class="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+            <Play size={24} class="text-gray-900 ml-0.5" fill="currentColor" />
+          </div>
+        </div>
+      </Show>
+
+      {/* Duration badge */}
+      <div class="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-black/60 text-white text-xs font-medium backdrop-blur-sm">
+        {isPlaying() ? formatDuration(currentTime()) : formatDuration(duration())}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Inline Audio Player with progress bar
+ */
+function InlineAudioPlayer(props: {
+  channelId: number
+  messageId: number
+  media: MessageMedia
+  isVisible: () => boolean
+}) {
+  const [isPlaying, setIsPlaying] = createSignal(false)
+  const [currentTime, setCurrentTime] = createSignal(0)
+  const [duration, setDuration] = createSignal(props.media.duration ?? 0)
+  let audioRef: HTMLAudioElement | undefined
+
+  // Load full audio file
+  const audioQuery = useMedia(
+    () => props.channelId,
+    () => props.messageId,
+    () => undefined,
+    props.isVisible
+  )
+
+  const progress = () => duration() > 0 ? (currentTime() / duration()) * 100 : 0
+
+  const handlePlayPause = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (!audioRef) return
+    
+    if (isPlaying()) {
+      audioRef.pause()
+    } else {
+      audioRef.play()
+    }
+  }
+
+  const handleProgressClick = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (!audioRef || duration() === 0) return
+    
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const percent = x / rect.width
+    audioRef.currentTime = percent * duration()
+  }
+
+  return (
+    <div class="glass rounded-xl p-4">
+      <div class="flex items-center gap-4">
+        {/* Album art / Icon */}
+        <div class="w-12 h-12 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center flex-shrink-0">
+          <Music size={24} class="text-accent" />
+        </div>
+
+        {/* Info */}
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-primary truncate">
+            {props.media.title || props.media.fileName || 'Audio'}
+          </p>
+          <p class="text-xs text-tertiary truncate">
+            {props.media.performer || 'Unknown artist'}
+          </p>
+        </div>
+
+        {/* Play/Pause button */}
+        <button
+          type="button"
+          aria-label={isPlaying() ? 'Pause' : 'Play audio'}
+          onClick={handlePlayPause}
+          disabled={!audioQuery.data}
+          class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center flex-shrink-0
+                 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-accent
+                 disabled:opacity-50"
+        >
+          <Show when={isPlaying()} fallback={
+            <Play size={20} class="text-white ml-0.5" fill="currentColor" />
+          }>
+            <Pause size={20} class="text-white" fill="currentColor" />
+          </Show>
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      <div class="mt-3 flex items-center gap-2">
+        <span class="text-xs text-tertiary min-w-[36px]">
+          {formatDuration(currentTime())}
+        </span>
+        <div 
+          class="flex-1 h-1 bg-[var(--accent)]/20 rounded-full cursor-pointer overflow-hidden"
+          onClick={handleProgressClick}
+        >
+          <div 
+            class="h-full bg-[var(--accent)] rounded-full transition-all duration-100"
+            style={{ width: `${progress()}%` }}
+          />
+        </div>
+        <span class="text-xs text-tertiary min-w-[36px] text-right">
+          {formatDuration(duration())}
+        </span>
+      </div>
+
+      {/* Hidden audio element */}
+      <Show when={audioQuery.data}>
+        {(url) => (
+          <audio
+            ref={audioRef}
+            src={url()}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => {
+              setIsPlaying(false)
+              setCurrentTime(0)
+            }}
+            onTimeUpdate={() => setCurrentTime(audioRef?.currentTime ?? 0)}
+            onLoadedMetadata={() => setDuration(audioRef?.duration ?? props.media.duration ?? 0)}
+            preload="metadata"
+          />
+        )}
+      </Show>
+    </div>
+  )
+}
+
+/**
+ * Inline Video Player
+ */
+function InlineVideoPlayer(props: {
+  channelId: number
+  messageId: number
+  media: MessageMedia
+  containerStyle: Record<string, string>
+  isVisible: () => boolean
+  onExpand: () => void
+}) {
+  const [isPlaying, setIsPlaying] = createSignal(false)
+  const [showControls, setShowControls] = createSignal(true)
+  let videoRef: HTMLVideoElement | undefined
+  let hideControlsTimeout: number | undefined
+
+  // Load thumbnail first
+  const thumbQuery = useMedia(
+    () => props.channelId,
+    () => props.messageId,
+    () => 'large',
+    props.isVisible
+  )
+
+  // Load full video on play
+  const [loadVideo, setLoadVideo] = createSignal(false)
+  const videoQuery = useMedia(
+    () => props.channelId,
+    () => props.messageId,
+    () => undefined,
+    () => loadVideo() && props.isVisible()
+  )
+
+  const handlePlay = (e: MouseEvent) => {
+    e.stopPropagation()
+    setLoadVideo(true)
+  }
+
+  // Auto-play when video is loaded
+  createEffect(() => {
+    if (videoQuery.data && videoRef) {
+      videoRef.play()
+    }
+  })
+
+  const handleVideoClick = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (!videoRef) return
+    
+    if (isPlaying()) {
+      videoRef.pause()
+    } else {
+      videoRef.play()
+    }
+    
+    // Show controls briefly
+    setShowControls(true)
+    clearTimeout(hideControlsTimeout)
+    hideControlsTimeout = window.setTimeout(() => {
+      if (isPlaying()) setShowControls(false)
+    }, 2000)
+  }
+
+  const handleExpand = (e: MouseEvent) => {
+    e.stopPropagation()
+    // Stop inline video before opening fullscreen
+    if (videoRef) {
+      videoRef.pause()
+    }
+    props.onExpand()
+  }
+
+  onCleanup(() => {
+    clearTimeout(hideControlsTimeout)
+  })
+
+  return (
+    <div 
+      class="relative rounded-2xl overflow-hidden flex-shrink-0 shadow-sm hover:shadow-md transition-shadow bg-black" 
+      style={props.containerStyle}
+    >
+      {/* Video element (when loaded) */}
+      <Show when={videoQuery.data}>
+        {(url) => (
+          <video
+            ref={videoRef}
+            src={url()}
+            class="w-full h-full object-cover cursor-pointer"
+            playsinline
+            onClick={handleVideoClick}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => setIsPlaying(false)}
+          />
+        )}
+      </Show>
+
+      {/* Thumbnail (before video loads) */}
+      <Show when={!videoQuery.data}>
+        <Show
+          when={thumbQuery.data}
+          fallback={<div class="absolute inset-0 skeleton" />}
+        >
+          {(url) => (
+            <img
+              src={url()}
+              alt="Video thumbnail"
+              class="w-full h-full object-cover"
+            />
+          )}
+        </Show>
+      </Show>
+
+      {/* Play button overlay */}
+      <Show when={!isPlaying() && showControls()}>
+        <div
+          class="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer"
+          onClick={videoQuery.data ? handleVideoClick : handlePlay}
+        >
+          <button
+            type="button"
+            aria-label="Play video"
+            class="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center
+                   shadow-lg hover:bg-white hover:scale-105 transition-all
+                   focus:outline-none focus:ring-2 focus:ring-accent"
+          >
+            <Show when={!videoQuery.isLoading} fallback={
+              <div class="w-5 h-5 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+            }>
+              <Play size={24} class="text-gray-900 ml-0.5" fill="currentColor" />
+            </Show>
+          </button>
+        </div>
+      </Show>
+
+      {/* Bottom controls - duration & expand */}
+      <Show when={showControls() || !isPlaying()}>
+        <div class="absolute bottom-2 right-2 flex items-center gap-1.5">
+          {/* Duration badge */}
+          <Show when={props.media.duration !== undefined}>
+            <div class="px-2 py-1 rounded-lg bg-black/60 text-white text-xs font-medium backdrop-blur-sm">
+              {formatDuration(props.media.duration!)}
+            </div>
+          </Show>
+          
+          {/* Expand button */}
+          <button
+            type="button"
+            aria-label="Fullscreen"
+            onClick={handleExpand}
+            class="p-1.5 rounded-lg bg-black/60 text-white/80 hover:text-white backdrop-blur-sm
+                   transition-colors focus:outline-none focus:ring-2 focus:ring-white"
+          >
+            <Maximize2 size={16} />
+          </button>
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+/**
+ * Sticker player - supports static, animated (Lottie), and video stickers
+ */
+function StickerPlayer(props: {
+  channelId: number
+  messageId: number
+  media: MessageMedia
+  isVisible: () => boolean
+}) {
+  const mediaQuery = useMedia(
+    () => props.channelId,
+    () => props.messageId,
+    () => undefined,
+    props.isVisible
+  )
+
+  const stickerType = () => props.media.stickerType ?? 'static'
+
+  return (
+    <div class="w-40 h-40">
+      <Show
+        when={mediaQuery.data}
+        fallback={<Skeleton class="w-full h-full" rounded="lg" />}
+      >
+        {(url) => (
+          <Switch>
+            {/* Static sticker (WebP) */}
+            <Match when={stickerType() === 'static'}>
+              <img
+                src={url()}
+                alt={props.media.stickerEmoji || 'Sticker'}
+                class="w-full h-full object-contain drop-shadow-md"
+              />
+            </Match>
+
+            {/* Video sticker (WebM) */}
+            <Match when={stickerType() === 'video'}>
+              <video
+                src={url()}
+                class="w-full h-full object-contain drop-shadow-md"
+                autoplay
+                muted
+                loop
+                playsinline
+              />
+            </Match>
+
+            {/* Animated sticker (Lottie TGS) - fallback to static for now */}
+            <Match when={stickerType() === 'animated'}>
+              {/* TODO: Add Lottie player for .tgs files */}
+              {/* For now, show as static image if available */}
+              <div class="w-full h-full flex items-center justify-center bg-[var(--accent)]/10 rounded-xl">
+                <span class="text-4xl">{props.media.stickerEmoji || '🎭'}</span>
+              </div>
+            </Match>
+          </Switch>
+        )}
       </Show>
     </div>
   )
@@ -493,7 +1010,7 @@ function GifPlayer(props: {
 }
 
 /**
- * Fullscreen media modal
+ * Fullscreen media modal with video player
  */
 function MediaModal(props: {
   channelId: number
@@ -524,18 +1041,21 @@ function MediaModal(props: {
     document.body.style.overflow = ''
   })
 
+  const isVideo = () => props.media.type === 'video' || props.media.type === 'video_note'
+
   return (
     <Motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      class="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
+      class="fixed inset-0 z-[9999] bg-black flex items-center justify-center"
       onClick={props.onClose}
     >
+      {/* Close button */}
       <button
         type="button"
         aria-label="Close"
-        class="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors z-10
+        class="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors z-20
                focus:outline-none focus:ring-2 focus:ring-white"
         onClick={props.onClose}
       >
@@ -543,84 +1063,257 @@ function MediaModal(props: {
       </button>
 
       <div
-        class="w-full h-full flex items-center justify-center p-4"
+        class="w-full h-full flex items-center justify-center"
         onClick={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
       >
-        <Switch>
-          <Match when={props.media.type === 'photo'}>
-            <Show
-              when={fullQuery.data}
-              fallback={
-                <div class="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full" />
-              }
-            >
-              {(url) => (
-                <img
-                  src={url()}
-                  alt="Full size"
-                  class="max-w-full max-h-full object-contain"
-                />
-              )}
-            </Show>
-          </Match>
+        {/* Photo */}
+        <Show when={props.media.type === 'photo'}>
+          <Show
+            when={fullQuery.data}
+            fallback={
+              <div class="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full" />
+            }
+          >
+            {(url) => (
+              <img
+                src={url()}
+                alt="Full size"
+                class="max-w-full max-h-full object-contain"
+              />
+            )}
+          </Show>
+        </Show>
 
-          <Match when={props.media.type === 'video' || props.media.type === 'animation'}>
-            <Show
-              when={fullQuery.data}
-              fallback={
-                <div class="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full" />
-              }
-            >
-              {(url) => (
-                <video
-                  src={url()}
-                  class="max-w-full max-h-full"
-                  controls
-                  autoplay
-                  muted={props.media.type === 'animation'}
-                  loop={props.media.type === 'animation'}
-                />
-              )}
-            </Show>
-          </Match>
-
-          <Match when={props.media.type === 'audio' || props.media.type === 'voice'}>
-            <Show
-              when={fullQuery.data}
-              fallback={
-                <div class="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full" />
-              }
-            >
-              {(url) => (
-                <div
-                  class="bg-white/10 rounded-2xl p-6 min-w-[300px]"
-                  onClick={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  <Show when={props.media.type === 'audio'}>
-                    <div class="text-center mb-4">
-                      <p class="text-white font-medium">{props.media.title || 'Audio'}</p>
-                      <Show when={props.media.performer}>
-                        <p class="text-white/60 text-sm">{props.media.performer}</p>
-                      </Show>
-                    </div>
-                  </Show>
-                  <audio
-                    src={url()}
-                    class="w-full"
-                    controls
-                    autoplay
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  />
-                </div>
-              )}
-            </Show>
-          </Match>
-        </Switch>
+        {/* Video Player */}
+        <Show when={isVideo()}>
+          <FullscreenVideoPlayer
+            url={fullQuery.data ?? undefined}
+            isLoading={fullQuery.isLoading}
+            duration={props.media.duration ?? 0}
+            isRound={props.media.type === 'video_note'}
+            onClose={props.onClose}
+          />
+        </Show>
       </div>
     </Motion.div>
+  )
+}
+
+/**
+ * Fullscreen video player with Telegram-style controls
+ */
+function FullscreenVideoPlayer(props: {
+  url: string | undefined
+  isLoading: boolean
+  duration: number
+  isRound?: boolean
+  onClose: () => void
+}) {
+  const [isPlaying, setIsPlaying] = createSignal(false)
+  const [currentTime, setCurrentTime] = createSignal(0)
+  const [duration, setDuration] = createSignal(props.duration)
+  const [showControls, setShowControls] = createSignal(true)
+  const [isMuted, setIsMuted] = createSignal(false)
+  let videoRef: HTMLVideoElement | undefined
+  let hideControlsTimeout: number | undefined
+
+  const progress = () => duration() > 0 ? (currentTime() / duration()) * 100 : 0
+
+  // Auto-hide controls after 3 seconds
+  const resetHideTimer = () => {
+    setShowControls(true)
+    clearTimeout(hideControlsTimeout)
+    hideControlsTimeout = window.setTimeout(() => {
+      if (isPlaying()) setShowControls(false)
+    }, 3000)
+  }
+
+  // Auto-play when video loads
+  createEffect(() => {
+    if (props.url && videoRef) {
+      videoRef.play().catch(() => {})
+      resetHideTimer()
+    }
+  })
+
+  const handleVideoClick = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (!videoRef) return
+    
+    if (isPlaying()) {
+      videoRef.pause()
+    } else {
+      videoRef.play()
+    }
+    resetHideTimer()
+  }
+
+  const handleProgressClick = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (!videoRef || duration() === 0) return
+    
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const percent = x / rect.width
+    videoRef.currentTime = percent * duration()
+  }
+
+  const toggleMute = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (!videoRef) return
+    videoRef.muted = !videoRef.muted
+    setIsMuted(videoRef.muted)
+  }
+
+  // Keyboard controls
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (!videoRef) return
+    
+    switch (e.key) {
+      case ' ':
+      case 'k':
+        e.preventDefault()
+        if (isPlaying()) videoRef.pause()
+        else videoRef.play()
+        break
+      case 'ArrowLeft':
+        e.preventDefault()
+        videoRef.currentTime = Math.max(0, videoRef.currentTime - 5)
+        break
+      case 'ArrowRight':
+        e.preventDefault()
+        videoRef.currentTime = Math.min(duration(), videoRef.currentTime + 5)
+        break
+      case 'm':
+        e.preventDefault()
+        videoRef.muted = !videoRef.muted
+        setIsMuted(videoRef.muted)
+        break
+    }
+    resetHideTimer()
+  }
+
+  onMount(() => {
+    document.addEventListener('keydown', handleKeyDown)
+  })
+
+  onCleanup(() => {
+    document.removeEventListener('keydown', handleKeyDown)
+    clearTimeout(hideControlsTimeout)
+  })
+
+  return (
+    <div 
+      class="relative w-full h-full flex items-center justify-center"
+      onMouseMove={resetHideTimer}
+      onClick={handleVideoClick}
+    >
+      {/* Loading spinner */}
+      <Show when={props.isLoading || !props.url}>
+        <div class="animate-spin w-10 h-10 border-3 border-white border-t-transparent rounded-full" />
+      </Show>
+
+      {/* Video */}
+      <Show when={props.url}>
+        {(url) => (
+          <video
+            ref={videoRef}
+            src={url()}
+            class={`max-w-full max-h-full ${props.isRound ? 'rounded-full' : ''}`}
+            playsinline
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => {
+              setIsPlaying(false)
+              setShowControls(true)
+            }}
+            onEnded={() => {
+              setIsPlaying(false)
+              setShowControls(true)
+            }}
+            onTimeUpdate={() => setCurrentTime(videoRef?.currentTime ?? 0)}
+            onLoadedMetadata={() => setDuration(videoRef?.duration ?? props.duration)}
+          />
+        )}
+      </Show>
+
+      {/* Center play/pause indicator (shows briefly on toggle) */}
+      <Show when={showControls() && !isPlaying() && props.url}>
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div class="w-20 h-20 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+            <Play size={40} class="text-white ml-1" fill="currentColor" />
+          </div>
+        </div>
+      </Show>
+
+      {/* Bottom controls */}
+      <div 
+        class={`absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent
+                transition-opacity duration-300 ${showControls() ? 'opacity-100' : 'opacity-0'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Progress bar */}
+        <div 
+          class="w-full h-1 bg-white/30 rounded-full cursor-pointer mb-4 group"
+          onClick={handleProgressClick}
+        >
+          {/* Buffered progress could go here */}
+          <div 
+            class="h-full bg-white rounded-full relative transition-all"
+            style={{ width: `${progress()}%` }}
+          >
+            {/* Scrubber handle */}
+            <div class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full 
+                        opacity-0 group-hover:opacity-100 transition-opacity shadow-lg" />
+          </div>
+        </div>
+
+        {/* Controls row */}
+        <div class="flex items-center gap-4">
+          {/* Play/Pause */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleVideoClick(e)
+            }}
+            class="p-2 text-white hover:text-white/80 transition-colors"
+          >
+            <Show when={isPlaying()} fallback={<Play size={28} fill="currentColor" />}>
+              <Pause size={28} fill="currentColor" />
+            </Show>
+          </button>
+
+          {/* Time */}
+          <div class="text-white text-sm font-medium">
+            {formatDuration(currentTime())} / {formatDuration(duration())}
+          </div>
+
+          {/* Spacer */}
+          <div class="flex-1" />
+
+          {/* Mute */}
+          <button
+            type="button"
+            onClick={toggleMute}
+            class="p-2 text-white hover:text-white/80 transition-colors"
+          >
+            <Show when={isMuted()} fallback={
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              </svg>
+            }>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+              </svg>
+            </Show>
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

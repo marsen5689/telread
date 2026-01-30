@@ -55,7 +55,7 @@ export interface Message {
 }
 
 export interface MessageMedia {
-  type: 'photo' | 'video' | 'document' | 'audio' | 'voice' | 'sticker' | 'animation' | 'location' | 'venue' | 'poll' | 'contact' | 'dice' | 'webpage'
+  type: 'photo' | 'video' | 'video_note' | 'document' | 'audio' | 'voice' | 'sticker' | 'animation' | 'location' | 'venue' | 'poll' | 'contact' | 'dice' | 'webpage'
   url?: string
   thumbnailUrl?: string
   width?: number
@@ -90,6 +90,9 @@ export interface MessageMedia {
   firstName?: string
   lastName?: string
   contactUserId?: number
+  // Sticker specific
+  stickerType?: 'static' | 'animated' | 'video'
+  stickerEmoji?: string
   // Dice specific
   emoji?: string
   value?: number
@@ -462,6 +465,16 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
         mimeType: video.mimeType,
       }
     }
+    // Check if it's a round video (video note / кружок)
+    if (video.isRound) {
+      return {
+        type: 'video_note',
+        width: video.width,
+        height: video.height,
+        duration: video.duration,
+        mimeType: video.mimeType,
+      }
+    }
     return {
       type: 'video',
       width: video.width,
@@ -511,6 +524,9 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
       type: 'sticker',
       width: sticker.width,
       height: sticker.height,
+      stickerType: sticker.sourceType,
+      stickerEmoji: sticker.emoji || undefined,
+      mimeType: sticker.mimeType,
     }
   }
 
