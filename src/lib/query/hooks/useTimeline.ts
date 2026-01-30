@@ -227,10 +227,10 @@ async function fetchTimelineHistory(
 }
 
 /**
- * Background sync: fetch recent messages from channels after initial load
- * This fills the gap between what user last saw and current state
- *
- * Runs once per session, fetches last 5 messages from each channel
+ * Light background sync: fetch recent messages from TOP channels only
+ * 
+ * Minimal sync - just top 10 most active channels, 3 messages each
+ * Real-time updates handle the rest
  */
 async function backgroundSyncRecentHistory(
   channels: ChannelWithLastMessage[],
@@ -238,40 +238,30 @@ async function backgroundSyncRecentHistory(
 ): Promise<void> {
   if (channels.length === 0) return
 
-  const startTime = performance.now()
-  if (import.meta.env.DEV) {
-    console.log(`[Timeline] Background sync starting for ${channels.length} channels...`)
-  }
+  // Only sync top 10 most recently active channels
+  const TOP_CHANNELS = 10
+  const MESSAGES_PER_CHANNEL = 3
 
-  // Sort channels by last message date (most recent first)
   const sortedChannels = [...channels]
     .filter(c => c.lastMessage)
     .sort((a, b) => getTime(b.lastMessage!.date) - getTime(a.lastMessage!.date))
+    .slice(0, TOP_CHANNELS)
 
-  // Fetch SEQUENTIALLY to avoid FLOOD_WAIT errors
-  // Background sync is not time-critical, so safety > speed
-  const MESSAGES_PER_CHANNEL = 5
-  const DELAY_BETWEEN_CHANNELS_MS = 500
+  if (import.meta.env.DEV) {
+    console.log(`[Timeline] Light sync: ${sortedChannels.length} channels × ${MESSAGES_PER_CHANNEL} msgs`)
+  }
 
   for (const channel of sortedChannels) {
     try {
       const messages = await fetchMessages(channel.id, { limit: MESSAGES_PER_CHANNEL })
-
       if (messages.length > 0) {
         onMessages(messages)
       }
-    } catch (error) {
-      // Rate limit or other error - continue with next channel
-      // Don't stop entirely, just skip this channel
+    } catch {
       continue
     }
-
-    // Delay between channels to avoid rate limits
-    await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_CHANNELS_MS))
-  }
-
-  if (import.meta.env.DEV) {
-    console.log(`[Timeline] Background sync done in ${Math.round(performance.now() - startTime)}ms`)
+    // Small delay between requests
+    await new Promise(resolve => setTimeout(resolve, 300))
   }
 }
 
@@ -367,26 +357,22 @@ export function useOptimizedTimeline() {
     )
   )
 
-  // Background sync: fetch recent history after initial load
-  // This runs ONCE per session to fill gaps from when user was offline
-  const [hasSynced, setHasSynced] = createSignal(false)
-
+  // Light background sync: runs ONCE per session
+  // Only syncs top 10 channels with 3 messages each (30 total max)
+  let hasSynced = false
   createEffect(
     on(
       () => initialQuery.data,
       (data) => {
-        if (!data || hasSynced()) return
+        if (!data || hasSynced) return
+        hasSynced = true
 
-        // Mark as synced immediately to prevent re-runs
-        setHasSynced(true)
-
-        // Run background sync after delay to let getDifference/catchUp complete first
-        // This prevents FLOOD_WAIT errors from too many concurrent API calls
+        // Delay to let getDifference/catchUp complete first
         setTimeout(() => {
           backgroundSyncRecentHistory(data.channels, (messages) => {
             upsertPosts(messages)
           })
-        }, 3000) // 3 second delay
+        }, 2000)
       }
     )
   )
