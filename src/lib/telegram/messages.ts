@@ -309,7 +309,7 @@ export function mapMessage(msg: TgMessage, channelId: number): Message | null {
     views: msg.views ?? undefined,
     forwards: msg.forwards ?? undefined,
     replies: msg.replies?.count ?? undefined,
-    editDate: msg.editDate ?? undefined,
+    editDate: msg.editDate && msg.editDate.getTime() > 0 ? msg.editDate : undefined,
     author: msg.sender
       ? {
           id: msg.sender.id,
