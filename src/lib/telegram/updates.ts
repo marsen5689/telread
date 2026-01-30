@@ -1,10 +1,13 @@
 import { getTelegramClient, getClientVersion } from './client'
-import { mapMessage, type Message } from './messages'
-import { queryClient } from '@/lib/query/client'
-import { queryKeys } from '@/lib/query/keys'
-import { getTime } from '@/lib/utils'
-import type { TimelineData } from '@/lib/query/hooks/useTimeline'
-import type { Message as TgMessage } from '@mtcute/web'
+import { mapMessage, type MessageReaction } from './messages'
+import {
+  upsertPost,
+  removePosts,
+  updatePostViews,
+  updatePostReactions,
+  hasPosts,
+} from '@/lib/store'
+import type { Message as TgMessage, RawUpdateInfo, Chat } from '@mtcute/web'
 
 export type UpdatesCleanup = () => void
 
@@ -12,84 +15,52 @@ let isListenerActive = false
 let activeCleanup: UpdatesCleanup | null = null
 let listenerClientVersion = 0
 
+// Queue for messages that arrive before store is ready
+const pendingMessages: TgMessage[] = []
+const MAX_PENDING_MESSAGES = 100
+
 /**
- * Update timeline query cache with a new message
+ * Check if posts store has been initialized with data
  */
-function addMessageToCache(message: Message): void {
-  queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
-    if (!old) return old
-
-    // Check if channel exists in our subscriptions
-    if (!old.channelMap.has(message.channelId)) return old
-
-    // Check if message already exists (dedup)
-    const exists = old.posts.some(
-      (p) => p.channelId === message.channelId && p.id === message.id
-    )
-    if (exists) return old
-
-    // Add message and sort by date
-    const newPosts = [message, ...old.posts].sort(
-      (a, b) => getTime(b.date) - getTime(a.date)
-    )
-
-    return { ...old, posts: newPosts }
-  })
+function isStoreReady(): boolean {
+  return hasPosts()
 }
 
 /**
- * Update an existing message in cache (for edits)
+ * Process pending messages that were queued before store was ready
  */
-function updateMessageInCache(message: Message): void {
-  queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
-    if (!old) return old
+function processPendingMessages(): void {
+  if (pendingMessages.length === 0) return
 
-    const index = old.posts.findIndex(
-      (p) => p.channelId === message.channelId && p.id === message.id
-    )
-    if (index === -1) return old
+  if (import.meta.env.DEV) {
+    console.log(`[Updates] Processing ${pendingMessages.length} pending messages`)
+  }
 
-    const newPosts = [...old.posts]
-    newPosts[index] = message
+  const messages = [...pendingMessages]
+  pendingMessages.length = 0 // Clear queue
 
-    return { ...old, posts: newPosts }
-  })
-}
+  for (const message of messages) {
+    const peer = message.chat
+    const chatId = peer?.id
+    if (!chatId) continue
 
-/**
- * Remove messages from cache (for deletions)
- */
-function removeMessagesFromCache(channelId: number, messageIds: number[]): void {
-  queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
-    if (!old) return old
+    // Only process channel messages
+    if (peer.type !== 'chat') continue
+    const chat = peer as Chat
+    if (chat.chatType !== 'channel') continue
 
-    const idsSet = new Set(messageIds)
-    const newPosts = old.posts.filter(
-      (p) => !(p.channelId === channelId && idsSet.has(p.id))
-    )
-
-    // Only update if something was removed
-    if (newPosts.length === old.posts.length) return old
-
-    return { ...old, posts: newPosts }
-  })
-}
-
-/**
- * Check if a channel is in our timeline cache
- */
-function isChannelInCache(channelId: number): boolean {
-  const data = queryClient.getQueryData<TimelineData>(queryKeys.timeline.all)
-  return data?.channelMap.has(channelId) ?? false
+    const mapped = mapMessage(message, chatId)
+    if (mapped) {
+      upsertPost(mapped)
+    }
+  }
 }
 
 /**
  * Start listening for real-time Telegram updates
  *
- * Updates are applied directly to TanStack Query cache for instant UI updates.
- * This is the single source of truth - no separate store needed.
- *
- * Uses client version to prevent race conditions during rapid restarts.
+ * Updates are applied to the centralized posts store.
+ * Both timeline and channel views read from this store.
  */
 export function startUpdatesListener(): UpdatesCleanup {
   // Clean up any existing listener first
@@ -100,26 +71,52 @@ export function startUpdatesListener(): UpdatesCleanup {
 
   const client = getTelegramClient()
   const clientVersion = getClientVersion()
-
-  // Store the version this listener is bound to
   listenerClientVersion = clientVersion
 
   const handleNewMessage = (message: TgMessage) => {
-    // Ignore if client version changed (logout/reconnect happened)
-    if (getClientVersion() !== listenerClientVersion) {
-      return
+    if (getClientVersion() !== listenerClientVersion) return
+
+    if (import.meta.env.DEV) {
+      console.log('[Updates] New message received:', {
+        chatId: message.chat?.id,
+        messageId: message.id,
+        text: message.text?.slice(0, 50),
+      })
     }
 
     try {
       const chatId = message.chat?.id
       if (!chatId) return
 
-      // Only process if channel is in our cache
-      if (!isChannelInCache(chatId)) return
+      // Queue if store not ready yet
+      if (!isStoreReady()) {
+        if (pendingMessages.length < MAX_PENDING_MESSAGES) {
+          pendingMessages.push(message)
+          if (import.meta.env.DEV) {
+            console.debug('[Updates] Queued message (store not ready):', chatId, message.id)
+          }
+        }
+        return
+      }
+
+      // Only process channel messages
+      const peer = message.chat
+      if (!peer || peer.type !== 'chat') return
+
+      const chat = peer as Chat
+      if (chat.chatType !== 'channel') return
+
+      if (import.meta.env.DEV) {
+        console.log('[Updates] Processing channel message:', {
+          chatId,
+          messageId: message.id,
+          channelTitle: chat.title,
+        })
+      }
 
       const mapped = mapMessage(message, chatId)
       if (mapped) {
-        addMessageToCache(mapped)
+        upsertPost(mapped)
       }
     } catch (error) {
       if (import.meta.env.DEV) {
@@ -129,20 +126,20 @@ export function startUpdatesListener(): UpdatesCleanup {
   }
 
   const handleEditMessage = (message: TgMessage) => {
-    // Ignore if client version changed
-    if (getClientVersion() !== listenerClientVersion) {
-      return
-    }
+    if (getClientVersion() !== listenerClientVersion) return
 
     try {
-      const chatId = message.chat?.id
+      const peer = message.chat
+      const chatId = peer?.id
       if (!chatId) return
 
-      if (!isChannelInCache(chatId)) return
+      if (peer.type !== 'chat') return
+      const chat = peer as Chat
+      if (chat.chatType !== 'channel') return
 
       const mapped = mapMessage(message, chatId)
       if (mapped) {
-        updateMessageInCache(mapped)
+        upsertPost(mapped) // upsert handles updates too
       }
     } catch (error) {
       if (import.meta.env.DEV) {
@@ -152,16 +149,13 @@ export function startUpdatesListener(): UpdatesCleanup {
   }
 
   const handleDeleteMessage = (update: { messageIds: number[]; channelId: number | null }) => {
-    // Ignore if client version changed
-    if (getClientVersion() !== listenerClientVersion) {
-      return
-    }
+    if (getClientVersion() !== listenerClientVersion) return
 
     try {
       const channelId = update.channelId
       if (channelId === null) return
-      if (!isChannelInCache(channelId)) return
-      removeMessagesFromCache(channelId, update.messageIds)
+
+      removePosts(channelId, update.messageIds)
     } catch (error) {
       if (import.meta.env.DEV) {
         console.error('[Updates] Error handling delete message:', error)
@@ -169,38 +163,90 @@ export function startUpdatesListener(): UpdatesCleanup {
     }
   }
 
+  /**
+   * Convert raw Telegram channel ID to marked format (-100 prefix)
+   */
+  const toMarkedChannelId = (rawId: number): number => -1000000000000 - rawId
+
+  /**
+   * Extract emoji from reaction object
+   */
+  const getReactionEmoji = (reaction: any): string => {
+    if (!reaction) return '👍'
+    if (reaction._ === 'reactionEmoji') return reaction.emoticon ?? '👍'
+    if (reaction._ === 'reactionCustomEmoji') return '⭐'
+    if (reaction._ === 'reactionPaid') return '⭐'
+    return '👍'
+  }
+
+  /**
+   * Handle raw updates for views, reactions, etc.
+   */
+  const handleRawUpdate = (info: RawUpdateInfo) => {
+    if (getClientVersion() !== listenerClientVersion) return
+
+    try {
+      const update = info.update as any
+
+      // Handle view count updates
+      if (update._ === 'updateChannelMessageViews') {
+        const channelId = update.channelId ? toMarkedChannelId(update.channelId) : 0
+        if (channelId) {
+          updatePostViews(channelId, update.id, update.views)
+        }
+        return
+      }
+
+      // Handle reaction updates
+      if (update._ === 'updateMessageReactions') {
+        const peer = update.peer
+        if (peer?._ === 'peerChannel' && update.reactions?.results) {
+          const channelId = toMarkedChannelId(peer.channelId)
+          const reactions: MessageReaction[] = update.reactions.results
+            .filter((r: any) => r.count > 0)
+            .map((r: any) => ({
+              emoji: getReactionEmoji(r.reaction),
+              count: r.count ?? 0,
+              isPaid: r.reaction?._ === 'reactionPaid',
+            }))
+          updatePostReactions(channelId, update.msgId, reactions)
+        }
+        return
+      }
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.debug('[Updates] Raw update error:', error)
+      }
+    }
+  }
+
+  // Register handlers
   try {
-    if (client.onNewMessage?.add) {
-      client.onNewMessage.add(handleNewMessage)
-    }
-    if (client.onEditMessage?.add) {
-      client.onEditMessage.add(handleEditMessage)
-    }
-    if (client.onDeleteMessage?.add) {
-      client.onDeleteMessage.add(handleDeleteMessage)
-    }
+    client.onNewMessage?.add(handleNewMessage)
+    client.onEditMessage?.add(handleEditMessage)
+    client.onDeleteMessage?.add(handleDeleteMessage)
+    client.onRawUpdate?.add(handleRawUpdate)
     isListenerActive = true
+
+    if (import.meta.env.DEV) {
+      console.log('[Updates] All handlers registered, listener active')
+    }
   } catch (error) {
     if (import.meta.env.DEV) {
-      console.error('[Updates] Error registering event handlers:', error)
+      console.error('[Updates] Error registering handlers:', error)
     }
     isListenerActive = false
   }
 
   const cleanup: UpdatesCleanup = () => {
     try {
-      if (client.onNewMessage?.remove) {
-        client.onNewMessage.remove(handleNewMessage)
-      }
-      if (client.onEditMessage?.remove) {
-        client.onEditMessage.remove(handleEditMessage)
-      }
-      if (client.onDeleteMessage?.remove) {
-        client.onDeleteMessage.remove(handleDeleteMessage)
-      }
+      client.onNewMessage?.remove(handleNewMessage)
+      client.onEditMessage?.remove(handleEditMessage)
+      client.onDeleteMessage?.remove(handleDeleteMessage)
+      client.onRawUpdate?.remove(handleRawUpdate)
     } catch (error) {
       if (import.meta.env.DEV) {
-        console.error('[Updates] Error removing event handlers:', error)
+        console.error('[Updates] Error removing handlers:', error)
       }
     } finally {
       isListenerActive = false
@@ -223,4 +269,11 @@ export function stopUpdatesListener(): void {
 
 export function isUpdatesListenerActive(): boolean {
   return isListenerActive
+}
+
+/**
+ * Call this when initial data is loaded to process queued messages
+ */
+export function onTimelineLoaded(): void {
+  processPendingMessages()
 }

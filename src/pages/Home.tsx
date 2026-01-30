@@ -21,6 +21,8 @@ export function Home() {
         isLoadingMore={timeline.isLoadingMore}
         hasMore={timeline.hasMore}
         onLoadMore={timeline.loadMore}
+        pendingCount={timeline.pendingCount}
+        onShowNewPosts={timeline.showNewPosts}
       />
     </div>
   )

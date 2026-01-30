@@ -1,7 +1,7 @@
 import { getTelegramClient } from './client'
 import { mapMessage } from './messages'
-import { MAX_DIALOGS_TO_ITERATE, MAX_CHANNELS_TO_FETCH } from '@/config/constants'
-import type { Chat, Message as TgMessage, Dialog } from '@mtcute/web'
+import { MAX_DIALOGS_TO_ITERATE } from '@/config/constants'
+import type { Chat, Message as TgMessage } from '@mtcute/web'
 import type { Message } from './messages'
 
 export interface Channel {
@@ -37,7 +37,7 @@ export async function fetchChannels(): Promise<Channel[]> {
   const iterator = client.iterDialogs()[Symbol.asyncIterator]()
   let dialogCount = 0
 
-  while (dialogCount < MAX_DIALOGS_TO_ITERATE && channels.length < MAX_CHANNELS_TO_FETCH) {
+  while (dialogCount < MAX_DIALOGS_TO_ITERATE) {
     try {
       const { value: dialog, done } = await iterator.next()
       if (done) break
@@ -80,7 +80,7 @@ export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMe
   const iterator = client.iterDialogs()[Symbol.asyncIterator]()
   let dialogCount = 0
 
-  while (dialogCount < MAX_DIALOGS_TO_ITERATE && channels.length < MAX_CHANNELS_TO_FETCH) {
+  while (dialogCount < MAX_DIALOGS_TO_ITERATE) {
     try {
       const { value: dialog, done } = await iterator.next()
       if (done) break

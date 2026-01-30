@@ -26,7 +26,7 @@ export const queryClient = new QueryClient({
 // IndexedDB persister using idb-keyval with BigInt support
 const IDB_KEY = 'telread-query-cache'
 
-// Handle BigInt and Date serialization
+// Handle BigInt, Date, and Map serialization
 const serialize = (data: unknown): string => {
   return JSON.stringify(data, (_, value) => {
     if (typeof value === 'bigint') {
@@ -34,6 +34,9 @@ const serialize = (data: unknown): string => {
     }
     if (value instanceof Date) {
       return { __date: value.toISOString() }
+    }
+    if (value instanceof Map) {
+      return { __map: Array.from(value.entries()) }
     }
     return value
   })
@@ -44,6 +47,7 @@ const deserialize = (str: string): unknown => {
     if (value && typeof value === 'object') {
       if ('__bigint' in value) return BigInt(value.__bigint)
       if ('__date' in value) return new Date(value.__date)
+      if ('__map' in value) return new Map(value.__map)
     }
     return value
   })
@@ -62,13 +66,28 @@ const idbPersister: Persister = {
   },
 }
 
+// Clear old cache on version change
+const CACHE_VERSION = 'v7'
+const CACHE_VERSION_KEY = 'telread-cache-version'
+
+const storedVersion = localStorage.getItem(CACHE_VERSION_KEY)
+if (storedVersion !== CACHE_VERSION) {
+  // Clear IndexedDB cache
+  del(IDB_KEY).then(() => {
+    if (import.meta.env.DEV) {
+      console.log('[QueryClient] Cache cleared due to version change:', storedVersion, '->', CACHE_VERSION)
+    }
+  })
+  localStorage.setItem(CACHE_VERSION_KEY, CACHE_VERSION)
+}
+
 // Enable persistence - cache survives page reloads
 // Exclude media queries (blob URLs can't be persisted)
 persistQueryClient({
   queryClient,
   persister: idbPersister,
   maxAge: 1000 * 60 * 60 * 24, // 24 hours
-  buster: 'v4', // Change to invalidate cache
+  buster: CACHE_VERSION,
   dehydrateOptions: {
     shouldDehydrateQuery: (query) => {
       // Don't persist media queries - blob URLs are session-only

@@ -1,49 +1,87 @@
 import { createQuery, createInfiniteQuery } from '@tanstack/solid-query'
-import { createSignal, createEffect, on } from 'solid-js'
+import { createSignal, createEffect, on, createMemo } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
 import {
   fetchMessages,
   fetchChannelsWithLastMessages,
+  onTimelineLoaded,
   type Message,
   type ChannelWithLastMessage,
 } from '@/lib/telegram'
+import {
+  upsertPosts,
+  postsState,
+  getChannelPosts,
+  revealPendingPosts,
+} from '@/lib/store'
 import { getTime } from '@/lib/utils'
 import { queryKeys } from '../keys'
 
 /**
  * Hook to fetch messages from a single channel
+ * Now also populates the centralized posts store
  */
 export function useMessages(channelId: () => number, enabled?: () => boolean) {
-  return createQuery(() => ({
+  const query = createQuery(() => ({
     queryKey: queryKeys.messages.list(channelId()),
-    queryFn: () => fetchMessages(channelId(), { limit: 20 }),
+    queryFn: async () => {
+      const messages = await fetchMessages(channelId(), { limit: 50 })
+      // Populate centralized store
+      upsertPosts(messages)
+      return messages
+    },
     enabled: enabled?.() ?? true,
-    staleTime: 1000 * 60 * 15,
+    staleTime: 1000 * 60 * 5,
   }))
+
+  // Return posts from centralized store for this channel
+  return {
+    ...query,
+    // Override data to come from centralized store
+    get data() {
+      // Direct store access for proper SolidJS dependency tracking
+      void postsState.lastUpdated
+      return getChannelPosts(channelId())
+    },
+  }
 }
 
 /**
  * Hook for infinite scrolling messages from a channel
  */
 export function useInfiniteMessages(channelId: () => number) {
-  return createInfiniteQuery(() => ({
+  const query = createInfiniteQuery(() => ({
     queryKey: queryKeys.messages.infinite(channelId()),
-    queryFn: ({ pageParam }) =>
-      fetchMessages(channelId(), {
+    queryFn: async ({ pageParam }) => {
+      const messages = await fetchMessages(channelId(), {
         limit: 20,
         offsetId: pageParam,
-      }),
+      })
+      // Populate centralized store
+      upsertPosts(messages)
+      return messages
+    },
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (lastPage) => {
       if (lastPage.length < 20) return undefined
       return lastPage[lastPage.length - 1]?.id
     },
-    staleTime: 1000 * 60 * 15,
+    staleTime: 1000 * 60 * 5,
   }))
+
+  // Return posts from centralized store
+  return {
+    ...query,
+    get data() {
+      // Direct store access for proper SolidJS dependency tracking
+      void postsState.lastUpdated
+      return { pages: [getChannelPosts(channelId())] }
+    },
+  }
 }
 
 /**
- * Timeline data structure returned from the hook
+ * Timeline data structure (for channels info)
  */
 export interface TimelineData {
   posts: Message[]
@@ -64,6 +102,9 @@ async function fetchInitialTimeline(): Promise<TimelineData> {
     .filter((c) => c.lastMessage)
     .map((c) => c.lastMessage!)
     .sort((a, b) => getTime(b.date) - getTime(a.date))
+
+  // Populate centralized posts store
+  upsertPosts(posts)
 
   return { posts, channels, channelMap }
 }
@@ -91,24 +132,26 @@ async function fetchTimelineHistory(
     }
   }
 
-  return allMessages.sort((a, b) => getTime(b.date) - getTime(a.date)).slice(0, limit)
+  const sorted = allMessages.sort((a, b) => getTime(b.date) - getTime(a.date)).slice(0, limit)
+
+  // Populate centralized store
+  upsertPosts(sorted)
+
+  return sorted
 }
 
 /**
- * Optimized timeline hook with stable store
+ * Optimized timeline hook
  *
- * Key architecture decisions:
- * - TanStack Query for data fetching + caching
- * - SolidJS store with reconcile for stable DOM updates
- * - Reconcile does structural diffing - only changed items trigger re-render
+ * Uses centralized posts store as single source of truth.
+ * TanStack Query handles fetching, store handles state.
  */
 export function useOptimizedTimeline() {
-  // Stable store for timeline - reconcile prevents unnecessary re-renders
-  const [timeline, setTimeline] = createStore<Message[]>([])
+  // Channels store (separate from posts)
   const [channels, setChannels] = createStore<ChannelWithLastMessage[]>([])
   const [channelMap, setChannelMap] = createSignal<Map<number, ChannelWithLastMessage>>(new Map())
 
-  // Initial data query
+  // Initial data query - fetches channels and populates posts store
   const initialQuery = createQuery(() => ({
     queryKey: queryKeys.timeline.all,
     queryFn: fetchInitialTimeline,
@@ -134,7 +177,7 @@ export function useOptimizedTimeline() {
     staleTime: 1000 * 60 * 5,
   }))
 
-  // Sync initial data to store - only when data changes
+  // Sync channels data when fetched (or restored from cache)
   createEffect(
     on(
       () => initialQuery.data,
@@ -142,46 +185,32 @@ export function useOptimizedTimeline() {
         if (!data) return
         setChannels(reconcile(data.channels))
         setChannelMap(data.channelMap)
-        // Initial posts merged with history
-        updateTimeline(data.posts, historyQuery.data?.pages ?? [])
+
+        // Populate posts store from data (important for cached data!)
+        // When data comes from cache, queryFn doesn't run, so we need to populate here
+        const posts = data.channels
+          .filter((c) => c.lastMessage)
+          .map((c) => c.lastMessage!)
+        if (posts.length > 0) {
+          upsertPosts(posts)
+        }
+
+        // Process any messages that arrived before data was ready
+        onTimelineLoaded()
       }
     )
   )
 
-  // Sync history pages to store
-  createEffect(
-    on(
-      () => historyQuery.data?.pages,
-      (pages) => {
-        const initial = initialQuery.data?.posts ?? []
-        updateTimeline(initial, pages ?? [])
-      }
-    )
-  )
-
-  // Merge and dedupe posts, then reconcile into store
-  function updateTimeline(initial: Message[], pages: Message[][]) {
-    const historyPosts = pages.flat()
-    const seen = new Set<string>()
-    const merged: Message[] = []
-
-    for (const post of [...initial, ...historyPosts]) {
-      const key = `${post.channelId}:${post.id}`
-      if (!seen.has(key)) {
-        seen.add(key)
-        merged.push(post)
-      }
-    }
-
-    merged.sort((a, b) => getTime(b.date) - getTime(a.date))
-
-    // Reconcile does structural diff - only changed items update
-    setTimeline(reconcile(merged))
-  }
+  // Reactive timeline from centralized store
+  // Direct access to postsState ensures SolidJS tracks the dependency
+  const timeline = createMemo(() => {
+    const keys = postsState.sortedKeys
+    return keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
+  })
 
   return {
     get timeline() {
-      return timeline
+      return timeline()
     },
     get channels() {
       return channels
@@ -190,7 +219,11 @@ export function useOptimizedTimeline() {
       return channelMap()
     },
     get isLoading() {
-      return initialQuery.isPending && timeline.length === 0
+      // Show loading while we don't have posts and haven't errored
+      const hasPosts = postsState.sortedKeys.length > 0
+      if (hasPosts) return false
+      if (initialQuery.isError) return false
+      return true
     },
     get isLoadingMore() {
       return historyQuery.isFetchingNextPage
@@ -203,6 +236,10 @@ export function useOptimizedTimeline() {
     },
     get isInitialized() {
       return initialQuery.isSuccess
+    },
+    /** Number of new posts waiting to be shown (Twitter-style) */
+    get pendingCount() {
+      return postsState.pendingKeys.length
     },
 
     loadMore: () => {
@@ -218,5 +255,7 @@ export function useOptimizedTimeline() {
         initialQuery.refetch()
       }
     },
+    /** Reveal pending posts in timeline (when user clicks "N new posts") */
+    showNewPosts: revealPendingPosts,
   }
 }

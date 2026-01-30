@@ -45,11 +45,17 @@ export async function startPhoneAuth(
   try {
     const result = await client.sendCode({ phone })
 
-    callbacks.onStateChange({
-      step: 'code',
-      phoneCodeHash: result.phoneCodeHash,
-      phone,
-    })
+    // In mtcute 0.27+, sendCode can return User (if already logged in) or SentCode
+    if ('phoneCodeHash' in result) {
+      callbacks.onStateChange({
+        step: 'code',
+        phoneCodeHash: result.phoneCodeHash,
+        phone,
+      })
+    } else {
+      // Already authenticated - this shouldn't happen in normal flow
+      callbacks.onStateChange({ step: 'done' })
+    }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to send code'
     callbacks.onStateChange({ step: 'error', message })

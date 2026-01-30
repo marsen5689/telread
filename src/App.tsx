@@ -117,6 +117,11 @@ export function App() {
       if (authenticated) {
         const user = await getCurrentUser()
         authStore.setUser(user)
+        // Start the updates loop to receive real-time messages
+        await client.startUpdatesLoop()
+        if (import.meta.env.DEV) {
+          console.log('[App] Updates loop started')
+        }
       }
     } catch (error) {
       console.error('Auth check failed:', error)
@@ -125,12 +130,28 @@ export function App() {
     }
   })
 
+  // Start/stop updates when auth state changes
   createEffect(
     on(
       () => authStore.isAuthenticated,
-      (isAuth) => {
+      async (isAuth, prevIsAuth) => {
         if (isAuth) {
+          // Register event handlers
           startUpdatesListener()
+
+          // Start updates loop if this is a fresh login (not initial load)
+          // Initial load already calls startUpdatesLoop in onMount
+          if (prevIsAuth === false) {
+            try {
+              const client = getTelegramClient()
+              await client.startUpdatesLoop()
+              if (import.meta.env.DEV) {
+                console.log('[App] Updates loop started (after login)')
+              }
+            } catch (error) {
+              console.error('[App] Failed to start updates loop:', error)
+            }
+          }
         } else {
           stopUpdatesListener()
         }

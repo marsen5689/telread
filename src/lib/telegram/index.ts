@@ -66,5 +66,6 @@ export {
   startUpdatesListener,
   stopUpdatesListener,
   isUpdatesListenerActive,
+  onTimelineLoaded,
   type UpdatesCleanup,
 } from './updates'

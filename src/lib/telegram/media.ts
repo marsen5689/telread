@@ -102,6 +102,10 @@ const PROFILE_CACHE_PREFIX = 'profile-photo:'
 const PROFILE_CACHE_VERSION = 1
 const PROFILE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7 // 7 days
 
+// Separate in-memory cache for profile photos (no eviction)
+// Profile photos are small (~10KB), so keeping 200 in memory = ~2MB max
+const profilePhotoMemoryCache = new Map<string, string>()
+
 interface CachedProfilePhoto {
   data: string // base64
   timestamp: number
@@ -480,8 +484,8 @@ export async function downloadMedia(
 /**
  * Download a channel/user profile photo
  *
- * Handles both channels (via getChat) and users (via getUsers).
- * Uses persistent IndexedDB cache to avoid re-downloading on page reload.
+ * Uses separate non-evicting memory cache to prevent blob URL revocation
+ * while React Query still holds references. Also persists to IndexedDB.
  */
 export async function downloadProfilePhoto(
   peerId: number,
@@ -489,8 +493,8 @@ export async function downloadProfilePhoto(
 ): Promise<string | null> {
   const cacheKey = `profile:${peerId}:${size}`
 
-  // Check in-memory cache first
-  const memCached = mediaCache.get(cacheKey)
+  // Check in-memory cache first (non-evicting, blob URLs stay valid)
+  const memCached = profilePhotoMemoryCache.get(cacheKey)
   if (memCached) {
     return memCached
   }
@@ -498,7 +502,8 @@ export async function downloadProfilePhoto(
   // Check persistent cache (IndexedDB)
   const persistedUrl = await getCachedProfilePhoto(peerId, size)
   if (persistedUrl) {
-    mediaCache.set(cacheKey, persistedUrl)
+    // Store in memory cache (no eviction = blob URL stays valid)
+    profilePhotoMemoryCache.set(cacheKey, persistedUrl)
     return persistedUrl
   }
 
@@ -539,7 +544,8 @@ export async function downloadProfilePhoto(
     const blob = new Blob([uint8Buffer], { type: 'image/jpeg' })
     const url = URL.createObjectURL(blob)
 
-    mediaCache.set(cacheKey, url)
+    // Store in non-evicting memory cache
+    profilePhotoMemoryCache.set(cacheKey, url)
     return url
   } catch (error) {
     debugWarn(`Failed to download profile photo: peer=${peerId}`, error)

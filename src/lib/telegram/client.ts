@@ -103,6 +103,12 @@ export function getTelegramClient(): TelegramClient {
       appVersion: TELEGRAM_CONFIG.APP_VERSION,
       systemVersion: TELEGRAM_CONFIG.SYSTEM_VERSION,
     },
+    updates: {
+      // Fetch missed updates when reconnecting after being offline
+      catchUp: true,
+      // Wait for album messages to arrive together (250ms recommended)
+      messageGroupingInterval: 250,
+    },
   })
 
   // Setup logging

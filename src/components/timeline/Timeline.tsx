@@ -11,6 +11,10 @@ interface TimelineProps {
   isLoadingMore: boolean
   hasMore: boolean
   onLoadMore: () => void
+  /** Number of new posts waiting to be shown */
+  pendingCount?: number
+  /** Called when user clicks "show new posts" button */
+  onShowNewPosts?: () => void
 }
 
 /**
@@ -90,6 +94,19 @@ export function Timeline(props: TimelineProps) {
       {/* Loading skeleton */}
       <Show when={showSkeleton()}>
         <Index each={[1, 2, 3, 4, 5]}>{() => <PostSkeleton />}</Index>
+      </Show>
+
+      {/* New posts button (Twitter-style with glassmorphism) */}
+      <Show when={props.pendingCount && props.pendingCount > 0}>
+        <div class="sticky top-0 z-10 flex justify-center py-3 pointer-events-none">
+          <button
+            type="button"
+            onClick={() => props.onShowNewPosts?.()}
+            class="pointer-events-auto px-4 py-2 text-sm font-medium rounded-full shadow-lg backdrop-blur-md bg-[var(--accent)]/80 text-white border border-white/20 hover:bg-[var(--accent)] transition-all hover:scale-105 active:scale-95"
+          >
+            {props.pendingCount === 1 ? '1 new post' : `${props.pendingCount} new posts`}
+          </button>
+        </div>
       </Show>
 
       {/* Posts list - Index preserves position stability */}
