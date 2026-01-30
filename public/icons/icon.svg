@@ -5,6 +5,10 @@
       <stop offset="100%" style="stop-color:#5856d6"/>
     </linearGradient>
   </defs>
+  <!-- Rounded square background -->
   <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#bg)"/>
-  <text x="256" y="300" text-anchor="middle" font-size="280" dominant-baseline="middle">📖</text>
+  <!-- MessageCircle icon (lucide) - scaled and centered -->
+  <svg x="136" y="136" width="240" height="240" viewBox="0 0 24 24" fill="white" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>
+  </svg>
 </svg>

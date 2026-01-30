@@ -122,19 +122,20 @@ function startCommentUpdatesListener(): void {
       const chatId = message.chat?.id
       if (!chatId) return
       
-      // Check if this chat is subscribed
-      const subscription = activeSubscriptions.get(chatId)
+      // Check if this chat is subscribed (try multiple ID formats)
+      const subscription = findSubscription(chatId)
       if (!subscription) return
       
       // Filter by thread - only process comments for this specific post
       // replyToTopId is the discussion message ID (thread root)
       const msgAny = message as TgMessage & {
-        replyTo?: { replyToTopId?: number }
+        replyTo?: { replyToTopId?: number; replyToMsgId?: number }
       }
       const threadId = msgAny.replyTo?.replyToTopId
       
-      // If subscription has discussionMessageId, filter by it
-      if (subscription.discussionMessageId && threadId !== subscription.discussionMessageId) {
+      // If subscription has discussionMessageId and message has threadId, filter by it
+      // Skip filtering if either is missing (first comment or unknown thread)
+      if (subscription.discussionMessageId && threadId && threadId !== subscription.discussionMessageId) {
         return // Not our thread
       }
       
@@ -160,7 +161,7 @@ function startCommentUpdatesListener(): void {
       const chatId = message.chat?.id
       if (!chatId) return
       
-      const subscription = activeSubscriptions.get(chatId)
+      const subscription = findSubscription(chatId)
       if (!subscription) return
       
       // Filter by thread
@@ -169,7 +170,7 @@ function startCommentUpdatesListener(): void {
       }
       const threadId = msgAny.replyTo?.replyToTopId
       
-      if (subscription.discussionMessageId && threadId !== subscription.discussionMessageId) {
+      if (subscription.discussionMessageId && threadId && threadId !== subscription.discussionMessageId) {
         return
       }
       
@@ -194,11 +195,7 @@ function startCommentUpdatesListener(): void {
       const chatId = update.channelId
       if (!chatId) return
       
-      // Check both raw and marked ID formats
-      const subscription = activeSubscriptions.get(chatId) || 
-        activeSubscriptions.get(-chatId) ||
-        findSubscriptionByRawId(chatId)
-      
+      const subscription = findSubscription(chatId)
       if (!subscription) return
       
       notifyCallbacks(subscription, { type: 'delete', commentIds: update.messageIds })
@@ -251,10 +248,35 @@ function stopCommentUpdatesListener(): void {
   }
 }
 
-function findSubscriptionByRawId(rawId: number): CommentSubscription | undefined {
-  // Convert raw channel ID to marked format and check
-  const markedId = -1000000000000 - Math.abs(rawId)
-  return activeSubscriptions.get(markedId)
+/**
+ * Find subscription by chatId, trying multiple ID formats
+ * mtcute may return different ID formats in different contexts
+ */
+function findSubscription(chatId: number): CommentSubscription | undefined {
+  // Direct match
+  let subscription = activeSubscriptions.get(chatId)
+  if (subscription) return subscription
+  
+  // Try negated
+  subscription = activeSubscriptions.get(-chatId)
+  if (subscription) return subscription
+  
+  // Try converting raw to marked format (-100 prefix)
+  const rawId = Math.abs(chatId)
+  const markedId = -Number(`100${rawId}`)
+  subscription = activeSubscriptions.get(markedId)
+  if (subscription) return subscription
+  
+  // Try extracting raw from marked and searching
+  if (chatId < -1000000000000) {
+    const extractedRaw = Math.abs(chatId) - 1000000000000
+    subscription = activeSubscriptions.get(extractedRaw)
+    if (subscription) return subscription
+    subscription = activeSubscriptions.get(-extractedRaw)
+    if (subscription) return subscription
+  }
+  
+  return undefined
 }
 
 function notifyCallbacks(subscription: CommentSubscription, update: CommentUpdate): void {

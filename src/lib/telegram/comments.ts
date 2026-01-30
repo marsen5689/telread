@@ -210,11 +210,12 @@ export async function fetchComments(
  */
 function processCommentsResponse(
   result: TLMessagesResponse,
-  messageId: number,
+  _messageId: number,
   requestedLimit: number
 ): CommentThread {
   const comments: Comment[] = []
   let discussionChatId: number | undefined
+  let discussionMessageId: number | undefined
   let totalCount = 0
 
   const validTypes = ['messages.channelMessages', 'messages.messages', 'messages.messagesSlice']
@@ -250,6 +251,12 @@ function processCommentsResponse(
     // Map messages to comments
     if (result.messages) {
       for (const msg of result.messages) {
+        // Extract discussionMessageId from first message's replyToTopId
+        // This is the ID of the discussion message (thread root) in the discussion group
+        if (!discussionMessageId && msg.replyTo?.replyToTopId) {
+          discussionMessageId = msg.replyTo.replyToTopId
+        }
+        
         const comment = mapTLMessageToComment(msg, users, chats)
         if (comment) {
           comments.push(comment)
@@ -266,7 +273,7 @@ function processCommentsResponse(
     totalCount,
     comments: threadedComments,
     discussionChatId,
-    discussionMessageId: messageId,
+    discussionMessageId,
     hasMore,
     nextOffsetId,
   }

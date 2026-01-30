@@ -14,6 +14,7 @@ import {
 import { validateConfig } from '@/config/telegram'
 import { MainLayout } from '@/layouts'
 import { FullPageError } from '@/components/ui'
+import { MessageCircle } from 'lucide-solid'
 
 import {
   Home,
@@ -44,8 +45,8 @@ function ProtectedRoute(props: ParentProps) {
       when={shouldShowContent()}
       fallback={
         <div class="min-h-screen flex flex-col items-center justify-center bg-[var(--bg-primary)]">
-          <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#007aff] to-[#5856d6] flex items-center justify-center mb-6 animate-pulse text-[44px]">
-            📖
+          <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#007aff] to-[#5856d6] flex items-center justify-center mb-6 animate-pulse">
+            <MessageCircle size={44} class="text-white" fill="white" />
           </div>
           <h1 class="text-2xl font-semibold text-primary mb-8" style="letter-spacing: -0.5px;">TelRead</h1>
           <div class="w-[120px] h-[3px] rounded-full overflow-hidden" style="background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%); background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite;" />
