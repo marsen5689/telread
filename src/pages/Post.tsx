@@ -1,10 +1,12 @@
 import { useParams, useNavigate } from '@solidjs/router'
-import { Show } from 'solid-js'
+import { Show, createMemo } from 'solid-js'
 import { Motion } from 'solid-motionone'
 import { ChannelAvatar, PostSkeleton } from '@/components/ui'
-import { PostContent, PostMedia, PostActions } from '@/components/post'
+import { PostContent, PostMedia, PostActions, MediaGallery } from '@/components/post'
 import { CommentSection } from '@/components/comments'
 import { usePost, useChannel } from '@/lib/query'
+import { postsState } from '@/lib/store'
+import type { Message } from '@/lib/telegram'
 
 /**
  * Post detail page with full content and comments
@@ -20,6 +22,37 @@ export function Post() {
 
   const postQuery = usePost(channelId, messageId)
   const channelQuery = useChannel(channelId)
+
+  // Find all posts in the same media group
+  const groupedPosts = createMemo(() => {
+    const post = postQuery.data
+    if (!post?.groupedId) return null
+
+    // Find all posts with the same groupedId from the store
+    const groupIdStr = post.groupedId.toString()
+    const allPosts = Object.values(postsState.byId).filter(
+      (p): p is Message => p?.groupedId?.toString() === groupIdStr
+    )
+
+    if (allPosts.length <= 1) return null
+
+    // Sort by message ID
+    return allPosts.sort((a, b) => a.id - b.id)
+  })
+
+  // Media items for gallery
+  const mediaItems = createMemo(() => {
+    const posts = groupedPosts()
+    if (!posts) return null
+
+    return posts
+      .filter((p) => p.media)
+      .map((p) => ({
+        channelId: p.channelId,
+        messageId: p.id,
+        media: p.media!,
+      }))
+  })
 
   const handleBack = () => {
     if (window.history.length > 1) {
@@ -120,16 +153,27 @@ export function Post() {
             </div>
           </Show>
 
-          {/* Media */}
-          <Show when={postQuery.data!.media}>
-            <div class="post-media">
-              <PostMedia
-                channelId={channelId()}
-                messageId={messageId()}
-                media={postQuery.data!.media!}
-                class="mx-4 rounded-2xl overflow-hidden"
-              />
-            </div>
+          {/* Media - gallery for groups, single for regular posts */}
+          <Show
+            when={mediaItems()}
+            fallback={
+              <Show when={postQuery.data!.media}>
+                <div class="post-media">
+                  <PostMedia
+                    channelId={channelId()}
+                    messageId={messageId()}
+                    media={postQuery.data!.media!}
+                    class="mx-4 rounded-2xl overflow-hidden"
+                  />
+                </div>
+              </Show>
+            }
+          >
+            {(items) => (
+              <div class="post-media">
+                <MediaGallery items={items()} class="mx-4" />
+              </div>
+            )}
           </Show>
 
           {/* Actions */}

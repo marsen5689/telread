@@ -14,7 +14,7 @@ import {
   getChannelPosts,
   revealPendingPosts,
 } from '@/lib/store'
-import { getTime } from '@/lib/utils'
+import { getTime, groupPostsByMediaGroup } from '@/lib/utils'
 import { queryKeys } from '../keys'
 
 /**
@@ -205,7 +205,9 @@ export function useOptimizedTimeline() {
   // Direct access to postsState ensures SolidJS tracks the dependency
   const timeline = createMemo(() => {
     const keys = postsState.sortedKeys
-    return keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
+    const posts = keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
+    // Group posts by groupedId for albums
+    return groupPostsByMediaGroup(posts)
   })
 
   return {
@@ -237,9 +239,14 @@ export function useOptimizedTimeline() {
     get isInitialized() {
       return initialQuery.isSuccess
     },
-    /** Number of new posts waiting to be shown (Twitter-style) */
+    /** Number of new items (posts/albums) waiting to be shown (Twitter-style) */
     get pendingCount() {
-      return postsState.pendingKeys.length
+      // Group pending posts to count items, not individual posts
+      const pendingPosts = postsState.pendingKeys
+        .map((key) => postsState.byId[key])
+        .filter(Boolean) as Message[]
+      const groupedPending = groupPostsByMediaGroup(pendingPosts)
+      return groupedPending.length
     },
 
     loadMore: () => {

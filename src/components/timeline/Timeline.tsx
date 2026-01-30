@@ -1,11 +1,13 @@
-import { Index, Show, createMemo, onCleanup } from 'solid-js'
+import { Index, Show, Switch, Match, createMemo, onCleanup } from 'solid-js'
 import { TimelinePost } from './TimelinePost'
+import { TimelineGroup } from './TimelineGroup'
 import { PostSkeleton } from '@/components/ui'
 import { INFINITE_SCROLL_THRESHOLD, SCROLL_THROTTLE_MS } from '@/config/constants'
-import type { Message, Channel } from '@/lib/telegram'
+import type { Channel } from '@/lib/telegram'
+import type { TimelineItem } from '@/lib/utils'
 
 interface TimelineProps {
-  posts: Message[]
+  items: TimelineItem[]
   channels: Channel[]
   isLoading: boolean
   isLoadingMore: boolean
@@ -65,11 +67,11 @@ export function Timeline(props: TimelineProps) {
     }
   }
 
-  // Get channel for post
-  const getChannel = (post: Message) => channelMap().get(post.channelId)
+  // Get channel by ID
+  const getChannel = (channelId: number) => channelMap().get(channelId)
 
-  const isEmpty = () => !props.isLoading && props.posts.length === 0
-  const showSkeleton = () => props.isLoading && props.posts.length === 0
+  const isEmpty = () => !props.isLoading && (props.items?.length ?? 0) === 0
+  const showSkeleton = () => props.isLoading && (props.items?.length ?? 0) === 0
 
   return (
     <div class="h-full overflow-y-auto custom-scrollbar" onScroll={handleScroll}>
@@ -109,16 +111,43 @@ export function Timeline(props: TimelineProps) {
         </div>
       </Show>
 
-      {/* Posts list - Index preserves position stability */}
-      <Index each={props.posts}>
-        {(post) => {
-          const channel = () => getChannel(post())
-          return (
-            <Show when={channel()}>
-              <TimelinePost post={post()} channelId={post().channelId} channelTitle={channel()!.title} />
-            </Show>
-          )
-        }}
+      {/* Items list - handles both single posts and groups */}
+      <Index each={props.items ?? []}>
+        {(item) => (
+          <Switch>
+            <Match when={item().type === 'single' && item() as { type: 'single'; post: any }}>
+              {(singleItem) => {
+                const post = () => singleItem().post
+                const channel = () => getChannel(post().channelId)
+                return (
+                  <Show when={channel()}>
+                    <TimelinePost
+                      post={post()}
+                      channelId={post().channelId}
+                      channelTitle={channel()!.title}
+                    />
+                  </Show>
+                )
+              }}
+            </Match>
+            <Match when={item().type === 'group' && item() as { type: 'group'; posts: any[]; groupedId: bigint }}>
+              {(groupItem) => {
+                const posts = () => groupItem().posts
+                const primaryPost = () => posts().find((p: any) => p.text) || posts()[0]
+                const channel = () => getChannel(primaryPost().channelId)
+                return (
+                  <Show when={channel()}>
+                    <TimelineGroup
+                      posts={posts()}
+                      channelId={primaryPost().channelId}
+                      channelTitle={channel()!.title}
+                    />
+                  </Show>
+                )
+              }}
+            </Match>
+          </Switch>
+        )}
       </Index>
 
       {/* Load more indicator */}
@@ -129,7 +158,7 @@ export function Timeline(props: TimelineProps) {
       </Show>
 
       {/* End of list */}
-      <Show when={!props.hasMore && !props.isLoadingMore && props.posts.length > 0}>
+      <Show when={!props.hasMore && !props.isLoadingMore && (props.items?.length ?? 0) > 0}>
         <div class="text-center py-8 text-sm text-tertiary">You've reached the end</div>
       </Show>
     </div>

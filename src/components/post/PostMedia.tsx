@@ -24,6 +24,30 @@ export function PostMedia(props: PostMediaProps) {
 
   let observer: IntersectionObserver | undefined
   let isMounted = true
+  let containerRef: HTMLDivElement | undefined
+
+  // Create a key that changes when post changes (for tracking)
+  const postKey = createMemo(() => `${props.channelId}:${props.messageId}`)
+
+  // Reset state when post changes (fixes Index keying issue)
+  createEffect(() => {
+    // Track the post key
+    postKey()
+
+    // Reset loading state
+    setThumbnailUrl(null)
+    setHasStartedLoading(false)
+
+    // Re-check if element is visible and should load
+    if (containerRef && isMounted) {
+      const rect = containerRef.getBoundingClientRect()
+      const isVisible = rect.top < window.innerHeight + 400
+      if (isVisible) {
+        setHasStartedLoading(true)
+        loadMedia()
+      }
+    }
+  })
 
   // Memoized aspect ratio calculation
   const aspectRatio = createMemo(() => {
@@ -42,6 +66,7 @@ export function PostMedia(props: PostMediaProps) {
 
   // Setup Intersection Observer for lazy loading
   const setupObserver = (el: HTMLDivElement) => {
+    containerRef = el
     observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting && !hasStartedLoading()) {
@@ -60,20 +85,30 @@ export function PostMedia(props: PostMediaProps) {
 
   // Load media when visible (with unmount protection)
   const loadMedia = async () => {
+    // Capture current props at call time
+    const channelId = props.channelId
+    const messageId = props.messageId
+
     // Check cache first
-    const cached = getCachedMedia(props.channelId, props.messageId, 'large')
+    const cached = getCachedMedia(channelId, messageId, 'large')
     if (cached) {
-      if (isMounted) setThumbnailUrl(cached)
+      // Verify props haven't changed during async operation
+      if (isMounted && props.channelId === channelId && props.messageId === messageId) {
+        setThumbnailUrl(cached)
+      }
       return
     }
 
     try {
-      const url = await downloadMedia(props.channelId, props.messageId, 'large')
-      if (isMounted) setThumbnailUrl(url)
+      const url = await downloadMedia(channelId, messageId, 'large')
+      // Verify props haven't changed during async operation
+      if (isMounted && props.channelId === channelId && props.messageId === messageId) {
+        setThumbnailUrl(url)
+      }
     } catch (error) {
       // Silently fail - skeleton will remain visible
       if (import.meta.env.DEV) {
-        console.warn('[PostMedia] Failed to load:', props.messageId, error)
+        console.warn('[PostMedia] Failed to load:', messageId, error)
       }
     }
   }

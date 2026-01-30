@@ -15,7 +15,7 @@ export function Home() {
   return (
     <div class="h-full">
       <Timeline
-        posts={timeline.timeline}
+        items={timeline.timeline}
         channels={timeline.channels}
         isLoading={timeline.isLoading}
         isLoadingMore={timeline.isLoadingMore}

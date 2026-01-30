@@ -4,6 +4,7 @@ import { Motion } from 'solid-motionone'
 import { Timeline } from '@/components/timeline'
 import { GlassButton, ChannelAvatar } from '@/components/ui'
 import { useChannels, useMessages, useLeaveChannel } from '@/lib/query'
+import { groupPostsByMediaGroup } from '@/lib/utils'
 
 /**
  * Channel page - Shows all posts from a single channel
@@ -84,7 +85,7 @@ export function Channel() {
       {/* Posts */}
       <div class="flex-1 overflow-hidden">
         <Timeline
-          posts={messagesQuery.data ?? []}
+          items={groupPostsByMediaGroup(messagesQuery.data ?? [])}
           channels={channel() ? [channel()!] : []}
           isLoading={messagesQuery.isLoading}
           isLoadingMore={false}

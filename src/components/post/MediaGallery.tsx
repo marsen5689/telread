@@ -1,0 +1,314 @@
+import { For, Show, createSignal, createMemo, onCleanup, createEffect } from 'solid-js'
+import { Motion } from 'solid-motionone'
+import { downloadMedia, getCachedMedia } from '@/lib/telegram'
+import { useMedia } from '@/lib/query'
+import type { MessageMedia } from '@/lib/telegram'
+
+interface MediaItem {
+  channelId: number
+  messageId: number
+  media: MessageMedia
+}
+
+interface MediaGalleryProps {
+  items: MediaItem[]
+  class?: string
+}
+
+/**
+ * Media gallery for albums (grouped posts)
+ * Displays 2-10 images in a responsive grid layout
+ */
+export function MediaGallery(props: MediaGalleryProps) {
+  const [expandedIndex, setExpandedIndex] = createSignal<number | null>(null)
+
+  // Calculate grid layout based on item count
+  const gridClass = createMemo(() => {
+    const count = props.items.length
+    if (count === 1) return 'grid-cols-1'
+    if (count === 2) return 'grid-cols-2'
+    if (count === 3) return 'grid-cols-2' // 2 + 1
+    if (count === 4) return 'grid-cols-2' // 2x2
+    return 'grid-cols-3' // 3 columns for 5+
+  })
+
+  // Get grid span for each item based on position and total count
+  const getItemClass = (index: number) => {
+    const count = props.items.length
+
+    if (count === 3 && index === 2) {
+      return 'col-span-2' // Last item spans 2 columns
+    }
+    if (count === 5 && index >= 3) {
+      return '' // Last 2 items are normal size
+    }
+    if (count > 5 && index === 0) {
+      return 'col-span-2 row-span-2' // First item is large
+    }
+    return ''
+  }
+
+  return (
+    <div class={`grid gap-0.5 rounded-2xl overflow-hidden ${gridClass()} ${props.class ?? ''}`}>
+      <For each={props.items}>
+        {(item, index) => (
+          <GalleryItem
+            item={item}
+            class={getItemClass(index())}
+            onClick={() => setExpandedIndex(index())}
+          />
+        )}
+      </For>
+
+      {/* Fullscreen modal */}
+      <Show when={expandedIndex() !== null}>
+        <GalleryModal
+          items={props.items}
+          initialIndex={expandedIndex()!}
+          onClose={() => setExpandedIndex(null)}
+        />
+      </Show>
+    </div>
+  )
+}
+
+/**
+ * Single item in the gallery grid
+ */
+function GalleryItem(props: {
+  item: MediaItem
+  class?: string
+  onClick: () => void
+}) {
+  const [thumbnailUrl, setThumbnailUrl] = createSignal<string | null>(null)
+  const [hasStartedLoading, setHasStartedLoading] = createSignal(false)
+
+  let observer: IntersectionObserver | undefined
+  let containerRef: HTMLDivElement | undefined
+  let isMounted = true
+
+  // Create key for tracking prop changes
+  const itemKey = createMemo(() => `${props.item.channelId}:${props.item.messageId}`)
+
+  // Reset when item changes
+  createEffect(() => {
+    itemKey()
+    setThumbnailUrl(null)
+    setHasStartedLoading(false)
+
+    if (containerRef && isMounted) {
+      const rect = containerRef.getBoundingClientRect()
+      const isVisible = rect.top < window.innerHeight + 400
+      if (isVisible) {
+        setHasStartedLoading(true)
+        loadMedia()
+      }
+    }
+  })
+
+  const loadMedia = async () => {
+    const { channelId, messageId } = props.item
+
+    const cached = getCachedMedia(channelId, messageId, 'large')
+    if (cached) {
+      if (isMounted && props.item.channelId === channelId && props.item.messageId === messageId) {
+        setThumbnailUrl(cached)
+      }
+      return
+    }
+
+    try {
+      const url = await downloadMedia(channelId, messageId, 'large')
+      if (isMounted && props.item.channelId === channelId && props.item.messageId === messageId) {
+        setThumbnailUrl(url)
+      }
+    } catch {
+      // Silently fail
+    }
+  }
+
+  const setupObserver = (el: HTMLDivElement) => {
+    containerRef = el
+    observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !hasStartedLoading()) {
+          setHasStartedLoading(true)
+          loadMedia()
+          observer?.disconnect()
+        }
+      },
+      { rootMargin: '400px', threshold: 0 }
+    )
+    observer.observe(el)
+  }
+
+  onCleanup(() => {
+    isMounted = false
+    observer?.disconnect()
+  })
+
+  return (
+    <div
+      ref={setupObserver}
+      class={`relative aspect-square cursor-pointer overflow-hidden ${props.class ?? ''}`}
+      onClick={props.onClick}
+    >
+      <Show
+        when={thumbnailUrl()}
+        fallback={<div class="absolute inset-0 skeleton" />}
+      >
+        {(url) => (
+          <img
+            src={url()}
+            alt=""
+            class="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
+            loading="lazy"
+          />
+        )}
+      </Show>
+
+      {/* Video indicator */}
+      <Show when={props.item.media.type === 'video' || props.item.media.type === 'animation'}>
+        <div class="absolute inset-0 flex items-center justify-center bg-black/20">
+          <div class="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
+            <svg class="w-5 h-5 text-gray-900 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+/**
+ * Fullscreen gallery modal with navigation
+ */
+function GalleryModal(props: {
+  items: MediaItem[]
+  initialIndex: number
+  onClose: () => void
+}) {
+  const [currentIndex, setCurrentIndex] = createSignal(props.initialIndex)
+
+  const currentItem = () => props.items[currentIndex()]
+  const canGoPrev = () => currentIndex() > 0
+  const canGoNext = () => currentIndex() < props.items.length - 1
+
+  const goToPrev = () => {
+    if (canGoPrev()) setCurrentIndex((i) => i - 1)
+  }
+
+  const goToNext = () => {
+    if (canGoNext()) setCurrentIndex((i) => i + 1)
+  }
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') props.onClose()
+    if (e.key === 'ArrowLeft') goToPrev()
+    if (e.key === 'ArrowRight') goToNext()
+  }
+
+  createEffect(() => {
+    document.addEventListener('keydown', handleKeyDown)
+    document.body.style.overflow = 'hidden'
+
+    onCleanup(() => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = ''
+    })
+  })
+
+  // Load full resolution for current item
+  const fullQuery = useMedia(
+    () => currentItem().channelId,
+    () => currentItem().messageId,
+    () => undefined
+  )
+
+  return (
+    <Motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      class="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
+      onClick={props.onClose}
+    >
+      {/* Close button */}
+      <button
+        type="button"
+        aria-label="Close"
+        class="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors z-10"
+        onClick={props.onClose}
+      >
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      {/* Counter */}
+      <div class="absolute top-4 left-4 text-white/70 text-sm">
+        {currentIndex() + 1} / {props.items.length}
+      </div>
+
+      {/* Navigation buttons */}
+      <Show when={canGoPrev()}>
+        <button
+          type="button"
+          aria-label="Previous"
+          class="absolute left-4 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white transition-colors"
+          onClick={(e) => { e.stopPropagation(); goToPrev() }}
+        >
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      </Show>
+
+      <Show when={canGoNext()}>
+        <button
+          type="button"
+          aria-label="Next"
+          class="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white transition-colors"
+          onClick={(e) => { e.stopPropagation(); goToNext() }}
+        >
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </Show>
+
+      {/* Media content */}
+      <div class="max-w-full max-h-full p-4" onClick={(e) => e.stopPropagation()}>
+        <Show
+          when={fullQuery.data}
+          fallback={
+            <div class="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full" />
+          }
+        >
+          {(url) => (
+            <Show
+              when={currentItem().media.type === 'video' || currentItem().media.type === 'animation'}
+              fallback={
+                <img
+                  src={url()}
+                  alt=""
+                  class="max-w-full max-h-[90vh] object-contain"
+                />
+              }
+            >
+              <video
+                src={url()}
+                class="max-w-full max-h-[90vh]"
+                controls
+                autoplay={currentItem().media.type === 'animation'}
+                muted={currentItem().media.type === 'animation'}
+                loop={currentItem().media.type === 'animation'}
+              />
+            </Show>
+          )}
+        </Show>
+      </div>
+    </Motion.div>
+  )
+}

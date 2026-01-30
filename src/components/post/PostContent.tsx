@@ -77,7 +77,7 @@ export function PostContent(props: PostContentProps) {
         )
       case 'pre':
         return (
-          <pre class="my-2 p-3 rounded-lg bg-[var(--glass-bg)] overflow-x-auto">
+          <pre class="my-2 p-3 rounded-lg bg-[var(--glass-bg)] overflow-x-auto max-w-full">
             <code class="font-mono text-sm">{part.content}</code>
           </pre>
         )
