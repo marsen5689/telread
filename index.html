@@ -24,7 +24,80 @@
     <title>TelRead — Telegram Reader</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Loading screen (replaced when app loads) -->
+      <div id="splash" style="
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #000;
+        z-index: 9999;
+      ">
+        <style>
+          @media (prefers-color-scheme: light) {
+            #splash { background: #f5f5f7 !important; }
+            #splash-text { color: #1d1d1f !important; }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(0.96); }
+          }
+          @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+          }
+          #splash-icon {
+            animation: pulse 2s ease-in-out infinite;
+          }
+          #splash-bar {
+            width: 120px;
+            height: 3px;
+            border-radius: 3px;
+            background: linear-gradient(
+              90deg,
+              transparent 0%,
+              rgba(0, 122, 255, 0.6) 50%,
+              transparent 100%
+            );
+            background-size: 200% 100%;
+            animation: shimmer 1.5s ease-in-out infinite;
+          }
+        </style>
+
+        <!-- App Icon -->
+        <svg id="splash-icon" width="80" height="80" viewBox="0 0 512 512" fill="none" style="margin-bottom: 24px;">
+          <defs>
+            <linearGradient id="splash-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#007aff"/>
+              <stop offset="100%" style="stop-color:#5856d6"/>
+            </linearGradient>
+          </defs>
+          <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#splash-bg)"/>
+          <g transform="translate(256, 256)">
+            <path d="M-140 -80 L140 -80 C156.569 -80 170 -66.569 170 -50 L170 50 C170 66.569 156.569 80 140 80 L-60 80 L-100 120 L-100 80 L-140 80 C-156.569 80 -170 66.569 -170 50 L-170 -50 C-170 -66.569 -156.569 -80 -140 -80 Z" fill="white" fill-opacity="0.95"/>
+            <rect x="-120" y="-40" width="160" height="12" rx="6" fill="#007aff" fill-opacity="0.6"/>
+            <rect x="-120" y="-10" width="200" height="12" rx="6" fill="#007aff" fill-opacity="0.4"/>
+            <rect x="-120" y="20" width="140" height="12" rx="6" fill="#007aff" fill-opacity="0.3"/>
+          </g>
+        </svg>
+
+        <!-- App Name -->
+        <div id="splash-text" style="
+          font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+          font-size: 24px;
+          font-weight: 600;
+          color: #fff;
+          letter-spacing: -0.5px;
+          margin-bottom: 32px;
+        ">TelRead</div>
+
+        <!-- Loading bar -->
+        <div id="splash-bar"></div>
+      </div>
+    </div>
     <script type="module" src="/src/index.tsx"></script>
   </body>
 </html>
