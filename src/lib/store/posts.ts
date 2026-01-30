@@ -126,6 +126,7 @@ export function upsertPosts(posts: Message[]): void {
 
   setState(produce((s) => {
     const newKeys: PostKey[] = []
+    const existingCount = Object.keys(s.byId).length
 
     for (const post of posts) {
       const key = makeKey(post.channelId, post.id)
@@ -143,6 +144,9 @@ export function upsertPosts(posts: Message[]): void {
     }
 
     // Batch insert new keys
+    if (import.meta.env.DEV && newKeys.length > 0) {
+      console.log(`[Posts] upsertPosts: ${posts.length} input, ${newKeys.length} new, ${existingCount} existing -> ${existingCount + newKeys.length} total`)
+    }
     if (newKeys.length > 0) {
       // Sort new keys by date
       newKeys.sort((a, b) => {

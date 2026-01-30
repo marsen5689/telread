@@ -303,8 +303,7 @@ export function useOptimizedTimeline() {
   }))
 
   // Populate stores when data loads (from cache or fresh fetch)
-  // Track if initial data has been processed to avoid re-processing
-  let initialDataProcessed = false
+  let hasInitialized = false
   createEffect(
     on(
       () => initialQuery.data,
@@ -315,19 +314,23 @@ export function useOptimizedTimeline() {
         // channelMap is derived via createMemo, no need to set separately
         setChannels(reconcile(data.channels))
 
-        // Extract and upsert posts from channels (works for both cache restore and fresh fetch)
-        if (!initialDataProcessed) {
-          initialDataProcessed = true
-          
-          // Extract posts from channel lastMessages
-          const posts = data.channels
-            .filter((c) => c.lastMessage)
-            .map((c) => c.lastMessage!)
-          
-          if (posts.length > 0) {
-            upsertPosts(posts)
-          }
-          
+        // Always extract and upsert posts from channels
+        // upsertPosts handles duplicates (only updates if newer)
+        const posts = data.channels
+          .filter((c) => c.lastMessage)
+          .map((c) => c.lastMessage!)
+        
+        if (import.meta.env.DEV) {
+          console.log(`[Timeline] Channels loaded: ${data.channels.length}, posts from lastMessage: ${posts.length}`)
+        }
+        
+        if (posts.length > 0) {
+          upsertPosts(posts)
+        }
+        
+        // Only run initialization once
+        if (!hasInitialized) {
+          hasInitialized = true
           markStoreInitialized()
           // Process messages that arrived before timeline was ready
           onTimelineLoaded()
@@ -346,6 +349,10 @@ export function useOptimizedTimeline() {
         if (!pages || pages.length === 0) return
         // Only process new pages
         if (pages.length <= lastProcessedPageCount) return
+        
+        if (import.meta.env.DEV) {
+          console.log(`[Timeline] History pages: ${lastProcessedPageCount} -> ${pages.length}, total posts: ${pages.flat().length}`)
+        }
         lastProcessedPageCount = pages.length
 
         const posts = pages.flat()
