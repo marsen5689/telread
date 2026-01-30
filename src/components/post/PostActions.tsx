@@ -32,22 +32,27 @@ export function PostActions(props: PostActionsProps) {
     )
   }
 
+  // Comments are enabled if replies is defined (even if 0)
+  const hasComments = () => props.replies !== undefined
+
   return (
     <div class="flex items-center gap-2">
-      {/* Comments pill */}
-      <button onClick={props.onCommentClick} class="pill">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.5"
-            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-          />
-        </svg>
-        <Show when={props.replies !== undefined && props.replies > 0}>
-          <span>{formatCount(props.replies!)}</span>
-        </Show>
-      </button>
+      {/* Comments pill - only show if channel has comments enabled */}
+      <Show when={hasComments()}>
+        <button onClick={props.onCommentClick} class="pill">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.5"
+              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+            />
+          </svg>
+          <Show when={props.replies && props.replies > 0}>
+            <span>{formatCount(props.replies)}</span>
+          </Show>
+        </button>
+      </Show>
 
       {/* Views pill */}
       <Show when={props.views !== undefined && props.views > 0}>

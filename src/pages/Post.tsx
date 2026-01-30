@@ -190,14 +190,16 @@ export function Post() {
           </div>
         </Motion.article>
 
-        {/* Comments section */}
-        <div class="px-4 pb-24">
-          <CommentSection
-            channelId={channelId()}
-            messageId={messageId()}
-            initialExpanded
-          />
-        </div>
+        {/* Comments section - only if channel has comments enabled */}
+        <Show when={postQuery.data!.replies !== undefined}>
+          <div class="px-4 pb-24">
+            <CommentSection
+              channelId={channelId()}
+              messageId={messageId()}
+              initialExpanded
+            />
+          </div>
+        </Show>
       </Show>
     </div>
   )
