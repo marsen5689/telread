@@ -79,3 +79,12 @@ export {
   onTimelineLoaded,
   type UpdatesCleanup,
 } from './updates'
+export {
+  subscribeToComments,
+  onCommentUpdate,
+  isCommentUpdatesActive,
+  getActiveSubscriptionCount,
+  type CommentSubscription,
+  type CommentUpdate,
+  type CommentUpdateCallback,
+} from './commentUpdates'

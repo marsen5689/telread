@@ -1,5 +1,6 @@
 import { createSignal } from 'solid-js'
 import { GlassInput, GlassButton } from '@/components/ui'
+import { Phone, QrCode } from 'lucide-solid'
 
 interface PhoneInputProps {
   onSubmit: (phone: string) => void
@@ -50,16 +51,7 @@ export function PhoneInput(props: PhoneInputProps) {
           placeholder="+1 234 567 8900"
           autofocus
           error={props.error}
-          icon={
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-              />
-            </svg>
-          }
+          icon={<Phone size={20} />}
         />
 
         <GlassButton
@@ -87,14 +79,7 @@ export function PhoneInput(props: PhoneInputProps) {
         class="w-full"
         onClick={props.onSwitchToQR}
       >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
-          />
-        </svg>
+        <QrCode size={20} />
         Login with QR Code
       </GlassButton>
 

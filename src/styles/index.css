@@ -295,7 +295,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
-     DESKTOP SIDEBAR NAVIGATION
+     DESKTOP SIDEBAR NAVIGATION - Threads style
      ═══════════════════════════════════════════════════════════════════════ */
 
   .sidebar-nav-item {
@@ -317,6 +317,28 @@
 
   .sidebar-nav-item-active svg {
     color: var(--accent);
+  }
+
+  /* Threads-style icon navigation */
+  .threads-nav-item {
+    @apply flex items-center justify-center w-14 h-14 rounded-2xl;
+    color: var(--color-text-tertiary);
+    transition: background 0.2s ease, color 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  .threads-nav-item:hover {
+    background: var(--pill-bg);
+    color: var(--color-text);
+  }
+
+  .threads-nav-item:active {
+    background: var(--pill-bg-hover);
+  }
+
+  .threads-nav-item-active {
+    color: var(--color-text);
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
@@ -606,6 +628,15 @@
   .text-secondary { color: var(--color-text-secondary); }
   .text-tertiary { color: var(--color-text-tertiary); }
   .text-accent { color: var(--accent); }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 
   .line-clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
   .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

@@ -1,8 +1,9 @@
 import { For, Show } from 'solid-js'
 import { CommentThread } from './CommentThread'
 import { CommentComposer } from './CommentComposer'
-import { CommentSkeleton } from '@/components/ui'
+import { CommentSkeleton, ErrorState } from '@/components/ui'
 import { useComments, useSendComment } from '@/lib/query'
+import { MessageCircle } from 'lucide-solid'
 
 interface CommentSectionProps {
   channelId: number
@@ -36,14 +37,7 @@ export function CommentSection(props: CommentSectionProps) {
     <div class="space-y-4">
       {/* Header with comment count */}
       <div class="flex items-center gap-2 text-sm text-secondary">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.5"
-            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-          />
-        </svg>
+        <MessageCircle size={20} />
         <span class="font-medium">
           {totalComments()} {totalComments() === 1 ? 'comment' : 'comments'}
         </span>
@@ -66,20 +60,26 @@ export function CommentSection(props: CommentSectionProps) {
 
       {/* Error state */}
       <Show when={commentsQuery.isError}>
-        <div class="text-center py-4">
-          <p class="text-sm text-[var(--danger)]">Failed to load comments</p>
-          <button
-            onClick={() => commentsQuery.refetch()}
-            class="mt-2 text-sm text-accent hover:underline"
-          >
-            Try again
-          </button>
-        </div>
+        <ErrorState
+          variant="error"
+          title="Failed to load comments"
+          description="Something went wrong while loading comments."
+          action={{
+            label: 'Try Again',
+            onClick: () => commentsQuery.refetch(),
+          }}
+          compact
+        />
       </Show>
 
       {/* Empty state */}
       <Show when={!commentsQuery.isLoading && !commentsQuery.isError && totalComments() === 0}>
-        <p class="text-tertiary text-sm text-center py-4">No comments yet</p>
+        <ErrorState
+          variant="empty"
+          title="No comments yet"
+          description="Be the first to share your thoughts!"
+          compact
+        />
       </Show>
 
       {/* Comments list */}

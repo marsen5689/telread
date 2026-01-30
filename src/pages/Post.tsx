@@ -1,11 +1,12 @@
 import { useParams, useNavigate } from '@solidjs/router'
 import { Show, createMemo } from 'solid-js'
 import { Motion } from 'solid-motionone'
-import { ChannelAvatar, PostSkeleton } from '@/components/ui'
+import { ChannelAvatar, PostSkeleton, ErrorState } from '@/components/ui'
 import { PostContent, PostMedia, PostActions, MediaGallery } from '@/components/post'
 import { CommentSection } from '@/components/comments'
 import { usePost, useResolveChannel, useChannelInfo } from '@/lib/query'
 import { postsState } from '@/lib/store'
+import { ChevronLeft } from 'lucide-solid'
 import type { Message } from '@/lib/telegram'
 
 /**
@@ -102,14 +103,7 @@ function Post() {
           onClick={handleBack}
           class="pill"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
+          <ChevronLeft size={16} />
           Back
         </button>
       </div>
@@ -121,19 +115,22 @@ function Post() {
 
       {/* Error - only when no data and error occurred */}
       <Show when={isError()}>
-        <div class="p-4 text-center">
-          <p class="text-[var(--danger)]">Failed to load post</p>
-          <button
-            type="button"
-            onClick={() => {
+        <ErrorState
+          variant="not-found"
+          title="Post not found"
+          description="This post may have been deleted or the channel is unavailable."
+          action={{
+            label: 'Try Again',
+            onClick: () => {
               postQuery.refetch()
               resolvedChannel.refetch()
-            }}
-            class="mt-2 text-accent hover:underline"
-          >
-            Try again
-          </button>
-        </div>
+            },
+          }}
+          secondaryAction={{
+            label: 'Go Back',
+            onClick: handleBack,
+          }}
+        />
       </Show>
 
       {/* Post content */}

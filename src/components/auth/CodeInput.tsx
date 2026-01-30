@@ -1,4 +1,5 @@
 import { createSignal, onMount, For } from 'solid-js'
+import { ChevronLeft, AlertCircle } from 'lucide-solid'
 
 interface CodeInputProps {
   phone: string
@@ -66,9 +67,7 @@ export function CodeInput(props: CodeInputProps) {
   return (
     <div class="space-y-6">
       <button onClick={props.onBack} class="pill">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-        </svg>
+        <ChevronLeft size={16} />
         Back
       </button>
 
@@ -108,7 +107,10 @@ export function CodeInput(props: CodeInputProps) {
 
         {/* Error message */}
         {props.error && (
-          <p class="text-sm text-[var(--danger)] text-center">{props.error}</p>
+          <div class="flex items-center justify-center gap-2 text-sm">
+            <AlertCircle size={16} class="flex-shrink-0" style="color: var(--danger)" />
+            <span style="color: var(--danger)">{props.error}</span>
+          </div>
         )}
 
         {/* Resend code */}

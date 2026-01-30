@@ -1,6 +1,7 @@
 import { type ParentProps, Show, createEffect, onCleanup } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { Motion, Presence } from 'solid-motionone'
+import { X } from 'lucide-solid'
 
 interface GlassModalProps extends ParentProps {
   open: boolean
@@ -77,9 +78,7 @@ export function GlassModal(props: GlassModalProps) {
                     onClick={props.onClose}
                     class="pill p-2.5"
                   >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <X size={16} />
                   </button>
                 </div>
               </Show>

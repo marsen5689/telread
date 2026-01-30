@@ -4,6 +4,7 @@ import { DEFAULT_ASPECT_RATIO } from '@/config/constants'
 import type { MessageMedia } from '@/lib/telegram'
 import { useMedia } from '@/lib/query'
 import { Skeleton } from '@/components/ui'
+import { Play, FileText, Music, MapPin, User, ExternalLink, X } from 'lucide-solid'
 
 interface PostMediaProps {
   channelId: number
@@ -46,9 +47,12 @@ export function PostMedia(props: PostMediaProps) {
     return DEFAULT_ASPECT_RATIO
   })
 
+  // Threads-style: fixed height with natural width based on aspect ratio
   const containerStyle = createMemo(() => ({
-    'aspect-ratio': aspectRatio().toString(),
-    'max-height': '300px',
+    height: '240px',
+    width: `${240 * aspectRatio()}px`,
+    'min-width': '160px',
+    'max-width': '100%',
   }))
 
   // Setup Intersection Observer for lazy loading
@@ -85,20 +89,23 @@ export function PostMedia(props: PostMediaProps) {
   })
 
   return (
-    <div ref={setupObserver} class={`relative rounded-xl overflow-hidden ${props.class ?? ''}`}>
+    <div ref={setupObserver} class={`relative ${props.class ?? ''}`}>
       <Switch>
-        {/* Photo */}
+        {/* Photo - Threads style */}
         <Match when={props.media.type === 'photo'}>
-          <div class="relative w-full" style={containerStyle()}>
+          <div 
+            class="relative rounded-2xl overflow-hidden flex-shrink-0 shadow-sm hover:shadow-md transition-shadow" 
+            style={containerStyle()}
+          >
             <Show
               when={mediaQuery.data}
-              fallback={<div class="absolute inset-0 skeleton rounded-none" />}
+              fallback={<div class="absolute inset-0 skeleton" />}
             >
               {(url) => (
                 <img
                   src={url()}
                   alt="Post media"
-                  class="w-full h-full object-cover cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent"
+                  class="w-full h-full object-cover cursor-pointer hover:scale-[1.02] transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-accent"
                   onClick={() => setIsExpanded(true)}
                   onKeyDown={handleImageKeyDown}
                   tabIndex={0}
@@ -109,12 +116,15 @@ export function PostMedia(props: PostMediaProps) {
           </div>
         </Match>
 
-        {/* Video */}
+        {/* Video - Threads style */}
         <Match when={props.media.type === 'video' || props.media.type === 'animation'}>
-          <div class="relative w-full" style={containerStyle()}>
+          <div 
+            class="relative rounded-2xl overflow-hidden flex-shrink-0 shadow-sm hover:shadow-md transition-shadow" 
+            style={containerStyle()}
+          >
             <Show
               when={mediaQuery.data}
-              fallback={<div class="absolute inset-0 skeleton rounded-none" />}
+              fallback={<div class="absolute inset-0 skeleton" />}
             >
               {(url) => (
                 <div class="relative w-full h-full">
@@ -129,24 +139,17 @@ export function PostMedia(props: PostMediaProps) {
                       type="button"
                       aria-label="Play video"
                       onClick={() => setIsExpanded(true)}
-                      class="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center
+                      class="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center
                              shadow-lg hover:bg-white hover:scale-105 transition-all
                              focus:outline-none focus:ring-2 focus:ring-accent"
                     >
-                      <svg
-                        class="w-8 h-8 text-gray-900 ml-1"
-                        fill="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                      >
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
+                      <Play size={24} class="text-gray-900 ml-0.5" fill="currentColor" />
                     </button>
                   </div>
                   {/* Duration badge */}
                   <Show when={props.media.duration}>
                     {(duration) => (
-                      <div class="absolute bottom-2 right-2 px-2 py-1 rounded bg-black/70 text-white text-xs font-medium">
+                      <div class="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/60 text-white text-xs font-medium backdrop-blur-sm">
                         {formatDuration(duration())}
                       </div>
                     )}
@@ -161,20 +164,7 @@ export function PostMedia(props: PostMediaProps) {
         <Match when={props.media.type === 'document'}>
           <div class="glass rounded-xl p-4 flex items-center gap-4">
             <div class="w-12 h-12 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center">
-              <svg
-                class="w-6 h-6 text-accent"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-                />
-              </svg>
+              <FileText size={24} class="text-accent" />
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-primary truncate">
@@ -189,7 +179,7 @@ export function PostMedia(props: PostMediaProps) {
 
         {/* Sticker */}
         <Match when={props.media.type === 'sticker'}>
-          <div class="w-32 h-32">
+          <div class="w-40 h-40">
             <Show
               when={mediaQuery.data}
               fallback={<Skeleton class="w-full h-full" rounded="lg" />}
@@ -198,7 +188,7 @@ export function PostMedia(props: PostMediaProps) {
                 <img
                   src={url()}
                   alt="Sticker"
-                  class="w-full h-full object-contain"
+                  class="w-full h-full object-contain drop-shadow-md"
                 />
               )}
             </Show>
@@ -209,9 +199,7 @@ export function PostMedia(props: PostMediaProps) {
         <Match when={props.media.type === 'audio'}>
           <div class="glass rounded-xl p-4 flex items-center gap-4">
             <div class="w-12 h-12 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center flex-shrink-0">
-              <svg class="w-6 h-6 text-accent" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-              </svg>
+              <Music size={24} class="text-accent" />
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-primary truncate">
@@ -229,9 +217,7 @@ export function PostMedia(props: PostMediaProps) {
               class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center flex-shrink-0
                      hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-accent"
             >
-              <svg class="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+              <Play size={20} class="text-white ml-0.5" fill="currentColor" />
             </button>
           </div>
         </Match>
@@ -246,9 +232,7 @@ export function PostMedia(props: PostMediaProps) {
               class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center flex-shrink-0
                      hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-accent"
             >
-              <svg class="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+              <Play size={20} class="text-white ml-0.5" fill="currentColor" />
             </button>
             {/* Waveform visualization */}
             <div class="flex-1 flex items-center gap-0.5 h-8">
@@ -325,9 +309,7 @@ export function PostMedia(props: PostMediaProps) {
             class="glass rounded-xl p-4 flex items-center gap-4 hover:bg-[var(--bg-secondary)] transition-colors"
           >
             <div class="w-12 h-12 rounded-lg bg-green-500/15 flex items-center justify-center flex-shrink-0">
-              <svg class="w-6 h-6 text-green-500" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-              </svg>
+              <MapPin size={24} class="text-green-500" />
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-primary">Location</p>
@@ -338,9 +320,7 @@ export function PostMedia(props: PostMediaProps) {
                 <p class="text-xs text-green-500 mt-1">Live location</p>
               </Show>
             </div>
-            <svg class="w-5 h-5 text-tertiary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
+            <ExternalLink size={20} class="text-tertiary flex-shrink-0" />
           </a>
         </Match>
 
@@ -353,17 +333,13 @@ export function PostMedia(props: PostMediaProps) {
             class="glass rounded-xl p-4 flex items-center gap-4 hover:bg-[var(--bg-secondary)] transition-colors"
           >
             <div class="w-12 h-12 rounded-lg bg-orange-500/15 flex items-center justify-center flex-shrink-0">
-              <svg class="w-6 h-6 text-orange-500" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-              </svg>
+              <MapPin size={24} class="text-orange-500" />
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-primary truncate">{props.media.venueTitle}</p>
               <p class="text-xs text-tertiary truncate">{props.media.address}</p>
             </div>
-            <svg class="w-5 h-5 text-tertiary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
+            <ExternalLink size={20} class="text-tertiary flex-shrink-0" />
           </a>
         </Match>
 
@@ -371,9 +347,7 @@ export function PostMedia(props: PostMediaProps) {
         <Match when={props.media.type === 'contact'}>
           <div class="glass rounded-xl p-4 flex items-center gap-4">
             <div class="w-12 h-12 rounded-full bg-blue-500/15 flex items-center justify-center flex-shrink-0">
-              <svg class="w-6 h-6 text-blue-500" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-              </svg>
+              <User size={24} class="text-blue-500" />
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-primary truncate">
@@ -498,14 +472,7 @@ function MediaModal(props: {
                focus:outline-none focus:ring-2 focus:ring-white"
         onClick={props.onClose}
       >
-        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M6 18L18 6M6 6l12 12"
-          />
-        </svg>
+        <X size={32} />
       </button>
 
       <div class="max-w-full max-h-full p-4" onClick={(e) => e.stopPropagation()}>

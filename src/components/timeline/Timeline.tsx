@@ -3,6 +3,7 @@ import { TimelinePost } from './TimelinePost'
 import { TimelineGroup } from './TimelineGroup'
 import { PostSkeleton } from '@/components/ui'
 import { INFINITE_SCROLL_THRESHOLD, SCROLL_THROTTLE_MS } from '@/config/constants'
+import { Newspaper } from 'lucide-solid'
 import type { Channel } from '@/lib/telegram'
 import type { TimelineItem } from '@/lib/utils'
 
@@ -232,14 +233,7 @@ export function Timeline(props: TimelineProps) {
       <Show when={isEmpty()}>
         <div class="flex flex-col items-center justify-center h-64 text-center">
           <div class="w-16 h-16 rounded-2xl bg-[var(--accent)]/15 flex items-center justify-center mb-4">
-            <svg class="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"
-              />
-            </svg>
+            <Newspaper size={32} class="text-accent" />
           </div>
           <h3 class="text-lg font-semibold text-primary mb-1">No posts yet</h3>
           <p class="text-secondary text-sm">Subscribe to channels to see posts here</p>

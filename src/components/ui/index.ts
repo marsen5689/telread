@@ -12,3 +12,5 @@ export {
   PostSkeleton,
   CommentSkeleton,
 } from './Skeleton'
+export { ErrorState, FullPageError, InlineError } from './ErrorState'
+export * from './Icons'

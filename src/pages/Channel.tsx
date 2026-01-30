@@ -5,6 +5,7 @@ import { ChannelCard } from '@/components/channel'
 import { Skeleton } from '@/components/ui'
 import { useResolveChannel, useChannelInfo, useMessages, useLeaveChannel } from '@/lib/query'
 import { groupPostsByMediaGroup } from '@/lib/utils'
+import { ChevronLeft } from 'lucide-solid'
 
 /**
  * Channel page - Shows all posts from a single channel
@@ -57,9 +58,7 @@ function Channel() {
       {/* Back button */}
       <div class="px-4 pt-4">
         <button onClick={handleBack} class="pill">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-          </svg>
+          <ChevronLeft size={16} />
           Back
         </button>
       </div>

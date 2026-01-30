@@ -3,6 +3,7 @@ import { useNavigate } from '@solidjs/router'
 import { ChannelAvatar } from '@/components/ui'
 import { PostContent, PostActions, MediaGallery } from '@/components/post'
 import { formatTimeAgo, globalNow } from '@/lib/utils'
+import { CornerDownRight } from 'lucide-solid'
 import type { Message } from '@/lib/telegram'
 
 interface TimelineGroupProps {
@@ -68,9 +69,7 @@ export function TimelineGroup(props: TimelineGroupProps) {
       <Show when={primaryPost().forward}>
         {(forward) => (
           <div class="flex items-center gap-2 px-4 pt-3 pb-1 text-sm text-tertiary">
-            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-            </svg>
+            <CornerDownRight size={16} class="flex-shrink-0" />
             <span class="truncate">
               Forwarded from{' '}
               <span class="text-accent font-medium">{forward().senderName}</span>

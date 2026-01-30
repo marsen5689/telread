@@ -13,6 +13,8 @@ import {
 } from '@/lib/telegram'
 import { validateConfig } from '@/config/telegram'
 import { MainLayout } from '@/layouts'
+import { FullPageError } from '@/components/ui'
+
 import {
   Home,
   Channel,
@@ -42,21 +44,9 @@ function ProtectedRoute(props: ParentProps) {
       when={shouldShowContent()}
       fallback={
         <div class="min-h-screen flex flex-col items-center justify-center bg-[var(--bg-primary)]">
-          <svg width="80" height="80" viewBox="0 0 512 512" fill="none" class="mb-6 animate-pulse">
-            <defs>
-              <linearGradient id="loading-bg" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style="stop-color:#007aff"/>
-                <stop offset="100%" style="stop-color:#5856d6"/>
-              </linearGradient>
-            </defs>
-            <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#loading-bg)"/>
-            <g transform="translate(256, 256)">
-              <path d="M-140 -80 L140 -80 C156.569 -80 170 -66.569 170 -50 L170 50 C170 66.569 156.569 80 140 80 L-60 80 L-100 120 L-100 80 L-140 80 C-156.569 80 -170 66.569 -170 50 L-170 -50 C-170 -66.569 -156.569 -80 -140 -80 Z" fill="white" fill-opacity="0.95"/>
-              <rect x="-120" y="-40" width="160" height="12" rx="6" fill="#007aff" fill-opacity="0.6"/>
-              <rect x="-120" y="-10" width="200" height="12" rx="6" fill="#007aff" fill-opacity="0.4"/>
-              <rect x="-120" y="20" width="140" height="12" rx="6" fill="#007aff" fill-opacity="0.3"/>
-            </g>
-          </svg>
+          <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#007aff] to-[#5856d6] flex items-center justify-center mb-6 animate-pulse text-[44px]">
+            📖
+          </div>
           <h1 class="text-2xl font-semibold text-primary mb-8" style="letter-spacing: -0.5px;">TelRead</h1>
           <div class="w-[120px] h-[3px] rounded-full overflow-hidden" style="background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%); background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite;" />
           <style>{`@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }`}</style>
@@ -223,17 +213,14 @@ export function App() {
           // Return minimal element to prevent further rendering
           return <div style={{ display: 'none' }} />
         }
-        // For other errors, show error state
+        // For other errors, show beautiful error state
         return (
-          <div class="min-h-screen flex flex-col items-center justify-center gap-4">
-            <p class="text-red-500">Something went wrong</p>
-            <button
-              class="px-4 py-2 bg-blue-500 text-white rounded"
-              onClick={() => window.location.replace('/')}
-            >
-              Go Home
-            </button>
-          </div>
+          <FullPageError
+            title="Something went wrong"
+            description="We're sorry, but something unexpected happened. Please try again or return to the home page."
+            onRetry={() => window.location.reload()}
+            onGoHome={() => window.location.replace('/')}
+          />
         )
       }}
     >

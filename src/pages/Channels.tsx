@@ -1,9 +1,10 @@
 import { For, Show, createSignal } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { Motion } from 'solid-motionone'
-import { GlassCard, GlassButton, GlassInput, ChannelAvatar, Skeleton } from '@/components/ui'
+import { GlassCard, GlassButton, GlassInput, ChannelAvatar, Skeleton, InlineError } from '@/components/ui'
 import { useChannels, useJoinChannel } from '@/lib/query'
 import { formatCount } from '@/lib/utils'
+import { Plus, Layers, ChevronRight } from 'lucide-solid'
 
 /**
  * Channels list page
@@ -43,14 +44,7 @@ function Channels() {
           size="sm"
           onClick={() => setShowJoinModal(true)}
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
+          <Plus size={16} />
           Add Channel
         </GlassButton>
       </div>
@@ -84,9 +78,7 @@ function Channels() {
             </GlassButton>
           </div>
           <Show when={joinMutation.isError}>
-            <p class="text-sm text-[var(--danger)]">
-              Failed to join channel. Check the username and try again.
-            </p>
+            <InlineError message="Failed to join channel. Check the username and try again." />
           </Show>
         </GlassCard>
       </Show>
@@ -114,19 +106,7 @@ function Channels() {
       <Show when={!channelsQuery.isLoading && channelsQuery.data?.length === 0}>
         <div class="text-center py-12">
           <div class="w-16 h-16 rounded-2xl bg-[var(--accent)]/15 flex items-center justify-center mx-auto mb-4">
-            <svg
-              class="w-8 h-8 text-accent"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-              />
-            </svg>
+            <Layers size={32} class="text-accent" />
           </div>
           <h3 class="text-lg font-semibold text-primary mb-1">No channels yet</h3>
           <p class="text-secondary text-sm mb-4">
@@ -177,19 +157,7 @@ function Channels() {
                         </p>
                       </Show>
                     </div>
-                    <svg
-                      class="w-5 h-5 text-tertiary flex-shrink-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
+                    <ChevronRight size={20} class="text-tertiary flex-shrink-0" />
                   </div>
                 </GlassCard>
               </Motion.div>
