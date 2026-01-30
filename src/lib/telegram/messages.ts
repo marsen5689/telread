@@ -619,3 +619,166 @@ function mapEntities(msg: TgMessage): MessageEntity[] | undefined {
     }
   })
 }
+
+// Cache for global available reactions
+let cachedGlobalReactions: string[] | null = null
+
+/**
+ * Send a reaction to a message using mtcute's built-in method
+ *
+ * @param channelId - Channel/chat ID
+ * @param messageId - Message ID to react to
+ * @param emoji - Emoji reaction (or null to remove reaction)
+ * @returns Updated reactions array or null on error
+ */
+export async function sendReaction(
+  channelId: number,
+  messageId: number,
+  emoji: string | null
+): Promise<MessageReaction[] | null> {
+  const client = getTelegramClient()
+
+  try {
+    // Use mtcute's built-in sendReaction method
+    // InputReaction can be a simple string (emoji)
+    const result = await client.sendReaction({
+      chatId: channelId,
+      message: messageId,
+      emoji: emoji ?? undefined, // null removes reaction
+    })
+
+    if (result) {
+      const mapped = mapMessage(result, channelId)
+      return mapped?.reactions ?? null
+    }
+
+    return null
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.error('[sendReaction] Error:', error)
+    }
+    return null
+  }
+}
+
+/**
+ * Default emoji reactions available in Telegram
+ * Used when channel allows all reactions
+ */
+const DEFAULT_REACTIONS = ['👍', '👎', '❤️', '🔥', '🥰', '👏', '😁', '🤔', '🤯', '😱', '🤬', '😢', '🎉', '🤩', '🤮', '💩', '🙏']
+
+/**
+ * Fetch global available reactions from Telegram
+ * Falls back to default list if API fails
+ */
+async function fetchGlobalReactions(): Promise<string[]> {
+  if (cachedGlobalReactions) {
+    return cachedGlobalReactions
+  }
+
+  const client = getTelegramClient()
+
+  try {
+    const result = await (client as any).call({
+      _: 'messages.getAvailableReactions',
+      hash: 0,
+    })
+
+    if (import.meta.env.DEV) {
+      console.log('[fetchGlobalReactions] Raw result:', result?._)
+    }
+
+    // Handle different response types
+    if (result?._ === 'messages.availableReactions' && result.reactions) {
+      const reactions = result.reactions
+        .filter((r: any) => r._ === 'availableReaction' && !r.inactive)
+        .map((r: any) => {
+          // Try different ways to get the emoticon
+          if (typeof r.reaction === 'string') {
+            return r.reaction
+          }
+          if (r.reaction?.emoticon) {
+            return r.reaction.emoticon
+          }
+          if (r.reaction?._ === 'reactionEmoji') {
+            return r.reaction.emoticon
+          }
+          return null
+        })
+        .filter(Boolean) as string[]
+
+      if (reactions.length > 0) {
+        if (import.meta.env.DEV) {
+          console.log('[fetchGlobalReactions] Parsed reactions:', reactions.length)
+        }
+        cachedGlobalReactions = reactions
+        return reactions
+      }
+    }
+
+    // Fallback to default
+    if (import.meta.env.DEV) {
+      console.log('[fetchGlobalReactions] Using default reactions')
+    }
+    cachedGlobalReactions = DEFAULT_REACTIONS
+    return DEFAULT_REACTIONS
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.error('[fetchGlobalReactions] Error, using defaults:', error)
+    }
+    cachedGlobalReactions = DEFAULT_REACTIONS
+    return DEFAULT_REACTIONS
+  }
+}
+
+/**
+ * Get available reactions for a channel
+ * Uses mtcute's getFullChat to get available reactions from channel settings
+ */
+export async function getAvailableReactions(channelId: number): Promise<string[]> {
+  const client = getTelegramClient()
+
+  try {
+    // Use mtcute's built-in getFullChat method
+    const fullChat = await client.getFullChat(channelId)
+    const availableReactions = fullChat.availableReactions
+
+    if (import.meta.env.DEV) {
+      console.log('[getAvailableReactions] Channel:', channelId, 'type:', availableReactions?._)
+    }
+
+    // chatReactionsNone - reactions are explicitly disabled
+    if (availableReactions?._ === 'chatReactionsNone') {
+      if (import.meta.env.DEV) {
+        console.log('[getAvailableReactions] Reactions disabled for channel')
+      }
+      return []
+    }
+
+    // Channel has specific reactions allowed
+    if (availableReactions?._ === 'chatReactionsSome') {
+      const reactions = availableReactions.reactions
+        ?.map((r: any) => {
+          if (typeof r === 'string') return r
+          if (r.emoticon) return r.emoticon
+          if (r._ === 'reactionEmoji') return r.emoticon
+          return null
+        })
+        .filter(Boolean) as string[]
+
+      if (import.meta.env.DEV) {
+        console.log('[getAvailableReactions] Specific reactions:', reactions)
+      }
+      return reactions ?? fetchGlobalReactions()
+    }
+
+    // No config, chatReactionsAll, or unknown - use global reactions
+    return fetchGlobalReactions()
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.error('[getAvailableReactions] Error, using defaults:', error)
+    }
+    // On error, return defaults so user can still react
+    return DEFAULT_REACTIONS
+  }
+}

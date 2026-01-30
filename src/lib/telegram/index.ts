@@ -37,6 +37,8 @@ export {
   fetchTimeline,
   fetchMoreHistory,
   mapMessage,
+  sendReaction,
+  getAvailableReactions,
   type Message,
   type MessageMedia,
   type MessageEntity,

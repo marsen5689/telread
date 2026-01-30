@@ -636,25 +636,44 @@ export async function downloadProfilePhoto(
 }
 
 /**
- * Resolve peer by ID - tries chat first, then user
+ * Determine peer type from ID based on Telegram's ID structure:
+ * - Users: positive numbers
+ * - Channels/Supergroups: negative with -100 prefix (e.g., -1001234567890)
+ * - Regular groups: negative without -100 prefix
+ */
+function getPeerType(id: number): 'user' | 'channel' | 'chat' {
+  if (id > 0) return 'user'
+  if (id < -1000000000000) return 'channel'
+  return 'chat'
+}
+
+/**
+ * Resolve peer by ID to get profile photo
+ * Uses ID structure to determine correct API method
  */
 async function resolvePeerWithPhoto(
   client: ReturnType<typeof getTelegramClient>,
   peerId: number
 ) {
-  // Try as channel/chat first
-  try {
-    return await withTimeout(client.getChat(peerId), DOWNLOAD_TIMEOUT, `getChat(${peerId})`)
-  } catch (error) {
-    debugLog(`getChat(${peerId}) failed, trying as user`, error)
-  }
+  const peerType = getPeerType(peerId)
 
-  // Fallback to user
   try {
-    const users = await withTimeout(client.getUsers([peerId]), DOWNLOAD_TIMEOUT, `getUsers(${peerId})`)
-    return users?.[0] ?? null
-  } catch (error) {
-    debugLog(`getUsers(${peerId}) failed`, error)
+    if (peerType === 'user') {
+      const users = await withTimeout(
+        client.getUsers([peerId]),
+        DOWNLOAD_TIMEOUT,
+        `getUsers(${peerId})`
+      )
+      return users?.[0] ?? null
+    } else {
+      // Channel or chat - use getChat
+      return await withTimeout(
+        client.getChat(peerId),
+        DOWNLOAD_TIMEOUT,
+        `getChat(${peerId})`
+      )
+    }
+  } catch {
     return null
   }
 }

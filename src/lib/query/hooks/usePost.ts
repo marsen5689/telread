@@ -1,5 +1,6 @@
-import { createQuery } from '@tanstack/solid-query'
-import { getMessage } from '@/lib/telegram'
+import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query'
+import { getMessage, sendReaction, getAvailableReactions } from '@/lib/telegram'
+import { updatePostReactions } from '@/lib/store'
 import { queryKeys } from '../keys'
 
 /**
@@ -30,4 +31,48 @@ export function usePrefetchPost(queryClient: {
       queryFn: () => getMessage(channelId, messageId),
     })
   }
+}
+
+/**
+ * Hook to fetch available reactions for a channel
+ */
+export function useAvailableReactions(channelId: () => number) {
+  return createQuery(() => ({
+    queryKey: ['reactions', 'available', channelId()],
+    queryFn: () => getAvailableReactions(channelId()),
+    enabled: channelId() !== 0,
+    staleTime: 1000 * 60 * 60, // 1 hour - reactions don't change often
+  }))
+}
+
+/**
+ * Mutation hook to send a reaction to a message
+ */
+export function useSendReaction() {
+  const queryClient = useQueryClient()
+
+  return createMutation(() => ({
+    mutationFn: async ({
+      channelId,
+      messageId,
+      emoji,
+    }: {
+      channelId: number
+      messageId: number
+      emoji: string | null
+    }) => {
+      const result = await sendReaction(channelId, messageId, emoji)
+      return { channelId, messageId, reactions: result }
+    },
+    onSuccess: ({ channelId, messageId, reactions }) => {
+      // Update the store with new reactions
+      if (reactions) {
+        updatePostReactions(channelId, messageId, reactions)
+      }
+      // Invalidate post query to refetch
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.detail(channelId, messageId),
+      })
+    },
+  }))
 }

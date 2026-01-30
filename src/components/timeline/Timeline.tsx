@@ -218,7 +218,12 @@ export function Timeline(props: TimelineProps) {
         <div class="sticky top-0 z-10 flex justify-center py-3 pointer-events-none">
           <button
             type="button"
-            onClick={() => props.onShowNewPosts?.()}
+            onClick={() => {
+              // Reveal pending posts
+              props.onShowNewPosts?.()
+              // Scroll to top (like Twitter)
+              scrollParent?.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
             class="new-posts-btn pointer-events-auto"
           >
             {props.pendingCount === 1 ? '1 new post' : `${props.pendingCount} new posts`}

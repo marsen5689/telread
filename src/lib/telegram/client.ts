@@ -121,6 +121,27 @@ export function getTelegramClient(): TelegramClient {
   // Setup logging
   setupClientLogging(clientInstance)
 
+  // Global error handler - catches all mtcute/mtproto errors
+  clientInstance.onError.add((error) => {
+    // Only log in development, and skip common ignorable errors
+    if (import.meta.env.DEV) {
+      const message = error instanceof Error ? error.message : String(error)
+
+      // Skip known ignorable errors
+      const ignorable = [
+        'CHANNEL_INVALID',
+        'CHANNEL_PRIVATE',
+        'MSG_ID_INVALID',
+        'FILE_REFERENCE',
+      ]
+      if (ignorable.some(e => message.includes(e))) {
+        return
+      }
+
+      console.error('[mtcute] Error:', error)
+    }
+  })
+
   // Increment version for new client instance
   clientVersion++
 

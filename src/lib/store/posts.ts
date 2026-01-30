@@ -71,6 +71,20 @@ export function upsertPost(post: Message): void {
     return
   }
 
+  // Check if already in sortedKeys (from initial load/fetch)
+  // This can happen if fetchChannelsWithLastMessages already loaded this post
+  if (state.sortedKeys.includes(key)) {
+    if (import.meta.env.DEV) {
+      console.log('[Posts] upsertPost: key already in sortedKeys, just updating byId', key)
+    }
+    setState('byId', key, post)
+    return
+  }
+
+  if (import.meta.env.DEV) {
+    console.log('[Posts] upsertPost: adding to pending queue', key)
+  }
+
   // New post - add to pending queue (Twitter-style)
   setState(
     produce((s) => {
@@ -290,16 +304,39 @@ export function getPendingCount(): number {
  * Called when user clicks "N new posts" button
  */
 export function revealPendingPosts(): void {
+  if (import.meta.env.DEV) {
+    console.log('[Posts] revealPendingPosts called')
+    console.log('[Posts] pendingKeys:', state.pendingKeys.length, state.pendingKeys)
+    console.log('[Posts] sortedKeys before:', state.sortedKeys.length)
+    // Check if pending posts exist in byId
+    const missingPosts = state.pendingKeys.filter((key) => !state.byId[key])
+    if (missingPosts.length > 0) {
+      console.warn('[Posts] Missing posts in byId:', missingPosts)
+    }
+    // Check for duplicates
+    const sortedSet = new Set(state.sortedKeys)
+    const duplicates = state.pendingKeys.filter((key) => sortedSet.has(key))
+    if (duplicates.length > 0) {
+      console.warn('[Posts] Duplicate keys (in both pending and sorted):', duplicates)
+    }
+  }
+
   if (state.pendingKeys.length === 0) return
 
   setState(
     produce((s) => {
       // Merge pending into sorted, maintaining sort order
-      s.sortedKeys = sortKeysByDate([...s.pendingKeys, ...s.sortedKeys], s.byId)
+      // Use Set to prevent duplicates (edge case protection)
+      const allKeys = [...new Set([...s.pendingKeys, ...s.sortedKeys])]
+      s.sortedKeys = sortKeysByDate(allKeys, s.byId)
       s.pendingKeys = []
       s.lastUpdated = Date.now()
     })
   )
+
+  if (import.meta.env.DEV) {
+    console.log('[Posts] sortedKeys after:', state.sortedKeys.length)
+  }
 }
 
 /**

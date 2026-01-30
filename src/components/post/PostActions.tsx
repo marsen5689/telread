@@ -1,5 +1,6 @@
-import { Show, For } from 'solid-js'
+import { Show, For, createSignal } from 'solid-js'
 import { bookmarksStore } from '@/lib/store'
+import { useAvailableReactions, useSendReaction } from '@/lib/query'
 import type { MessageReaction } from '@/lib/telegram'
 
 interface PostActionsProps {
@@ -17,9 +18,14 @@ interface PostActionsProps {
  * Post action buttons - pill-style like VK/Telegram
  *
  * Uses rounded pill buttons with subtle backgrounds.
- * Actions include: comments, views, bookmark.
+ * Actions include: comments, views, bookmark, reactions.
  */
 export function PostActions(props: PostActionsProps) {
+  const [showPicker, setShowPicker] = createSignal(false)
+
+  const availableReactionsQuery = useAvailableReactions(() => props.channelId)
+  const sendReactionMutation = useSendReaction()
+
   const isBookmarked = () =>
     bookmarksStore.isBookmarked(props.channelId, props.messageId)
 
@@ -32,11 +38,35 @@ export function PostActions(props: PostActionsProps) {
     )
   }
 
+  const handleReactionClick = (emoji: string) => {
+    sendReactionMutation.mutate({
+      channelId: props.channelId,
+      messageId: props.messageId,
+      emoji,
+    })
+    setShowPicker(false)
+  }
+
+  const handleExistingReactionClick = (emoji: string) => {
+    // Toggle - if already reacted with this emoji, remove it
+    sendReactionMutation.mutate({
+      channelId: props.channelId,
+      messageId: props.messageId,
+      emoji,
+    })
+  }
+
   // Comments are enabled if replies is defined (even if 0)
   const hasComments = () => props.replies !== undefined
 
+  // Always show reaction button - will load reactions when clicked
+  const hasReactions = () => {
+    const available = availableReactionsQuery.data
+    return available && available.length > 0
+  }
+
   return (
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 relative">
       {/* Comments pill - only show if channel has comments enabled */}
       <Show when={hasComments()}>
         <button type="button" onClick={props.onCommentClick} class="pill" aria-label="View comments">
@@ -99,22 +129,85 @@ export function PostActions(props: PostActionsProps) {
         </svg>
       </button>
 
-      {/* Reactions - after buttons with separator */}
+      {/* Add reaction button */}
+      <div class="relative">
+        <button
+          type="button"
+          onClick={() => setShowPicker(!showPicker())}
+          class={`pill ${showPicker() ? 'pill-active' : ''}`}
+          aria-label="Add reaction"
+          aria-expanded={showPicker()}
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.5"
+              d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+        </button>
+
+        {/* Reaction picker popup */}
+        <Show when={showPicker()}>
+          <div
+            class="fixed inset-x-4 bottom-20 mx-auto max-w-sm p-3 glass-card rounded-2xl shadow-xl z-50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Show
+              when={hasReactions()}
+              fallback={
+                <div class="text-center py-4 text-tertiary text-sm">
+                  {availableReactionsQuery.isLoading ? 'Loading...' : 'No reactions available'}
+                </div>
+              }
+            >
+              <div class="flex flex-wrap justify-center gap-1">
+                <For each={availableReactionsQuery.data}>
+                  {(emoji) => (
+                    <button
+                      type="button"
+                      onClick={() => handleReactionClick(emoji)}
+                      disabled={sendReactionMutation.isPending}
+                      class="w-10 h-10 flex items-center justify-center text-2xl rounded-xl hover:bg-[var(--glass-bg)] hover:scale-110 transition-transform active:scale-95 disabled:opacity-50"
+                    >
+                      {emoji}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+        </Show>
+      </div>
+
+      {/* Existing reactions - clickable */}
       <Show when={props.reactions && props.reactions.length > 0}>
         <div class="actions-divider" />
         <div class="flex items-center gap-1.5">
           <For each={props.reactions}>
             {(reaction) => (
-              <div
-                class={`reaction-pill ${reaction.isPaid ? 'reaction-paid' : ''}`}
-                title={reaction.isPaid ? 'Paid reaction' : undefined}
+              <button
+                type="button"
+                onClick={() => handleExistingReactionClick(reaction.emoji)}
+                disabled={sendReactionMutation.isPending}
+                class={`reaction-pill cursor-pointer hover:scale-105 transition-transform active:scale-95 disabled:opacity-50 ${reaction.isPaid ? 'reaction-paid' : ''}`}
+                title={reaction.isPaid ? 'Paid reaction' : `React with ${reaction.emoji}`}
               >
                 <span class="reaction-emoji">{reaction.emoji}</span>
                 <span class="reaction-count">{formatCount(reaction.count)}</span>
-              </div>
+              </button>
             )}
           </For>
         </div>
+      </Show>
+
+      {/* Click outside to close picker */}
+      <Show when={showPicker()}>
+        <div
+          class="fixed inset-0 z-40"
+          onClick={() => setShowPicker(false)}
+        />
       </Show>
     </div>
   )

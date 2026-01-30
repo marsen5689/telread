@@ -1,5 +1,5 @@
 import { createQuery, createInfiniteQuery } from '@tanstack/solid-query'
-import { createSignal, createEffect, on, createMemo, onCleanup } from 'solid-js'
+import { createSignal, createEffect, on, createMemo } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
 import {
   fetchMessages,
@@ -248,19 +248,24 @@ async function fetchTimelineHistory(
   maxId: number,
   limit: number = 20
 ): Promise<Message[]> {
-  const channelsToFetch = channelIds.slice(0, 5)
-
-  const results = await Promise.allSettled(
-    channelsToFetch.map((channelId) =>
-      fetchMessages(channelId, { limit: Math.ceil(limit / channelsToFetch.length), maxId })
-    )
-  )
+  // Limit parallel requests to avoid FLOOD_WAIT
+  // User-triggered so some parallelism is okay, but keep it conservative
+  const channelsToFetch = channelIds.slice(0, 2)
+  const messagesPerChannel = Math.ceil(limit / channelsToFetch.length)
 
   const allMessages: Message[] = []
-  for (const result of results) {
-    if (result.status === 'fulfilled') {
-      allMessages.push(...result.value)
+
+  // Fetch sequentially with small delay to be safe
+  for (const channelId of channelsToFetch) {
+    try {
+      const messages = await fetchMessages(channelId, { limit: messagesPerChannel, maxId })
+      allMessages.push(...messages)
+    } catch {
+      // Skip failed channels
+      continue
     }
+    // Small delay between requests
+    await new Promise(resolve => setTimeout(resolve, 200))
   }
 
   return allMessages.sort((a, b) => getTime(b.date) - getTime(a.date)).slice(0, limit)
@@ -288,44 +293,26 @@ async function backgroundSyncRecentHistory(
     .filter(c => c.lastMessage)
     .sort((a, b) => getTime(b.lastMessage!.date) - getTime(a.lastMessage!.date))
 
-  // Fetch in batches to avoid API rate limits
-  // Conservative: 3 parallel requests, 300ms between batches
-  const BATCH_SIZE = 3
-  const MESSAGES_PER_CHANNEL = 10
-  const BATCH_DELAY_MS = 300
+  // Fetch SEQUENTIALLY to avoid FLOOD_WAIT errors
+  // Background sync is not time-critical, so safety > speed
+  const MESSAGES_PER_CHANNEL = 5
+  const DELAY_BETWEEN_CHANNELS_MS = 500
 
-  for (let i = 0; i < sortedChannels.length; i += BATCH_SIZE) {
-    const batch = sortedChannels.slice(i, i + BATCH_SIZE)
-
+  for (const channel of sortedChannels) {
     try {
-      const results = await Promise.allSettled(
-        batch.map(channel =>
-          fetchMessages(channel.id, { limit: MESSAGES_PER_CHANNEL })
-        )
-      )
+      const messages = await fetchMessages(channel.id, { limit: MESSAGES_PER_CHANNEL })
 
-      const batchMessages: Message[] = []
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          batchMessages.push(...result.value)
-        }
-      }
-
-      if (batchMessages.length > 0) {
-        onMessages(batchMessages)
+      if (messages.length > 0) {
+        onMessages(messages)
       }
     } catch (error) {
-      // Rate limit or other error - stop background sync
-      if (import.meta.env.DEV) {
-        console.warn('[Timeline] Background sync stopped due to error:', error)
-      }
-      break
+      // Rate limit or other error - continue with next channel
+      // Don't stop entirely, just skip this channel
+      continue
     }
 
-    // Delay between batches to avoid rate limits
-    if (i + BATCH_SIZE < sortedChannels.length) {
-      await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS))
-    }
+    // Delay between channels to avoid rate limits
+    await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_CHANNELS_MS))
   }
 
   if (import.meta.env.DEV) {
@@ -426,20 +413,16 @@ export function useOptimizedTimeline() {
         // Mark as synced immediately to prevent re-runs
         setHasSynced(true)
 
-        // Run background sync after a short delay to not block UI
+        // Run background sync after delay to let getDifference/catchUp complete first
+        // This prevents FLOOD_WAIT errors from too many concurrent API calls
         setTimeout(() => {
           backgroundSyncRecentHistory(data.channels, (messages) => {
             upsertPosts(messages)
           })
-        }, 500)
+        }, 3000) // 3 second delay
       }
     )
   )
-
-  // Cleanup on unmount
-  onCleanup(() => {
-    // Nothing to clean up currently, but good practice
-  })
 
   // Reactive timeline from centralized store
   // Direct access to postsState ensures SolidJS tracks the dependency
@@ -447,7 +430,11 @@ export function useOptimizedTimeline() {
     const keys = postsState.sortedKeys
     const posts = keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
     // Group posts by groupedId for albums
-    return groupPostsByMediaGroup(posts)
+    const items = groupPostsByMediaGroup(posts)
+    if (import.meta.env.DEV) {
+      console.log('[Timeline] memo recalculating, keys:', keys.length, 'posts:', posts.length, 'items:', items.length)
+    }
+    return items
   })
 
   return {
