@@ -8,6 +8,7 @@ export {
   removePosts,
   updatePostViews,
   updatePostReactions,
+  updatePostReactionsImmediate,
   getPost,
   isStoreReady,
   markStoreInitialized,

@@ -88,26 +88,171 @@ export interface TimelineData {
 }
 
 /**
- * Update channel's lastMessage when a new post arrives
+ * Maximum posts to persist in IndexedDB
+ * Keep it reasonable to avoid large storage and slow restore
+ */
+const MAX_SYNCED_POSTS = 100
+
+/**
+ * Type for synced posts storage
+ */
+interface SyncedPostsData {
+  posts: Message[]
+}
+
+// ============================================================================
+// Batched Persistent Cache Updates
+// ============================================================================
+
+const pendingPersistPosts: Message[] = []
+let persistTimer: ReturnType<typeof setTimeout> | null = null
+const PERSIST_DEBOUNCE_MS = 1000 // Debounce writes to IndexedDB
+
+// Flush pending posts before page unload to prevent data loss
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    if (pendingPersistPosts.length > 0) {
+      flushPersistentCache()
+    }
+  })
+}
+
+function flushPersistentCache(): void {
+  if (pendingPersistPosts.length === 0) return
+  
+  const postsToAdd = [...pendingPersistPosts]
+  pendingPersistPosts.length = 0
+  persistTimer = null
+
+  queryClient.setQueryData<SyncedPostsData>(queryKeys.timeline.syncedPosts, (old) => {
+    const existingPosts = old?.posts ?? []
+    
+    // Create a map of existing posts by key for deduplication
+    const postsMap = new Map<string, Message>()
+    for (const post of existingPosts) {
+      postsMap.set(`${post.channelId}:${post.id}`, post)
+    }
+    
+    // Add/update with new posts (newer wins)
+    for (const post of postsToAdd) {
+      const key = `${post.channelId}:${post.id}`
+      const existing = postsMap.get(key)
+      
+      if (!existing) {
+        postsMap.set(key, post)
+      } else {
+        // Only update if newer
+        const existingTime = getTime(existing.editDate ?? existing.date)
+        const newTime = getTime(post.editDate ?? post.date)
+        if (newTime > existingTime) {
+          postsMap.set(key, post)
+        }
+      }
+    }
+    
+    // Convert back to array and sort by date (newest first)
+    const allPosts = Array.from(postsMap.values())
+      .sort((a, b) => getTime(b.date) - getTime(a.date))
+      .slice(0, MAX_SYNCED_POSTS)
+    
+    if (import.meta.env.DEV) {
+      console.log(`[Timeline] Persisted ${postsToAdd.length} posts, total in cache: ${allPosts.length}`)
+    }
+    
+    return { posts: allPosts }
+  })
+}
+
+/**
+ * Queue posts for persistent cache (debounced to avoid frequent IndexedDB writes)
+ */
+function queuePostsForPersistence(posts: Message[]): void {
+  if (posts.length === 0) return
+  
+  pendingPersistPosts.push(...posts)
+  
+  if (!persistTimer) {
+    persistTimer = setTimeout(flushPersistentCache, PERSIST_DEBOUNCE_MS)
+  }
+}
+
+/**
+ * Remove posts from persistent cache
+ */
+function removePostsFromPersistentCache(channelId: number, messageIds: number[]): void {
+  const keysToRemove = new Set(messageIds.map(id => `${channelId}:${id}`))
+  
+  // Also remove from pending queue
+  for (let i = pendingPersistPosts.length - 1; i >= 0; i--) {
+    const post = pendingPersistPosts[i]
+    if (keysToRemove.has(`${post.channelId}:${post.id}`)) {
+      pendingPersistPosts.splice(i, 1)
+    }
+  }
+  
+  queryClient.setQueryData<SyncedPostsData>(queryKeys.timeline.syncedPosts, (old) => {
+    if (!old) return old
+    
+    const filteredPosts = old.posts.filter(
+      post => !keysToRemove.has(`${post.channelId}:${post.id}`)
+    )
+    
+    if (filteredPosts.length === old.posts.length) return old
+    return { posts: filteredPosts }
+  })
+}
+
+/**
+ * Get synced posts from persistent cache (for restore on page load)
+ */
+function getSyncedPostsFromCache(): Message[] {
+  const data = queryClient.getQueryData<SyncedPostsData>(queryKeys.timeline.syncedPosts)
+  return data?.posts ?? []
+}
+
+/**
+ * Add single post to cache (convenience wrapper)
  */
 export function addPostToCache(post: Message): void {
+  addPostsToCache([post])
+}
+
+/**
+ * Add multiple posts to cache - batched for efficiency
+ * Updates channel lastMessages and queues for persistent storage
+ */
+export function addPostsToCache(posts: Message[]): void {
+  if (posts.length === 0) return
+  
+  // Queue for persistent cache (debounced)
+  queuePostsForPersistence(posts)
+  
+  // Update channels' lastMessage in timeline data (immediate)
   queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
     if (!old) return old
 
-    const postTime = getTime(post.editDate ?? post.date)
+    // Build a map of newest post per channel
+    const newestByChannel = new Map<number, Message>()
+    for (const post of posts) {
+      const existing = newestByChannel.get(post.channelId)
+      if (!existing || getTime(post.date) > getTime(existing.date)) {
+        newestByChannel.set(post.channelId, post)
+      }
+    }
 
-    // Update channel's lastMessage only if this post is newer
     let hasChange = false
     const newChannels = old.channels.map((channel) => {
-      if (channel.id !== post.channelId) return channel
+      const newestPost = newestByChannel.get(channel.id)
+      if (!newestPost) return channel
 
+      const postTime = getTime(newestPost.editDate ?? newestPost.date)
       const currentTime = channel.lastMessage
         ? getTime(channel.lastMessage.editDate ?? channel.lastMessage.date)
         : 0
 
       if (postTime > currentTime) {
         hasChange = true
-        return { ...channel, lastMessage: post }
+        return { ...channel, lastMessage: newestPost }
       }
       return channel
     })
@@ -120,6 +265,10 @@ export function addPostToCache(post: Message): void {
  * Update channel's lastMessage when posts are deleted
  */
 export function removePostsFromCache(channelId: number, messageIds: number[]): void {
+  // Remove from persistent cache
+  removePostsFromPersistentCache(channelId, messageIds)
+  
+  // Update timeline data
   queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
     if (!old) return old
 
@@ -199,14 +348,12 @@ async function fetchTimelineHistory(
  * 
  * Minimal sync - just top 10 most active channels, 3 messages each
  * Real-time updates handle the rest
+ * 
+ * Posts are saved to both RAM store AND persistent cache (IndexedDB)
  */
-async function backgroundSyncRecentHistory(
-  channels: ChannelWithLastMessage[],
-  onMessages: (messages: Message[]) => void
-): Promise<void> {
+async function backgroundSyncRecentHistory(channels: ChannelWithLastMessage[]): Promise<void> {
   if (channels.length === 0) return
 
-  // Only sync top 10 most recently active channels
   const TOP_CHANNELS = 10
   const MESSAGES_PER_CHANNEL = 3
 
@@ -216,20 +363,30 @@ async function backgroundSyncRecentHistory(
     .slice(0, TOP_CHANNELS)
 
   if (import.meta.env.DEV) {
-    console.log(`[Timeline] Light sync: ${sortedChannels.length} channels × ${MESSAGES_PER_CHANNEL} msgs`)
+    console.log(`[Timeline] Background sync: ${sortedChannels.length} channels × ${MESSAGES_PER_CHANNEL} msgs`)
   }
+
+  const allMessages: Message[] = []
 
   for (const channel of sortedChannels) {
     try {
       const messages = await fetchMessages(channel.id, { limit: MESSAGES_PER_CHANNEL })
-      if (messages.length > 0) {
-        onMessages(messages)
-      }
+      allMessages.push(...messages)
     } catch {
       continue
     }
-    // Small delay between requests
     await new Promise(resolve => setTimeout(resolve, 300))
+  }
+
+  if (allMessages.length > 0) {
+    // Add to RAM store (for immediate UI)
+    upsertPosts(allMessages)
+    // Queue for persistent cache (survives page reload)
+    queuePostsForPersistence(allMessages)
+    
+    if (import.meta.env.DEV) {
+      console.log(`[Timeline] Background sync complete: ${allMessages.length} posts`)
+    }
   }
 }
 
@@ -298,12 +455,16 @@ export function useOptimizedTimeline() {
           .filter((c) => c.lastMessage)
           .map((c) => c.lastMessage!)
         
+        // Also restore synced posts from persistent cache (survives page reload)
+        const syncedPosts = getSyncedPostsFromCache()
+        const allPosts = [...posts, ...syncedPosts]
+        
         if (import.meta.env.DEV) {
-          console.log(`[Timeline] Channels loaded: ${data.channels.length}, posts from lastMessage: ${posts.length}`)
+          console.log(`[Timeline] Restoring: ${posts.length} from lastMessage, ${syncedPosts.length} from persistent cache`)
         }
         
-        if (posts.length > 0) {
-          upsertPosts(posts)
+        if (allPosts.length > 0) {
+          upsertPosts(allPosts)
         }
         
         // Only run initialization once
@@ -353,9 +514,7 @@ export function useOptimizedTimeline() {
 
         // Delay to let getDifference/catchUp complete first
         const timeoutId = setTimeout(() => {
-          backgroundSyncRecentHistory(data.channels, (messages) => {
-            upsertPosts(messages)
-          })
+          backgroundSyncRecentHistory(data.channels)
         }, 2000)
         
         // Cleanup if component unmounts before timeout fires

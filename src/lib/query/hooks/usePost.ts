@@ -1,8 +1,8 @@
-import { createQuery, createMutation, useQueryClient } from '@tanstack/solid-query'
-import { getMessage, sendReaction, getAvailableReactions } from '@/lib/telegram'
-import { updatePostReactions, getPost, upsertPosts } from '@/lib/store'
-import { queryKeys } from '../keys'
+import { createQuery, createMutation } from '@tanstack/solid-query'
+import { getMessage, sendReaction, getAvailableReactions, type Message } from '@/lib/telegram'
+import { updatePostReactionsImmediate, getPost, upsertPosts } from '@/lib/store'
 import { queryClient } from '../client'
+import { queryKeys } from '../keys'
 import type { TimelineData } from './useTimeline'
 
 /**
@@ -81,10 +81,9 @@ export function useAvailableReactions(channelId: () => number) {
 /**
  * Mutation hook to toggle a reaction on a message
  * Supports multiple reactions per user
+ * Uses optimistic updates for instant UI feedback
  */
 export function useSendReaction() {
-  const queryClient = useQueryClient()
-
   return createMutation(() => ({
     mutationFn: async ({
       channelId,
@@ -96,19 +95,85 @@ export function useSendReaction() {
       messageId: number
       emoji: string
       currentChosenEmojis: string[]
+      currentReactions: Array<{ emoji: string; count: number; chosen?: boolean }>
     }) => {
-      const result = await sendReaction(channelId, messageId, emoji, currentChosenEmojis)
-      return { channelId, messageId, reactions: result }
+      // Just send to API - optimistic update handled in onMutate
+      await sendReaction(channelId, messageId, emoji, currentChosenEmojis)
+      return { channelId, messageId }
     },
-    onSuccess: ({ channelId, messageId, reactions }) => {
-      // Update the store with new reactions
-      if (reactions) {
-        updatePostReactions(channelId, messageId, reactions)
+    
+    // Optimistic update - runs before mutationFn
+    onMutate: async ({ channelId, messageId, emoji, currentChosenEmojis, currentReactions }) => {
+      const isChosen = currentChosenEmojis.includes(emoji)
+      const optimisticReactions = calculateOptimisticReactions(
+        currentReactions,
+        emoji,
+        isChosen
+      )
+      
+      // Update store (timeline reads from store)
+      updatePostReactionsImmediate(channelId, messageId, optimisticReactions)
+      
+      // Update post detail query cache (Post.tsx reads from this)
+      queryClient.setQueryData<Message>(
+        queryKeys.messages.detail(channelId, messageId),
+        (old) => old ? { ...old, reactions: optimisticReactions } : old
+      )
+      
+      // Return context for rollback
+      return { previousReactions: currentReactions }
+    },
+    
+    onError: (_err, { channelId, messageId }, context) => {
+      // Rollback to original reactions on error
+      if (context?.previousReactions) {
+        updatePostReactionsImmediate(channelId, messageId, context.previousReactions)
       }
-      // Invalidate post query to refetch
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messages.detail(channelId, messageId),
-      })
     },
+    
+    // No onSuccess needed - raw updates from server will sync final state
   }))
+}
+
+/**
+ * Calculate what reactions should look like after toggling an emoji
+ */
+function calculateOptimisticReactions(
+  currentReactions: Array<{ emoji: string; count: number; chosen?: boolean }>,
+  emoji: string,
+  wasChosen: boolean
+): Array<{ emoji: string; count: number; chosen?: boolean }> {
+  const reactions = [...currentReactions]
+  const existingIndex = reactions.findIndex(r => r.emoji === emoji)
+  
+  if (wasChosen) {
+    // Removing reaction
+    if (existingIndex >= 0) {
+      const newCount = reactions[existingIndex].count - 1
+      if (newCount <= 0) {
+        // Remove reaction entirely
+        reactions.splice(existingIndex, 1)
+      } else {
+        reactions[existingIndex] = {
+          ...reactions[existingIndex],
+          count: newCount,
+          chosen: false,
+        }
+      }
+    }
+  } else {
+    // Adding reaction
+    if (existingIndex >= 0) {
+      reactions[existingIndex] = {
+        ...reactions[existingIndex],
+        count: reactions[existingIndex].count + 1,
+        chosen: true,
+      }
+    } else {
+      // New reaction
+      reactions.push({ emoji, count: 1, chosen: true })
+    }
+  }
+  
+  return reactions
 }

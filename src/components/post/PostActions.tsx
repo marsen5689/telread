@@ -1,5 +1,5 @@
 import { Show, For, createMemo } from 'solid-js'
-import { bookmarksStore } from '@/lib/store'
+import { bookmarksStore, postsState } from '@/lib/store'
 import { useSendReaction } from '@/lib/query'
 import { formatCount } from '@/lib/utils'
 import { MessageCircle, Eye, Bookmark } from 'lucide-solid'
@@ -37,9 +37,16 @@ export function PostActions(props: PostActionsProps) {
     )
   }
 
-  // Get currently chosen emojis by the user (memoized to avoid recalculating on each access)
+  // Read reactions from store for reactivity (props.reactions may be stale due to untrack in timeline)
+  const reactions = createMemo(() => {
+    const key = `${props.channelId}:${props.messageId}`
+    const post = postsState.byId[key]
+    return post?.reactions ?? props.reactions ?? []
+  })
+
+  // Get currently chosen emojis by the user
   const currentChosenEmojis = createMemo(() =>
-    (props.reactions ?? []).filter((r) => r.chosen).map((r) => r.emoji)
+    reactions().filter((r) => r.chosen).map((r) => r.emoji)
   )
 
   const handleReactionClick = (emoji: string) => {
@@ -49,6 +56,7 @@ export function PostActions(props: PostActionsProps) {
       messageId: props.messageId,
       emoji,
       currentChosenEmojis: currentChosenEmojis(),
+      currentReactions: reactions(),
     })
   }
 
@@ -87,10 +95,10 @@ export function PostActions(props: PostActionsProps) {
       </button>
 
       {/* Existing reactions - clickable to add same reaction */}
-      <Show when={props.reactions && props.reactions.length > 0}>
+      <Show when={reactions().length > 0}>
         <div class="actions-divider" />
         <div class="flex items-center gap-1.5">
-          <For each={props.reactions}>
+          <For each={reactions()}>
             {(reaction) => (
               <button
                 type="button"

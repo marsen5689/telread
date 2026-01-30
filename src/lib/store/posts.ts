@@ -279,6 +279,9 @@ function flushReactions(): void {
   }
 }
 
+/**
+ * Update reactions with debounce (for incoming updates from server)
+ */
 export function updatePostReactions(
   channelId: number,
   messageId: number,
@@ -291,6 +294,24 @@ export function updatePostReactions(
   if (!reactionsTimer) {
     reactionsTimer = setTimeout(flushReactions, 2000) // 2s batch window
   }
+}
+
+/**
+ * Update reactions immediately (for optimistic updates)
+ */
+export function updatePostReactionsImmediate(
+  channelId: number,
+  messageId: number,
+  reactions: Message['reactions']
+): void {
+  const key = makeKey(channelId, messageId)
+  if (!state.byId[key]) return
+  
+  // Clear any pending update for this post
+  pendingReactionsUpdates.delete(key)
+  
+  // Update immediately
+  setState('byId', key, 'reactions', reactions ?? [])
 }
 
 // ============================================================================

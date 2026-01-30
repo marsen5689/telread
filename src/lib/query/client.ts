@@ -67,7 +67,7 @@ const idbPersister: Persister = {
 }
 
 // Clear old cache on version change
-const CACHE_VERSION = 'v10' // v10: don't persist null resolve results
+const CACHE_VERSION = 'v11' // v11: persist synced posts for page reload survival
 const CACHE_VERSION_KEY = 'telread-cache-version'
 
 const storedVersion = localStorage.getItem(CACHE_VERSION_KEY)

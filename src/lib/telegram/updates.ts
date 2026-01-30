@@ -13,7 +13,7 @@ import {
   isStoreReady,
   getPost,
 } from '@/lib/store'
-import { addPostToCache, removePostsFromCache } from '@/lib/query/hooks'
+import { addPostsToCache, removePostsFromCache } from '@/lib/query/hooks'
 import type { Message as TgMessage, RawUpdateInfo, Chat } from '@mtcute/web'
 
 export type UpdatesCleanup = () => void
@@ -79,11 +79,11 @@ function processBatch(): void {
 
   if (mapped.length === 0) return
 
-  // Add each post to pending (Twitter-style)
+  // Add posts to pending (Twitter-style) and cache - batched for efficiency
   for (const post of mapped) {
-    upsertPost(post)
-    addPostToCache(post)
+    upsertPost(post) // Individual call for pendingKeys behavior
   }
+  addPostsToCache(mapped)
 
   if (import.meta.env.DEV && mapped.length > 1) {
     console.log(`[Updates] Processed ${mapped.length} messages`)
@@ -176,9 +176,9 @@ function processPendingMessages(): void {
 
   // Add to pending (these are real-time updates that arrived before store was ready)
   for (const post of mapped) {
-    upsertPost(post)
-    addPostToCache(post)
+    upsertPost(post) // Individual call for pendingKeys behavior
   }
+  addPostsToCache(mapped)
 }
 
 /**
@@ -355,6 +355,7 @@ export function startUpdatesListener(): UpdatesCleanup {
               chosen: chosenMap.get(emoji) ?? false,
             })
           }
+          
           updatePostReactions(channelId, update.msgId, reactions)
         }
         return
