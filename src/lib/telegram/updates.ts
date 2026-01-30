@@ -24,8 +24,6 @@ let listenerClientVersion = 0
 let isPaused = false
 
 // Queue for messages that arrive before store is ready
-// Limited to prevent memory issues during initial sync
-const MAX_PENDING_MESSAGES = 100
 const pendingMessages: TgMessage[] = []
 
 // ============================================================================
@@ -218,10 +216,6 @@ export function startUpdatesListener(): UpdatesCleanup {
 
       // Queue if store not ready yet
       if (!isStoreReady()) {
-        // Limit queue size to prevent memory issues
-        if (pendingMessages.length >= MAX_PENDING_MESSAGES) {
-          pendingMessages.shift() // Drop oldest
-        }
         pendingMessages.push(message)
         return
       }
@@ -256,10 +250,6 @@ export function startUpdatesListener(): UpdatesCleanup {
 
       // Queue if store not ready yet
       if (!isStoreReady()) {
-        // Limit queue size to prevent memory issues
-        if (pendingMessages.length >= MAX_PENDING_MESSAGES) {
-          pendingMessages.shift() // Drop oldest
-        }
         pendingMessages.push(message)
         return
       }
