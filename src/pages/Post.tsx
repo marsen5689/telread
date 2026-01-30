@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from '@solidjs/router'
 import { createMemo, Show } from 'solid-js'
 import { Motion } from 'solid-motionone'
-import { Avatar, PostSkeleton } from '@/components/ui'
+import { ChannelAvatar, PostSkeleton } from '@/components/ui'
 import { PostContent, PostMedia, PostActions } from '@/components/post'
 import { CommentSection } from '@/components/comments'
 import { usePost, useChannels } from '@/lib/query'
@@ -84,7 +84,7 @@ export function Post() {
         >
           {/* Header */}
           <div class="post-header cursor-pointer" onClick={handleChannelClick}>
-            <Avatar name={channel()!.title} size="md" />
+            <ChannelAvatar channelId={channelId()} name={channel()!.title} size="md" />
             <div class="flex-1 min-w-0">
               <p class="font-semibold text-primary hover:underline truncate">
                 {channel()!.title}

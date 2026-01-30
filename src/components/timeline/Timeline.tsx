@@ -84,7 +84,7 @@ export function Timeline(props: TimelineProps) {
           const channel = () => getChannel(post())
           return (
             <Show when={channel()}>
-              <TimelinePost post={post()} channelTitle={channel()!.title} />
+              <TimelinePost post={post()} channelId={post().channelId} channelTitle={channel()!.title} />
             </Show>
           )
         }}

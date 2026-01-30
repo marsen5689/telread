@@ -81,7 +81,7 @@ export function PostMedia(props: PostMediaProps) {
 
   const containerStyle = () => ({
     'aspect-ratio': aspectRatio().toString(),
-    'max-height': '400px',
+    'max-height': '300px',
   })
 
   return (

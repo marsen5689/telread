@@ -1,16 +1,19 @@
-import { Show } from 'solid-js'
+import { Show, createMemo } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
-import { Avatar } from '@/components/ui'
+import { ChannelAvatar } from '@/components/ui'
 import { PostContent, PostMedia, PostActions } from '@/components/post'
 import type { Message } from '@/lib/telegram'
 
 interface TimelinePostProps {
   post: Message
   channelTitle: string
-  channelPhoto?: string
+  channelId: number
   style?: Record<string, string>
   onCommentClick?: () => void
 }
+
+// Approximate character count for 4 lines
+const TRUNCATE_THRESHOLD = 280
 
 /**
  * Individual post in the timeline
@@ -32,13 +35,21 @@ export function TimelinePost(props: TimelinePostProps) {
 
   const timeAgo = () => formatTimeAgo(props.post.date)
 
+  // Check if text is long enough to be truncated
+  const isTruncated = createMemo(() => {
+    if (!props.post.text) return false
+    // Check character count or line breaks
+    return props.post.text.length > TRUNCATE_THRESHOLD ||
+           (props.post.text.match(/\n/g) || []).length > 3
+  })
+
   return (
     <article class="post cursor-pointer" style={props.style} onClick={handlePostClick}>
       {/* Header */}
       <div class="post-header">
         <div onClick={handleChannelClick}>
-          <Avatar
-            src={props.channelPhoto}
+          <ChannelAvatar
+            channelId={props.channelId}
             name={props.channelTitle}
             size="md"
             class="cursor-pointer"
@@ -60,15 +71,18 @@ export function TimelinePost(props: TimelinePostProps) {
         </div>
       </div>
 
-      {/* Text content */}
+      {/* Text content - truncated like Twitter */}
       <Show when={props.post.text}>
         <div class="post-content">
           <PostContent
             text={props.post.text}
             entities={props.post.entities}
             truncate
-            maxLines={5}
+            maxLines={4}
           />
+          <Show when={isTruncated()}>
+            <span class="text-accent text-sm mt-1 inline-block">Show more</span>
+          </Show>
         </div>
       </Show>
 

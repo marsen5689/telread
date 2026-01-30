@@ -2,7 +2,7 @@ import { useParams, useNavigate } from '@solidjs/router'
 import { createMemo, Show } from 'solid-js'
 import { Motion } from 'solid-motionone'
 import { Timeline } from '@/components/timeline'
-import { GlassButton, Avatar } from '@/components/ui'
+import { GlassButton, ChannelAvatar } from '@/components/ui'
 import { useChannels, useMessages, useLeaveChannel } from '@/lib/query'
 
 /**
@@ -49,7 +49,7 @@ export function Channel() {
           class="px-4 py-4"
         >
           <div class="flex items-center gap-4">
-            <Avatar name={channel()!.title} size="xl" />
+            <ChannelAvatar channelId={channel()!.id} name={channel()!.title} size="xl" />
 
             <div class="flex-1 min-w-0">
               <h1 class="text-xl font-semibold text-primary truncate">

@@ -133,7 +133,11 @@ export async function downloadMedia(
 }
 
 /**
- * Download a user's profile photo
+ * Download a channel/user profile photo
+ *
+ * For channels, we need to fetch the full Chat object first
+ * because Telegram API requires access_hash for InputPeerChannel.
+ * Then we use chat.photo.small or chat.photo.big to get the FileLocation.
  */
 export async function downloadProfilePhoto(
   peerId: number,
@@ -150,14 +154,54 @@ export async function downloadProfilePhoto(
   const anyClient = client as any
 
   try {
+    // First, get the full peer object (Chat/User) which includes access_hash and photo
+    let peer: any = null
+    try {
+      peer = await client.getChat(peerId)
+    } catch {
+      // If getChat fails, try resolvePeer
+      try {
+        peer = await anyClient.resolvePeer(peerId)
+      } catch {
+        return null
+      }
+    }
+
+    if (!peer) {
+      return null
+    }
+
     let buffer: Uint8Array | null = null
 
-    if (anyClient.downloadPeerPhoto) {
-      buffer = await anyClient.downloadPeerPhoto(peerId, {
-        size: size === 'big' ? 'big' : 'small',
-      })
-    } else if (anyClient.downloadProfilePhoto) {
-      buffer = await anyClient.downloadProfilePhoto(peerId, size)
+    // Method 1: Use chat.photo which is a ChatPhoto object with .small and .big
+    if (peer.photo) {
+      try {
+        // ChatPhoto has .small and .big which return ChatPhotoSize (extends FileLocation)
+        const photoLocation = size === 'big' ? peer.photo.big : peer.photo.small
+        if (photoLocation) {
+          // Download the file location
+          if (anyClient.downloadAsBuffer) {
+            buffer = await anyClient.downloadAsBuffer(photoLocation)
+          } else if (anyClient.downloadMedia) {
+            buffer = await anyClient.downloadMedia(photoLocation)
+          } else if (anyClient.downloadToBuffer) {
+            buffer = await anyClient.downloadToBuffer(photoLocation)
+          }
+        }
+      } catch {
+        // Method 1 failed, try alternatives
+      }
+    }
+
+    // Method 2: Try downloadPeerPhoto if available
+    if (!buffer && anyClient.downloadPeerPhoto) {
+      try {
+        buffer = await anyClient.downloadPeerPhoto(peer, {
+          size: size === 'big' ? 'big' : 'small',
+        })
+      } catch {
+        // Silently fail
+      }
     }
 
     if (!buffer) {

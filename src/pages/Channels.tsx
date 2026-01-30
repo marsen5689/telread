@@ -1,7 +1,7 @@
 import { For, Show, createSignal } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { Motion } from 'solid-motionone'
-import { GlassCard, GlassButton, GlassInput, Avatar, Skeleton } from '@/components/ui'
+import { GlassCard, GlassButton, GlassInput, ChannelAvatar, Skeleton } from '@/components/ui'
 import { useChannels, useJoinChannel } from '@/lib/query'
 
 /**
@@ -156,7 +156,8 @@ export function Channels() {
                   hover
                 >
                   <div class="flex items-center gap-3">
-                    <Avatar
+                    <ChannelAvatar
+                      channelId={channel.id}
                       name={channel.title}
                       size="lg"
                     />
