@@ -1,4 +1,4 @@
-import { createSignal, createEffect } from 'solid-js'
+import { createSignal, createEffect, Show } from 'solid-js'
 import { GlassButton } from '@/components/ui'
 
 interface ReplyComposerProps {
@@ -9,8 +9,6 @@ interface ReplyComposerProps {
 
 /**
  * Inline reply composer for nested replies
- *
- * Compact design that appears under comments when replying.
  */
 export function ReplyComposer(props: ReplyComposerProps) {
   const [text, setText] = createSignal('')
@@ -39,44 +37,41 @@ export function ReplyComposer(props: ReplyComposerProps) {
     target.style.height = `${Math.min(target.scrollHeight, 120)}px`
   }
 
-  // Auto-focus on mount
   createEffect(() => {
     textareaRef?.focus()
   })
 
   return (
-    <div class="glass rounded-xl p-3">
+    <div class="glass rounded-2xl px-4 py-3">
       <textarea
         ref={textareaRef}
         value={text()}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         rows={1}
-        class={`
-          w-full bg-transparent resize-none outline-none text-sm
-          text-primary
-          min-h-[36px] max-h-[120px]
-        `}
+        class="w-full bg-transparent resize-none outline-none text-sm text-primary min-h-[24px] max-h-[120px]"
       />
 
-      <div class="flex items-center justify-end gap-2 mt-2">
-        <GlassButton
-          variant="ghost"
-          size="sm"
-          onClick={props.onCancel}
-        >
-          Cancel
-        </GlassButton>
-        <GlassButton
-          variant="primary"
-          size="sm"
-          onClick={handleSubmit}
-          disabled={!text().trim() || props.isSending}
-          loading={props.isSending}
-        >
-          Reply
-        </GlassButton>
-      </div>
+      <Show when={text().length > 0 || true}>
+        <div class="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-[var(--glass-border)]">
+          <button
+            type="button"
+            onClick={props.onCancel}
+            class="px-3 py-1.5 rounded-full text-xs font-medium text-tertiary hover:text-primary transition-colors"
+          >
+            Cancel
+          </button>
+          <GlassButton
+            variant="primary"
+            size="sm"
+            onClick={handleSubmit}
+            disabled={!text().trim() || props.isSending}
+            loading={props.isSending}
+          >
+            Reply
+          </GlassButton>
+        </div>
+      </Show>
     </div>
   )
 }

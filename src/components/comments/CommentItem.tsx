@@ -34,7 +34,7 @@ export function CommentItem(props: CommentItemProps) {
         />
         {/* Thread line connecting to next comment */}
         <Show when={props.showThreadLine}>
-          <div class="w-0.5 flex-1 bg-[var(--nav-border)] mt-1" />
+          <div class="w-0.5 flex-1 bg-[var(--nav-border)] mt-2 rounded-full opacity-60" />
         </Show>
       </div>
 
@@ -123,17 +123,20 @@ export function CommentItem(props: CommentItemProps) {
         </Show>
 
         {/* Actions */}
-        <div class="mt-2 flex items-center gap-4">
+        <div class="mt-2">
           <button
             type="button"
             onClick={() => props.onReply?.(props.comment.id)}
             aria-label={`Reply to ${props.comment.author.name}`}
             class={`
-              text-xs flex items-center gap-1 transition-colors
-              ${props.isReplying ? 'text-accent' : 'text-tertiary hover:text-accent'}
+              inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
+              transition-all active:scale-95
+              ${props.isReplying 
+                ? 'bg-[var(--accent)] text-white' 
+                : 'bg-[var(--glass-bg)] text-tertiary hover:text-primary hover:bg-[var(--glass-bg-elevated)]'}
             `}
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"

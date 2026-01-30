@@ -277,11 +277,14 @@ export function useOptimizedTimeline() {
   })
 
   // Initial data query - fetches channels and populates posts store
+  // Long staleTime because channels rarely change - real-time updates handle new posts
   const initialQuery = createQuery(() => ({
     queryKey: queryKeys.timeline.all,
     queryFn: fetchInitialTimeline,
-    staleTime: 1000 * 60 * 5,
-    gcTime: 1000 * 60 * 30,
+    staleTime: 1000 * 60 * 30, // 30 min - channels list rarely changes
+    gcTime: 1000 * 60 * 60, // 1 hour in memory
+    refetchOnMount: false, // Don't refetch if data exists
+    refetchOnWindowFocus: false,
   }))
 
   // Infinite query for loading more
