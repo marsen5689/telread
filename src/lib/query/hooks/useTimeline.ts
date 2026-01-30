@@ -170,7 +170,7 @@ export function removePostsFromCache(channelId: number, messageIds: number[]): v
 
 /**
  * Fetch initial timeline data - channels with their last messages
- * Posts are added directly to postsState (not stored in TanStack Query)
+ * Posts are extracted in the effect (works for both fresh fetch and cache restore)
  */
 async function fetchInitialTimeline(): Promise<TimelineData> {
   const startTime = performance.now()
@@ -187,17 +187,9 @@ async function fetchInitialTimeline(): Promise<TimelineData> {
   const channelMap = new Map<number, ChannelWithLastMessage>()
   channels.forEach((c) => channelMap.set(c.id, c))
 
-  // Extract posts and add to store (not to TanStack Query)
-  const posts = channels
-    .filter((c) => c.lastMessage)
-    .map((c) => c.lastMessage!)
-  
-  if (posts.length > 0) {
-    upsertPosts(posts)
-  }
-
   if (import.meta.env.DEV) {
-    console.log(`[Timeline] fetchInitialTimeline done: ${posts.length} posts in ${Math.round(performance.now() - startTime)}ms`)
+    const postCount = channels.filter((c) => c.lastMessage).length
+    console.log(`[Timeline] fetchInitialTimeline done: ${postCount} posts in ${Math.round(performance.now() - startTime)}ms`)
   }
 
   return { channels, channelMap }
@@ -334,9 +326,19 @@ export function useOptimizedTimeline() {
         setChannels(reconcile(data.channels))
         setChannelMap(data.channelMap)
 
-        // Mark store as initialized once (posts already added in fetchInitialTimeline)
+        // Extract and upsert posts from channels (works for both cache restore and fresh fetch)
         if (!initialDataProcessed) {
           initialDataProcessed = true
+          
+          // Extract posts from channel lastMessages
+          const posts = data.channels
+            .filter((c) => c.lastMessage)
+            .map((c) => c.lastMessage!)
+          
+          if (posts.length > 0) {
+            upsertPosts(posts)
+          }
+          
           markStoreInitialized()
           // Process messages that arrived before timeline was ready
           onTimelineLoaded()

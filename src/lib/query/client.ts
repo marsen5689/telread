@@ -67,7 +67,7 @@ const idbPersister: Persister = {
 }
 
 // Clear old cache on version change
-const CACHE_VERSION = 'v8' // v8: profile photos now use data URLs
+const CACHE_VERSION = 'v9' // v9: posts extracted from channels in effect (cache restore fix)
 const CACHE_VERSION_KEY = 'telread-cache-version'
 
 const storedVersion = localStorage.getItem(CACHE_VERSION_KEY)
