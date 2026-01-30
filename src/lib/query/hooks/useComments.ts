@@ -15,23 +15,27 @@ import {
 import { queryKeys } from '../keys'
 
 /**
- * Collect all unique author IDs from a comment tree
+ * Maximum number of author avatars to prefetch
+ * Only prefetch visible/top-level comment authors to reduce API calls
  */
-function collectAuthorIds(comments: Comment[]): number[] {
+const MAX_AVATAR_PREFETCH = 10
+
+/**
+ * Collect unique author IDs from top-level comments (limited)
+ * Only prefetches visible authors to reduce unnecessary API calls
+ */
+function collectVisibleAuthorIds(comments: Comment[], limit: number = MAX_AVATAR_PREFETCH): number[] {
   const ids = new Set<number>()
 
-  const traverse = (list: Comment[]) => {
-    for (const comment of list) {
-      if (comment.author.id > 0) {
-        ids.add(comment.author.id)
-      }
-      if (comment.replies?.length) {
-        traverse(comment.replies)
-      }
+  // Only collect from top-level comments (visible initially)
+  for (const comment of comments) {
+    if (ids.size >= limit) break
+
+    if (comment.author.id > 0) {
+      ids.add(comment.author.id)
     }
   }
 
-  traverse(comments)
   return Array.from(ids)
 }
 
@@ -68,16 +72,16 @@ export function useComments(
     },
   }))
 
-  // Prefetch author avatars when comments load
+  // Prefetch author avatars when comments load (limited to visible)
   createEffect(
     on(
       () => query.data,
       (data) => {
         if (!data?.comments.length) return
 
-        const authorIds = collectAuthorIds(data.comments)
+        // Only prefetch top-level visible authors to reduce API calls
+        const authorIds = collectVisibleAuthorIds(data.comments)
 
-        // Prefetch all author photos in parallel (non-blocking)
         for (const authorId of authorIds) {
           queryClient.prefetchQuery({
             queryKey: queryKeys.media.profile(authorId),

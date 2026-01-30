@@ -1,7 +1,9 @@
-export { default as Home } from './Home'
-export { default as Channel } from './Channel'
-export { default as Channels } from './Channels'
-export { default as Post } from './Post'
-export { default as Bookmarks } from './Bookmarks'
-export { default as Settings } from './Settings'
-export { default as Login } from './Login'
+import Home from './Home'
+import Channel from './Channel'
+import Channels from './Channels'
+import Post from './Post'
+import Bookmarks from './Bookmarks'
+import Settings from './Settings'
+import Login from './Login'
+
+export { Home, Channel, Channels, Post, Bookmarks, Settings, Login }

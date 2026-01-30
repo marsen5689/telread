@@ -5,6 +5,7 @@ export { bookmarksStore, type Bookmark } from './bookmarks'
 export {
   upsertPost,
   upsertPosts,
+  upsertPostsToPending,
   removePost,
   removePosts,
   updatePostViews,

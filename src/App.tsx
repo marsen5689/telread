@@ -1,26 +1,24 @@
 import { Router, Route, Navigate } from '@solidjs/router'
 import { QueryClientProvider } from '@tanstack/solid-query'
-import { Show, lazy, onMount, onCleanup, createEffect, on, type ParentProps } from 'solid-js'
+import { Show, onMount, onCleanup, createEffect, on, type ParentProps } from 'solid-js'
 import { queryClient } from '@/lib/query'
 import { authStore } from '@/lib/store'
 import {
-  isAuthenticated,
-  getCurrentUser,
   getTelegramClient,
   startUpdatesListener,
   stopUpdatesListener,
 } from '@/lib/telegram'
 import { validateConfig } from '@/config/telegram'
 import { MainLayout } from '@/layouts'
-
-// Lazy load pages for code splitting
-const Home = lazy(() => import('@/pages/Home'))
-const Channel = lazy(() => import('@/pages/Channel'))
-const Channels = lazy(() => import('@/pages/Channels'))
-const Post = lazy(() => import('@/pages/Post'))
-const Bookmarks = lazy(() => import('@/pages/Bookmarks'))
-const Settings = lazy(() => import('@/pages/Settings'))
-const Login = lazy(() => import('@/pages/Login'))
+import {
+  Home,
+  Channel,
+  Channels,
+  Post,
+  Bookmarks,
+  Settings,
+  Login,
+} from '@/pages'
 
 /**
  * Protected route wrapper - redirects to login if not authenticated
@@ -149,15 +147,17 @@ export function App() {
       const client = getTelegramClient()
       await client.connect()
 
-      const authenticated = await isAuthenticated()
-      if (authenticated) {
-        const user = await getCurrentUser()
+      // Get user once - combines isAuthenticated + getCurrentUser
+      const user = await client.getMe().catch(() => null)
+
+      if (user) {
         authStore.setUser(user)
-        // Start the updates loop to receive real-time messages
-        await client.startUpdatesLoop()
-        if (import.meta.env.DEV) {
-          console.log('[App] Updates loop started')
-        }
+        // Start updates loop (non-blocking)
+        client.startUpdatesLoop().then(() => {
+          if (import.meta.env.DEV) {
+            console.log('[App] Updates loop started')
+          }
+        })
       }
     } catch (error) {
       console.error('Auth check failed:', error)
@@ -170,24 +170,10 @@ export function App() {
   createEffect(
     on(
       () => authStore.isAuthenticated,
-      async (isAuth, prevIsAuth) => {
+      (isAuth) => {
         if (isAuth) {
-          // Register event handlers
+          // Register event handlers (sync, fast)
           startUpdatesListener()
-
-          // Start updates loop if this is a fresh login (not initial load)
-          // Initial load already calls startUpdatesLoop in onMount
-          if (prevIsAuth === false) {
-            try {
-              const client = getTelegramClient()
-              await client.startUpdatesLoop()
-              if (import.meta.env.DEV) {
-                console.log('[App] Updates loop started (after login)')
-              }
-            } catch (error) {
-              console.error('[App] Failed to start updates loop:', error)
-            }
-          }
         } else {
           stopUpdatesListener()
         }

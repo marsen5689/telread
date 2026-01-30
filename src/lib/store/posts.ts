@@ -82,6 +82,49 @@ export function upsertPost(post: Message): void {
 }
 
 /**
+ * Add or update multiple posts to pending queue (batch operation)
+ * Used for real-time updates - adds to pending like Twitter's "N new posts"
+ * More efficient than calling upsertPost() in a loop
+ */
+export function upsertPostsToPending(posts: Message[]): void {
+  if (posts.length === 0) return
+
+  setState(
+    produce((s) => {
+      const newPendingKeys: PostKey[] = []
+
+      for (const post of posts) {
+        const key = makeKey(post.channelId, post.id)
+        const existing = s.byId[key]
+
+        if (existing) {
+          // Update existing - check if newer
+          const existingTime = existing.editDate ?? existing.date
+          const newTime = post.editDate ?? post.date
+          if (getTime(existingTime) >= getTime(newTime)) {
+            continue
+          }
+          // Update in place (no need to add to pending)
+          s.byId[key] = post
+        } else {
+          // New post - add to pending
+          s.byId[key] = post
+          if (!s.pendingKeys.includes(key)) {
+            newPendingKeys.push(key)
+          }
+        }
+      }
+
+      // Sort and merge new pending keys
+      if (newPendingKeys.length > 0) {
+        s.pendingKeys = sortKeysByDate([...newPendingKeys, ...s.pendingKeys], s.byId)
+      }
+      s.lastUpdated = Date.now()
+    })
+  )
+}
+
+/**
  * Add or update multiple posts (batch operation)
  * Used for initial load and fetching - adds directly to visible timeline
  */

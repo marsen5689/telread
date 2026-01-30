@@ -1,7 +1,7 @@
 import { useNavigate } from '@solidjs/router'
 import { AuthFlow } from '@/components/auth'
 import { authStore } from '@/lib/store'
-import { getCurrentUser } from '@/lib/telegram'
+import { getTelegramClient } from '@/lib/telegram'
 
 /**
  * Login page wrapper
@@ -10,9 +10,14 @@ function Login() {
   const navigate = useNavigate()
 
   const handleSuccess = async () => {
-    // Get the user and update auth store
-    const user = await getCurrentUser()
+    const client = getTelegramClient()
+
+    // Get user and set auth
+    const user = await client.getMe()
     authStore.setUser(user)
+
+    // Start updates loop (non-blocking)
+    client.startUpdatesLoop().catch(console.error)
 
     // Navigate to home
     navigate('/', { replace: true })

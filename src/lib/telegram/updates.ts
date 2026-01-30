@@ -139,7 +139,7 @@ export function startUpdatesListener(): UpdatesCleanup {
 
       const mapped = mapMessage(message, chatId)
       if (mapped) {
-        upsertPost(mapped) // upsert handles updates too
+        upsertPost(mapped)
       }
     } catch (error) {
       if (import.meta.env.DEV) {
@@ -240,6 +240,9 @@ export function startUpdatesListener(): UpdatesCleanup {
 
   const cleanup: UpdatesCleanup = () => {
     try {
+      // Flush any pending batched messages before cleanup
+      flushMessageBatch()
+
       client.onNewMessage?.remove(handleNewMessage)
       client.onEditMessage?.remove(handleEditMessage)
       client.onDeleteMessage?.remove(handleDeleteMessage)
@@ -249,6 +252,13 @@ export function startUpdatesListener(): UpdatesCleanup {
         console.error('[Updates] Error removing handlers:', error)
       }
     } finally {
+      // Clear batch timer
+      if (batchTimer) {
+        clearTimeout(batchTimer)
+        batchTimer = null
+      }
+      batchQueue = []
+
       isListenerActive = false
       if (activeCleanup === cleanup) {
         activeCleanup = null

@@ -74,11 +74,17 @@ export async function fetchChannels(): Promise<Channel[]> {
  * PERFORMANCE: 1 API call instead of 10+ calls
  */
 export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMessage[]> {
+  const startTime = performance.now()
+  if (import.meta.env.DEV) {
+    console.log('[Channels] Starting fetchChannelsWithLastMessages...')
+  }
+
   const client = getTelegramClient()
   const channels: ChannelWithLastMessage[] = []
 
   const iterator = client.iterDialogs()[Symbol.asyncIterator]()
   let dialogCount = 0
+  let lastLogTime = startTime
 
   while (dialogCount < MAX_DIALOGS_TO_ITERATE) {
     try {
@@ -86,6 +92,13 @@ export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMe
       if (done) break
 
       dialogCount++
+
+      // Log progress every 100 dialogs or every 2 seconds
+      if (import.meta.env.DEV && (dialogCount % 100 === 0 || performance.now() - lastLogTime > 2000)) {
+        console.log(`[Channels] Processed ${dialogCount} dialogs, found ${channels.length} channels (${Math.round(performance.now() - startTime)}ms)`)
+        lastLogTime = performance.now()
+      }
+
       const peer = dialog.peer
 
       // Skip users and secret chats
@@ -122,6 +135,10 @@ export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMe
       }
       break
     }
+  }
+
+  if (import.meta.env.DEV) {
+    console.log(`[Channels] Done! ${dialogCount} dialogs → ${channels.length} channels in ${Math.round(performance.now() - startTime)}ms`)
   }
 
   return channels

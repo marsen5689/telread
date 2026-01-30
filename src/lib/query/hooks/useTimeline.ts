@@ -93,7 +93,16 @@ export interface TimelineData {
  * Fetch initial timeline data - channels with their last messages
  */
 async function fetchInitialTimeline(): Promise<TimelineData> {
+  const startTime = performance.now()
+  if (import.meta.env.DEV) {
+    console.log('[Timeline] fetchInitialTimeline starting...')
+  }
+
   const channels = await fetchChannelsWithLastMessages()
+
+  if (import.meta.env.DEV) {
+    console.log(`[Timeline] Got ${channels.length} channels in ${Math.round(performance.now() - startTime)}ms`)
+  }
 
   const channelMap = new Map<number, ChannelWithLastMessage>()
   channels.forEach((c) => channelMap.set(c.id, c))
@@ -105,6 +114,10 @@ async function fetchInitialTimeline(): Promise<TimelineData> {
 
   // Populate centralized posts store
   upsertPosts(posts)
+
+  if (import.meta.env.DEV) {
+    console.log(`[Timeline] fetchInitialTimeline done: ${posts.length} posts in ${Math.round(performance.now() - startTime)}ms`)
+  }
 
   return { posts, channels, channelMap }
 }
