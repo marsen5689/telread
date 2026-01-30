@@ -14,6 +14,7 @@ const STORAGE_KEY = 'telread_bookmarks'
 function createBookmarksStore() {
   const [bookmarks, setBookmarksInternal] = createSignal<Bookmark[]>([])
   const [isLoaded, setIsLoaded] = createSignal(false)
+  const [isSaving, setIsSaving] = createSignal(false)
 
   // Load from storage
   const load = async () => {
@@ -27,18 +28,28 @@ function createBookmarksStore() {
         }))
         setBookmarksInternal(restored)
       }
-    } catch {
-      // Use empty list
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.error('[Bookmarks] Failed to load:', error)
+      }
     }
     setIsLoaded(true)
   }
 
-  // Save to storage
-  const save = async (items: Bookmark[]) => {
+  // Save to storage - atomic operation
+  // Returns true if successful, false otherwise
+  const save = async (items: Bookmark[]): Promise<boolean> => {
     try {
+      setIsSaving(true)
       await set(STORAGE_KEY, items)
-    } catch {
-      // Ignore storage errors
+      return true
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.error('[Bookmarks] Failed to save:', error)
+      }
+      return false
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -49,14 +60,14 @@ function createBookmarksStore() {
     )
   }
 
-  // Add a bookmark
+  // Add a bookmark - atomic: save first, then update state
   const addBookmark = async (
     channelId: number,
     messageId: number,
     channelTitle: string,
     preview: string
-  ) => {
-    if (isBookmarked(channelId, messageId)) return
+  ): Promise<boolean> => {
+    if (isBookmarked(channelId, messageId)) return true
 
     const newBookmark: Bookmark = {
       channelId,
@@ -67,17 +78,27 @@ function createBookmarksStore() {
     }
 
     const updated = [newBookmark, ...bookmarks()]
-    setBookmarksInternal(updated)
-    await save(updated)
+
+    // Save first, then update state only on success
+    const success = await save(updated)
+    if (success) {
+      setBookmarksInternal(updated)
+    }
+    return success
   }
 
-  // Remove a bookmark
-  const removeBookmark = async (channelId: number, messageId: number) => {
+  // Remove a bookmark - atomic: save first, then update state
+  const removeBookmark = async (channelId: number, messageId: number): Promise<boolean> => {
     const updated = bookmarks().filter(
       (b) => !(b.channelId === channelId && b.messageId === messageId)
     )
-    setBookmarksInternal(updated)
-    await save(updated)
+
+    // Save first, then update state only on success
+    const success = await save(updated)
+    if (success) {
+      setBookmarksInternal(updated)
+    }
+    return success
   }
 
   // Toggle bookmark
@@ -86,18 +107,21 @@ function createBookmarksStore() {
     messageId: number,
     channelTitle: string,
     preview: string
-  ) => {
+  ): Promise<boolean> => {
     if (isBookmarked(channelId, messageId)) {
-      await removeBookmark(channelId, messageId)
+      return removeBookmark(channelId, messageId)
     } else {
-      await addBookmark(channelId, messageId, channelTitle, preview)
+      return addBookmark(channelId, messageId, channelTitle, preview)
     }
   }
 
   // Clear all bookmarks
-  const clearAll = async () => {
-    setBookmarksInternal([])
-    await save([])
+  const clearAll = async (): Promise<boolean> => {
+    const success = await save([])
+    if (success) {
+      setBookmarksInternal([])
+    }
+    return success
   }
 
   // Initialize
@@ -109,6 +133,9 @@ function createBookmarksStore() {
     },
     get isLoaded() {
       return isLoaded()
+    },
+    get isSaving() {
+      return isSaving()
     },
     isBookmarked,
     addBookmark,

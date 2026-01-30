@@ -1,7 +1,8 @@
-import { getTelegramClient } from './client'
+import { getTelegramClient, getClientVersion } from './client'
 import { mapMessage, type Message } from './messages'
 import { queryClient } from '@/lib/query/client'
 import { queryKeys } from '@/lib/query/keys'
+import { getTime } from '@/lib/utils'
 import type { TimelineData } from '@/lib/query/hooks/useTimeline'
 import type { Message as TgMessage } from '@mtcute/web'
 
@@ -9,13 +10,7 @@ export type UpdatesCleanup = () => void
 
 let isListenerActive = false
 let activeCleanup: UpdatesCleanup | null = null
-
-/**
- * Helper to get timestamp from Date or string
- */
-function getTime(date: Date | string): number {
-  return date instanceof Date ? date.getTime() : new Date(date).getTime()
-}
+let listenerClientVersion = 0
 
 /**
  * Update timeline query cache with a new message
@@ -93,16 +88,28 @@ function isChannelInCache(channelId: number): boolean {
  *
  * Updates are applied directly to TanStack Query cache for instant UI updates.
  * This is the single source of truth - no separate store needed.
+ *
+ * Uses client version to prevent race conditions during rapid restarts.
  */
 export function startUpdatesListener(): UpdatesCleanup {
+  // Clean up any existing listener first
   if (activeCleanup) {
     activeCleanup()
     activeCleanup = null
   }
 
   const client = getTelegramClient()
+  const clientVersion = getClientVersion()
+
+  // Store the version this listener is bound to
+  listenerClientVersion = clientVersion
 
   const handleNewMessage = (message: TgMessage) => {
+    // Ignore if client version changed (logout/reconnect happened)
+    if (getClientVersion() !== listenerClientVersion) {
+      return
+    }
+
     try {
       const chatId = message.chat?.id
       if (!chatId) return
@@ -115,11 +122,18 @@ export function startUpdatesListener(): UpdatesCleanup {
         addMessageToCache(mapped)
       }
     } catch (error) {
-      console.error('[Updates] Error handling new message:', error)
+      if (import.meta.env.DEV) {
+        console.error('[Updates] Error handling new message:', error)
+      }
     }
   }
 
   const handleEditMessage = (message: TgMessage) => {
+    // Ignore if client version changed
+    if (getClientVersion() !== listenerClientVersion) {
+      return
+    }
+
     try {
       const chatId = message.chat?.id
       if (!chatId) return
@@ -131,18 +145,27 @@ export function startUpdatesListener(): UpdatesCleanup {
         updateMessageInCache(mapped)
       }
     } catch (error) {
-      console.error('[Updates] Error handling edit message:', error)
+      if (import.meta.env.DEV) {
+        console.error('[Updates] Error handling edit message:', error)
+      }
     }
   }
 
   const handleDeleteMessage = (update: { messageIds: number[]; channelId: number | null }) => {
+    // Ignore if client version changed
+    if (getClientVersion() !== listenerClientVersion) {
+      return
+    }
+
     try {
       const channelId = update.channelId
       if (channelId === null) return
       if (!isChannelInCache(channelId)) return
       removeMessagesFromCache(channelId, update.messageIds)
     } catch (error) {
-      console.error('[Updates] Error handling delete message:', error)
+      if (import.meta.env.DEV) {
+        console.error('[Updates] Error handling delete message:', error)
+      }
     }
   }
 
@@ -158,7 +181,9 @@ export function startUpdatesListener(): UpdatesCleanup {
     }
     isListenerActive = true
   } catch (error) {
-    console.error('[Updates] Error registering event handlers:', error)
+    if (import.meta.env.DEV) {
+      console.error('[Updates] Error registering event handlers:', error)
+    }
     isListenerActive = false
   }
 
@@ -174,10 +199,14 @@ export function startUpdatesListener(): UpdatesCleanup {
         client.onDeleteMessage.remove(handleDeleteMessage)
       }
     } catch (error) {
-      console.error('[Updates] Error removing event handlers:', error)
+      if (import.meta.env.DEV) {
+        console.error('[Updates] Error removing event handlers:', error)
+      }
     } finally {
       isListenerActive = false
-      activeCleanup = null
+      if (activeCleanup === cleanup) {
+        activeCleanup = null
+      }
     }
   }
 

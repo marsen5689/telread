@@ -1,6 +1,7 @@
-import { Index, Show, createMemo } from 'solid-js'
+import { Index, Show, createMemo, onCleanup } from 'solid-js'
 import { TimelinePost } from './TimelinePost'
 import { PostSkeleton } from '@/components/ui'
+import { INFINITE_SCROLL_THRESHOLD, SCROLL_THROTTLE_MS } from '@/config/constants'
 import type { Message, Channel } from '@/lib/telegram'
 
 interface TimelineProps {
@@ -28,8 +29,18 @@ export function Timeline(props: TimelineProps) {
     return map
   })
 
-  // Scroll handler with throttle
+  // Throttle state with proper cleanup
   let ticking = false
+  let throttleTimer: ReturnType<typeof setTimeout> | null = null
+
+  // Cleanup throttle timer on unmount
+  onCleanup(() => {
+    if (throttleTimer) {
+      clearTimeout(throttleTimer)
+      throttleTimer = null
+    }
+  })
+
   const handleScroll = (e: Event) => {
     if (ticking || props.isLoadingMore || !props.hasMore) return
 
@@ -39,11 +50,14 @@ export function Timeline(props: TimelineProps) {
     const clientHeight = target.clientHeight
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight
 
-    if (distanceFromBottom < 500) {
+    if (distanceFromBottom < INFINITE_SCROLL_THRESHOLD) {
       ticking = true
       props.onLoadMore()
       // Reset throttle after a delay
-      setTimeout(() => { ticking = false }, 300)
+      throttleTimer = setTimeout(() => {
+        ticking = false
+        throttleTimer = null
+      }, SCROLL_THROTTLE_MS)
     }
   }
 

@@ -4,6 +4,12 @@ import { TELEGRAM_CONFIG, validateConfig } from '@/config/telegram'
 let clientInstance: TelegramClient | null = null
 
 /**
+ * Client version counter - incremented on each logout/reconnect
+ * Used to invalidate stale event handlers and callbacks
+ */
+let clientVersion = 0
+
+/**
  * Get or create the Telegram client singleton
  */
 export function getTelegramClient(): TelegramClient {
@@ -29,7 +35,18 @@ export function getTelegramClient(): TelegramClient {
     },
   })
 
+  // Increment version for new client instance
+  clientVersion++
+
   return clientInstance
+}
+
+/**
+ * Get the current client version
+ * Used by event handlers to detect stale references
+ */
+export function getClientVersion(): number {
+  return clientVersion
 }
 
 /**
@@ -55,10 +72,33 @@ export async function getCurrentUser() {
 
 /**
  * Disconnect and clear the client session
+ *
+ * Increments the client version to invalidate any stale references
+ * held by event handlers or callbacks
  */
 export async function logout(): Promise<void> {
   if (clientInstance) {
-    await clientInstance.logOut()
+    // Increment version before cleanup to signal handlers
+    clientVersion++
+
+    try {
+      await clientInstance.logOut()
+    } catch (error) {
+      // Log but don't throw - we still want to clear the instance
+      if (import.meta.env.DEV) {
+        console.warn('[Client] Error during logout:', error)
+      }
+    }
+
     clientInstance = null
   }
+}
+
+/**
+ * Force reset the client (for recovery scenarios)
+ * Does not call logOut - just clears the instance
+ */
+export function resetClient(): void {
+  clientVersion++
+  clientInstance = null
 }

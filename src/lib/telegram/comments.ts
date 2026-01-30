@@ -1,4 +1,6 @@
 import { getTelegramClient } from './client'
+import { downloadProfilePhoto } from './media'
+import { MAX_COMMENT_LENGTH } from '@/config/constants'
 import type { Message as TgMessage } from '@mtcute/web'
 import Long from 'long'
 
@@ -269,7 +271,7 @@ async function fetchCommentsViaDiscussion(
       hasMore: comments.length >= limit,
       nextOffsetId: comments.length > 0 ? comments[comments.length - 1].id : undefined,
     }
-  } catch (error) {
+  } catch {
     throw new CommentError('Failed to load comments', 'NETWORK')
   }
 }
@@ -277,8 +279,6 @@ async function fetchCommentsViaDiscussion(
 // ============================================================================
 // Send Comment
 // ============================================================================
-
-const MAX_COMMENT_LENGTH = 4096
 
 /**
  * Send a comment on a channel post
@@ -344,7 +344,10 @@ export async function sendComment(
     }
 
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error('Failed to send comment:', errorMessage)
+
+    if (import.meta.env.DEV) {
+      console.error('Failed to send comment:', errorMessage)
+    }
 
     if (errorMessage.includes('FLOOD')) {
       throw new CommentError('Too many requests, please wait', 'NETWORK')
@@ -453,6 +456,7 @@ function mapHighLevelMessage(msg: TgMessage): Comment | null {
 
 /**
  * Resolve author information from TL fromId
+ * Attempts to load profile photo asynchronously
  */
 function resolveAuthor(
   fromId: TLMessage['fromId'],
@@ -470,10 +474,15 @@ function resolveAuthor(
         [user.firstName, user.lastName].filter(Boolean).join(' ') ||
         user.username ||
         'User'
+
+      // Check if user has a profile photo
+      const hasPhoto = user.photo && user.photo._ !== 'userProfilePhotoEmpty'
+
       return {
         id: fromId.userId,
         name,
-        photo: user.photo?._ !== 'userProfilePhotoEmpty' ? undefined : undefined, // TODO: resolve photo URL
+        // Photo will be loaded lazily via downloadProfilePhoto when needed
+        photo: hasPhoto ? `user:${fromId.userId}` : undefined,
       }
     }
     return { id: fromId.userId, name: 'User' }
@@ -485,12 +494,23 @@ function resolveAuthor(
       return {
         id: fromId.channelId,
         name: chat.title || 'Channel',
+        // Channel photos loaded lazily
+        photo: `channel:${fromId.channelId}`,
       }
     }
     return { id: fromId.channelId, name: 'Channel' }
   }
 
   return { id: 0, name: 'Unknown' }
+}
+
+/**
+ * Load author profile photo
+ * Call this when rendering comment to get the actual photo URL
+ */
+export async function loadAuthorPhoto(authorId: number): Promise<string | null> {
+  if (!authorId) return null
+  return downloadProfilePhoto(authorId, 'small')
 }
 
 /**

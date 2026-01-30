@@ -1,10 +1,98 @@
 import { getTelegramClient } from './client'
+import { MAX_CONCURRENT_DOWNLOADS, MEDIA_CACHE_MAX_SIZE } from '@/config/constants'
 
-// Cache for downloaded media URLs
-const mediaCache = new Map<string, string>()
+// ============================================================================
+// LRU Cache for Media URLs
+// ============================================================================
 
-// Limit concurrent downloads to avoid overwhelming Telegram connection
-const MAX_CONCURRENT_DOWNLOADS = 3
+/**
+ * LRU (Least Recently Used) cache for blob URLs
+ * Automatically evicts oldest entries and revokes blob URLs to prevent memory leaks
+ */
+class MediaLRUCache {
+  private cache = new Map<string, string>()
+  private readonly maxSize: number
+
+  constructor(maxSize: number) {
+    this.maxSize = maxSize
+  }
+
+  get(key: string): string | undefined {
+    const value = this.cache.get(key)
+    if (value !== undefined) {
+      // Move to end (most recently used)
+      this.cache.delete(key)
+      this.cache.set(key, value)
+    }
+    return value
+  }
+
+  set(key: string, value: string): void {
+    // If key exists, delete it first to update position
+    if (this.cache.has(key)) {
+      const oldValue = this.cache.get(key)
+      if (oldValue) {
+        URL.revokeObjectURL(oldValue)
+      }
+      this.cache.delete(key)
+    }
+
+    // Evict oldest entries if at capacity
+    while (this.cache.size >= this.maxSize) {
+      const oldestKey = this.cache.keys().next().value
+      if (oldestKey) {
+        const oldestValue = this.cache.get(oldestKey)
+        if (oldestValue) {
+          URL.revokeObjectURL(oldestValue)
+        }
+        this.cache.delete(oldestKey)
+      }
+    }
+
+    this.cache.set(key, value)
+  }
+
+  has(key: string): boolean {
+    return this.cache.has(key)
+  }
+
+  /**
+   * Remove a specific entry and revoke its blob URL
+   */
+  delete(key: string): boolean {
+    const value = this.cache.get(key)
+    if (value) {
+      URL.revokeObjectURL(value)
+      return this.cache.delete(key)
+    }
+    return false
+  }
+
+  /**
+   * Clear all entries and revoke all blob URLs
+   */
+  clear(): void {
+    for (const url of this.cache.values()) {
+      URL.revokeObjectURL(url)
+    }
+    this.cache.clear()
+  }
+
+  get size(): number {
+    return this.cache.size
+  }
+}
+
+// ============================================================================
+// Media Cache Instance
+// ============================================================================
+
+const mediaCache = new MediaLRUCache(MEDIA_CACHE_MAX_SIZE)
+
+// ============================================================================
+// Download Queue Management
+// ============================================================================
+
 let activeDownloads = 0
 const downloadQueue: Array<() => void> = []
 
@@ -25,7 +113,10 @@ function releaseDownloadSlot(): void {
   }
 }
 
-// Debug mode - set to true for troubleshooting
+// ============================================================================
+// Debug Logging
+// ============================================================================
+
 const DEBUG_MEDIA = import.meta.env.DEV
 
 function debugLog(message: string, ...args: unknown[]) {
@@ -40,23 +131,39 @@ function debugWarn(message: string, ...args: unknown[]) {
   }
 }
 
+// ============================================================================
+// Download Media
+// ============================================================================
+
 /**
  * Download media from a message and return a blob URL
  *
  * Uses mtcute's built-in download methods which handle:
  * - Automatic file reference refresh on FILE_REFERENCE_EXPIRED
  * - Proper thumbnail extraction for videos/photos
+ *
+ * @param channelId - Channel ID
+ * @param messageId - Message ID
+ * @param thumbSize - Optional thumbnail size (small/medium/large)
+ * @param signal - Optional AbortSignal for cancellation
  */
 export async function downloadMedia(
   channelId: number,
   messageId: number,
-  thumbSize?: 'small' | 'medium' | 'large'
+  thumbSize?: 'small' | 'medium' | 'large',
+  signal?: AbortSignal
 ): Promise<string | null> {
   const cacheKey = `${channelId}:${messageId}:${thumbSize ?? 'full'}`
 
+  // Check cache first
   const cached = mediaCache.get(cacheKey)
   if (cached) {
     return cached
+  }
+
+  // Check if already aborted
+  if (signal?.aborted) {
+    return null
   }
 
   const client = getTelegramClient()
@@ -64,9 +171,19 @@ export async function downloadMedia(
   // Wait for available download slot
   await acquireDownloadSlot()
 
+  // Check again after waiting for slot
+  if (signal?.aborted) {
+    releaseDownloadSlot()
+    return null
+  }
+
   try {
     // Always fetch fresh message to get valid file references
     const messages = await client.getMessages(channelId, [messageId])
+
+    if (signal?.aborted) {
+      return null
+    }
 
     if (!Array.isArray(messages) || messages.length === 0 || !messages[0]) {
       debugWarn(`Message not found: channel=${channelId}, msg=${messageId}`)
@@ -115,7 +232,6 @@ export async function downloadMedia(
           buffer = await client.downloadAsBuffer(thumbnail)
         } else {
           // No thumbnail found - download full media
-          // For photos this gets the best size, for videos the full file
           debugLog(`No thumbnail found, downloading full media`)
           buffer = await client.downloadAsBuffer(media)
         }
@@ -124,6 +240,10 @@ export async function downloadMedia(
         buffer = await client.downloadAsBuffer(media)
       }
     } catch (downloadError) {
+      if (signal?.aborted) {
+        return null
+      }
+
       const errorMessage = downloadError instanceof Error ? downloadError.message : String(downloadError)
 
       // Check for FILE_REFERENCE_EXPIRED - try refetching message
@@ -133,6 +253,11 @@ export async function downloadMedia(
         try {
           // Refetch message to get fresh file reference
           const freshMessages = await client.getMessages(channelId, [messageId])
+
+          if (signal?.aborted) {
+            return null
+          }
+
           if (freshMessages?.[0]?.media) {
             const freshMedia = freshMessages[0].media as any
 
@@ -145,7 +270,6 @@ export async function downloadMedia(
               if (thumbnail) {
                 buffer = await client.downloadAsBuffer(thumbnail)
               } else {
-                // No thumbnail - download full media
                 buffer = await client.downloadAsBuffer(freshMedia)
               }
             } else {
@@ -160,6 +284,10 @@ export async function downloadMedia(
       }
     }
 
+    if (signal?.aborted) {
+      return null
+    }
+
     if (!buffer || buffer.length === 0) {
       debugWarn(`Empty buffer: channel=${channelId}, msg=${messageId}`)
       return null
@@ -172,15 +300,21 @@ export async function downloadMedia(
     const url = URL.createObjectURL(blob)
 
     mediaCache.set(cacheKey, url)
-    debugLog(`Cached media: ${cacheKey}`)
+    debugLog(`Cached media: ${cacheKey} (cache size: ${mediaCache.size})`)
     return url
   } catch (error) {
-    debugWarn(`Error downloading media: channel=${channelId}, msg=${messageId}`, error)
+    if (!signal?.aborted) {
+      debugWarn(`Error downloading media: channel=${channelId}, msg=${messageId}`, error)
+    }
     return null
   } finally {
     releaseDownloadSlot()
   }
 }
+
+// ============================================================================
+// Download Profile Photo
+// ============================================================================
 
 /**
  * Download a channel/user profile photo
@@ -225,7 +359,8 @@ export async function downloadProfilePhoto(
 
     mediaCache.set(cacheKey, url)
     return url
-  } catch {
+  } catch (error) {
+    debugWarn(`Failed to download profile photo: peer=${peerId}`, error)
     return null
   }
 }
@@ -241,7 +376,7 @@ async function resolvePeerWithPhoto(
   try {
     return await client.getChat(peerId)
   } catch {
-    // Ignore - not a chat
+    // Not a chat, try as user
   }
 
   // Try as user
@@ -252,6 +387,10 @@ async function resolvePeerWithPhoto(
     return null
   }
 }
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
 
 /**
  * Stream video media
@@ -277,13 +416,24 @@ export async function preloadThumbnails(
 }
 
 /**
- * Clear the media cache
+ * Clear the media cache and revoke all blob URLs
  */
 export function clearMediaCache(): void {
-  for (const url of mediaCache.values()) {
-    URL.revokeObjectURL(url)
-  }
   mediaCache.clear()
+  debugLog('Media cache cleared')
+}
+
+/**
+ * Remove a specific media entry from cache
+ * Useful for cleanup when component unmounts
+ */
+export function removeFromMediaCache(
+  channelId: number,
+  messageId: number,
+  thumbSize?: 'small' | 'medium' | 'large'
+): void {
+  const cacheKey = `${channelId}:${messageId}:${thumbSize ?? 'full'}`
+  mediaCache.delete(cacheKey)
 }
 
 /**
@@ -296,6 +446,16 @@ export function getCachedMedia(
 ): string | null {
   const cacheKey = `${channelId}:${messageId}:${thumbSize ?? 'full'}`
   return mediaCache.get(cacheKey) ?? null
+}
+
+/**
+ * Get current cache statistics
+ */
+export function getMediaCacheStats(): { size: number; maxSize: number } {
+  return {
+    size: mediaCache.size,
+    maxSize: MEDIA_CACHE_MAX_SIZE,
+  }
 }
 
 function getMimeType(media: { type: string; mimeType?: string }): string {

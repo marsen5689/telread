@@ -1,6 +1,7 @@
 import { createSignal, Show, Match, Switch, createEffect, createResource } from 'solid-js'
 import { Motion } from 'solid-motionone'
 import { downloadMedia, getCachedMedia } from '@/lib/telegram'
+import { DEFAULT_ASPECT_RATIO } from '@/config/constants'
 import type { MessageMedia } from '@/lib/telegram'
 import { useMedia } from '@/lib/query'
 import { Skeleton } from '@/components/ui'
@@ -33,12 +34,16 @@ export function PostMedia(props: PostMediaProps) {
     }
   )
 
-  // Calculate aspect ratio
+  // Calculate aspect ratio with safety check for division by zero
   const aspectRatio = () => {
-    if (props.media.width && props.media.height) {
-      return props.media.width / props.media.height
+    const width = props.media.width
+    const height = props.media.height
+
+    // Guard against division by zero and invalid dimensions
+    if (width && height && height > 0) {
+      return width / height
     }
-    return 16 / 9 // Default aspect ratio
+    return DEFAULT_ASPECT_RATIO
   }
 
   const containerStyle = () => ({

@@ -1,5 +1,6 @@
 import { getTelegramClient } from './client'
 import { mapMessage } from './messages'
+import { MAX_DIALOGS_TO_ITERATE, MAX_CHANNELS_TO_FETCH } from '@/config/constants'
 import type { Chat, Message as TgMessage } from '@mtcute/web'
 import type { Message } from './messages'
 
@@ -30,10 +31,8 @@ export async function fetchChannels(): Promise<Channel[]> {
 
   const iterator = client.iterDialogs()[Symbol.asyncIterator]()
   let dialogCount = 0
-  const maxDialogs = 200 // Limit to avoid rate limits
-  const maxChannels = 50 // We only need a reasonable number
 
-  while (dialogCount < maxDialogs && channels.length < maxChannels) {
+  while (dialogCount < MAX_DIALOGS_TO_ITERATE && channels.length < MAX_CHANNELS_TO_FETCH) {
     try {
       const { value: dialog, done } = await iterator.next()
       if (done) break
@@ -48,9 +47,10 @@ export async function fetchChannels(): Promise<Channel[]> {
       if (chat.chatType === 'channel' && !isGroupChat(chat)) {
         channels.push(mapChatToChannel(chat))
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Skip unsupported dialog types and continue
-      if (e?.message?.includes('Secret') || e?.message?.includes('Unsupported')) {
+      const message = e instanceof Error ? e.message : ''
+      if (message.includes('Secret') || message.includes('Unsupported')) {
         continue
       }
       // For rate limits or other errors, stop
@@ -75,10 +75,8 @@ export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMe
 
   const iterator = client.iterDialogs()[Symbol.asyncIterator]()
   let dialogCount = 0
-  const maxDialogs = 200
-  const maxChannels = 50
 
-  while (dialogCount < maxDialogs && channels.length < maxChannels) {
+  while (dialogCount < MAX_DIALOGS_TO_ITERATE && channels.length < MAX_CHANNELS_TO_FETCH) {
     try {
       const { value: dialog, done } = await iterator.next()
       if (done) break
@@ -115,8 +113,9 @@ export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMe
           lastMessage: mappedLastMessage,
         })
       }
-    } catch (e: any) {
-      if (e?.message?.includes('Secret') || e?.message?.includes('Unsupported')) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : ''
+      if (message.includes('Secret') || message.includes('Unsupported')) {
         continue
       }
       break

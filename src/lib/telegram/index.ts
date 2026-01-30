@@ -1,4 +1,4 @@
-export { getTelegramClient, isAuthenticated, getCurrentUser, logout } from './client'
+export { getTelegramClient, getClientVersion, isAuthenticated, getCurrentUser, logout, resetClient } from './client'
 export {
   startPhoneAuth,
   submitCode,
@@ -33,6 +33,7 @@ export {
   fetchComments,
   sendComment,
   hasCommentsEnabled,
+  loadAuthorPhoto,
   CommentError,
   type Comment,
   type CommentAuthor,
@@ -47,6 +48,8 @@ export {
   preloadThumbnails,
   clearMediaCache,
   getCachedMedia,
+  removeFromMediaCache,
+  getMediaCacheStats,
 } from './media'
 export {
   startUpdatesListener,

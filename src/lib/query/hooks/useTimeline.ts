@@ -7,6 +7,7 @@ import {
   type Message,
   type ChannelWithLastMessage,
 } from '@/lib/telegram'
+import { getTime } from '@/lib/utils'
 import { queryKeys } from '../keys'
 
 /**
@@ -91,11 +92,6 @@ async function fetchTimelineHistory(
   }
 
   return allMessages.sort((a, b) => getTime(b.date) - getTime(a.date)).slice(0, limit)
-}
-
-/** Helper to handle Date objects and strings from cache */
-function getTime(date: Date | string): number {
-  return date instanceof Date ? date.getTime() : new Date(date).getTime()
 }
 
 /**
