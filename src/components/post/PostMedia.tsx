@@ -1,6 +1,6 @@
-import { createSignal, Show, Match, Switch, onCleanup, onMount, createEffect, createMemo } from 'solid-js'
+import { createSignal, Show, Match, Switch, For, onCleanup, onMount, createEffect, createMemo } from 'solid-js'
 import { Motion } from 'solid-motionone'
-import { downloadMedia, getCachedMedia } from '@/lib/telegram'
+import { downloadMedia, getCachedMedia, isClientReady } from '@/lib/telegram'
 import { DEFAULT_ASPECT_RATIO } from '@/config/constants'
 import type { MessageMedia } from '@/lib/telegram'
 import { useMedia } from '@/lib/query'
@@ -83,19 +83,36 @@ export function PostMedia(props: PostMediaProps) {
     observer.observe(el)
   }
 
+  // Track if we're waiting for client to become ready
+  const [waitingForClient, setWaitingForClient] = createSignal(false)
+
+  // Retry loading when client becomes ready
+  createEffect(() => {
+    if (isClientReady() && waitingForClient() && !thumbnailUrl()) {
+      setWaitingForClient(false)
+      loadMedia()
+    }
+  })
+
   // Load media when visible (with unmount protection)
   const loadMedia = async () => {
     // Capture current props at call time
     const channelId = props.channelId
     const messageId = props.messageId
 
-    // Check cache first
+    // Check cache first (works without client)
     const cached = getCachedMedia(channelId, messageId, 'large')
     if (cached) {
       // Verify props haven't changed during async operation
       if (isMounted && props.channelId === channelId && props.messageId === messageId) {
         setThumbnailUrl(cached)
       }
+      return
+    }
+
+    // Wait for client to be ready before downloading
+    if (!isClientReady()) {
+      setWaitingForClient(true)
       return
     }
 
@@ -247,6 +264,236 @@ export function PostMedia(props: PostMediaProps) {
             </Show>
           </div>
         </Match>
+
+        {/* Audio */}
+        <Match when={props.media.type === 'audio'}>
+          <div class="glass rounded-xl p-4 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-lg bg-[var(--accent)]/15 flex items-center justify-center flex-shrink-0">
+              <svg class="w-6 h-6 text-accent" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-primary truncate">
+                {props.media.title || props.media.fileName || 'Audio'}
+              </p>
+              <p class="text-xs text-tertiary truncate">
+                {props.media.performer || formatDuration(props.media.duration ?? 0)}
+                {props.media.performer && props.media.duration && ` • ${formatDuration(props.media.duration)}`}
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Play audio"
+              onClick={() => setIsExpanded(true)}
+              class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center flex-shrink-0
+                     hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-accent"
+            >
+              <svg class="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </button>
+          </div>
+        </Match>
+
+        {/* Voice */}
+        <Match when={props.media.type === 'voice'}>
+          <div class="glass rounded-xl p-3 flex items-center gap-3">
+            <button
+              type="button"
+              aria-label="Play voice message"
+              onClick={() => setIsExpanded(true)}
+              class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center flex-shrink-0
+                     hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-accent"
+            >
+              <svg class="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </button>
+            {/* Waveform visualization */}
+            <div class="flex-1 flex items-center gap-0.5 h-8">
+              <Show when={props.media.waveform} fallback={
+                <div class="w-full h-4 bg-[var(--accent)]/20 rounded" />
+              }>
+                {(waveform) => (
+                  <For each={waveform().slice(0, 50)}>
+                    {(value) => (
+                      <div
+                        class="w-1 bg-[var(--accent)]/60 rounded-full"
+                        style={{ height: `${Math.max(4, (value / 31) * 100)}%` }}
+                      />
+                    )}
+                  </For>
+                )}
+              </Show>
+            </div>
+            <span class="text-xs text-tertiary flex-shrink-0">
+              {formatDuration(props.media.duration ?? 0)}
+            </span>
+          </div>
+        </Match>
+
+        {/* Poll */}
+        <Match when={props.media.type === 'poll'}>
+          <div class="glass rounded-xl p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <Show when={props.media.pollQuiz}>
+                <span class="text-xs px-2 py-0.5 rounded bg-[var(--accent)]/15 text-accent font-medium">Quiz</span>
+              </Show>
+              <Show when={props.media.pollClosed}>
+                <span class="text-xs px-2 py-0.5 rounded bg-tertiary/20 text-tertiary font-medium">Closed</span>
+              </Show>
+            </div>
+            <p class="text-sm font-medium text-primary mb-3">{props.media.pollQuestion}</p>
+            <div class="space-y-2">
+              <For each={props.media.pollAnswers}>
+                {(answer) => {
+                  const percentage = () => props.media.pollVoters && props.media.pollVoters > 0
+                    ? Math.round((answer.voters / props.media.pollVoters!) * 100)
+                    : 0
+                  return (
+                    <div class="relative">
+                      <div
+                        class={`absolute inset-0 rounded-lg transition-all ${
+                          answer.correct ? 'bg-green-500/20' : answer.chosen ? 'bg-[var(--accent)]/20' : 'bg-[var(--accent)]/10'
+                        }`}
+                        style={{ width: `${percentage()}%` }}
+                      />
+                      <div class="relative flex items-center justify-between p-2 rounded-lg">
+                        <span class="text-sm text-primary">{answer.text}</span>
+                        <span class="text-xs text-tertiary font-medium">{percentage()}%</span>
+                      </div>
+                    </div>
+                  )
+                }}
+              </For>
+            </div>
+            <Show when={props.media.pollVoters !== undefined}>
+              <p class="text-xs text-tertiary mt-3">
+                {props.media.pollVoters} {props.media.pollVoters === 1 ? 'vote' : 'votes'}
+              </p>
+            </Show>
+          </div>
+        </Match>
+
+        {/* Location */}
+        <Match when={props.media.type === 'location'}>
+          <a
+            href={`https://maps.google.com/?q=${props.media.latitude},${props.media.longitude}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="glass rounded-xl p-4 flex items-center gap-4 hover:bg-[var(--bg-secondary)] transition-colors"
+          >
+            <div class="w-12 h-12 rounded-lg bg-green-500/15 flex items-center justify-center flex-shrink-0">
+              <svg class="w-6 h-6 text-green-500" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-primary">Location</p>
+              <p class="text-xs text-tertiary truncate">
+                {props.media.latitude?.toFixed(6)}, {props.media.longitude?.toFixed(6)}
+              </p>
+              <Show when={props.media.period}>
+                <p class="text-xs text-green-500 mt-1">Live location</p>
+              </Show>
+            </div>
+            <svg class="w-5 h-5 text-tertiary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+        </Match>
+
+        {/* Venue */}
+        <Match when={props.media.type === 'venue'}>
+          <a
+            href={`https://maps.google.com/?q=${props.media.latitude},${props.media.longitude}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="glass rounded-xl p-4 flex items-center gap-4 hover:bg-[var(--bg-secondary)] transition-colors"
+          >
+            <div class="w-12 h-12 rounded-lg bg-orange-500/15 flex items-center justify-center flex-shrink-0">
+              <svg class="w-6 h-6 text-orange-500" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-primary truncate">{props.media.venueTitle}</p>
+              <p class="text-xs text-tertiary truncate">{props.media.address}</p>
+            </div>
+            <svg class="w-5 h-5 text-tertiary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+        </Match>
+
+        {/* Contact */}
+        <Match when={props.media.type === 'contact'}>
+          <div class="glass rounded-xl p-4 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-blue-500/15 flex items-center justify-center flex-shrink-0">
+              <svg class="w-6 h-6 text-blue-500" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-primary truncate">
+                {props.media.firstName} {props.media.lastName}
+              </p>
+              <a
+                href={`tel:${props.media.phoneNumber}`}
+                class="text-xs text-accent hover:underline"
+              >
+                {props.media.phoneNumber}
+              </a>
+            </div>
+          </div>
+        </Match>
+
+        {/* Dice */}
+        <Match when={props.media.type === 'dice'}>
+          <div class="flex items-center justify-center p-4">
+            <div class="text-6xl" title={`Value: ${props.media.value}`}>
+              {props.media.emoji}
+            </div>
+          </div>
+        </Match>
+
+        {/* Webpage preview */}
+        <Match when={props.media.type === 'webpage'}>
+          <a
+            href={props.media.webpageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="glass rounded-xl overflow-hidden block hover:bg-[var(--bg-secondary)] transition-colors"
+          >
+            <Show when={props.media.webpagePhoto && thumbnailUrl()}>
+              <div class="relative w-full" style={{ 'aspect-ratio': '1.91' }}>
+                <img
+                  src={thumbnailUrl()!}
+                  alt=""
+                  class="w-full h-full object-cover"
+                />
+              </div>
+            </Show>
+            <div class="p-4">
+              <Show when={props.media.webpageSiteName}>
+                <p class="text-xs text-accent font-medium uppercase tracking-wide mb-1">
+                  {props.media.webpageSiteName}
+                </p>
+              </Show>
+              <Show when={props.media.webpageTitle}>
+                <p class="text-sm font-medium text-primary line-clamp-2 mb-1">
+                  {props.media.webpageTitle}
+                </p>
+              </Show>
+              <Show when={props.media.webpageDescription}>
+                <p class="text-xs text-tertiary line-clamp-3">
+                  {props.media.webpageDescription}
+                </p>
+              </Show>
+            </div>
+          </a>
+        </Match>
       </Switch>
 
       {/* Fullscreen modal */}
@@ -350,10 +597,38 @@ function MediaModal(props: {
                   src={url()}
                   class="max-w-full max-h-[90vh]"
                   controls
-                  autoplay={props.media.type === 'animation'}
+                  autoplay
                   muted={props.media.type === 'animation'}
                   loop={props.media.type === 'animation'}
                 />
+              )}
+            </Show>
+          </Match>
+
+          <Match when={props.media.type === 'audio' || props.media.type === 'voice'}>
+            <Show
+              when={fullQuery.data}
+              fallback={
+                <div class="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full" />
+              }
+            >
+              {(url) => (
+                <div class="bg-white/10 rounded-2xl p-6 min-w-[300px]">
+                  <Show when={props.media.type === 'audio'}>
+                    <div class="text-center mb-4">
+                      <p class="text-white font-medium">{props.media.title || 'Audio'}</p>
+                      <Show when={props.media.performer}>
+                        <p class="text-white/60 text-sm">{props.media.performer}</p>
+                      </Show>
+                    </div>
+                  </Show>
+                  <audio
+                    src={url()}
+                    class="w-full"
+                    controls
+                    autoplay
+                  />
+                </div>
               )}
             </Show>
           </Match>

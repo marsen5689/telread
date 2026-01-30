@@ -119,6 +119,7 @@ export function CommentSection(props: CommentSectionProps) {
                 {(comment) => (
                   <CommentThread
                     comment={comment}
+                    discussionChatId={commentsQuery.data!.discussionChatId}
                     onReply={handleSendComment}
                     isSending={sendMutation.isPending}
                   />

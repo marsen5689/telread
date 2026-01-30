@@ -2,6 +2,8 @@ import { getTelegramClient } from './client'
 import { downloadProfilePhoto } from './media'
 import { MAX_COMMENT_LENGTH } from '@/config/constants'
 import type { Message as TgMessage } from '@mtcute/web'
+import type { MessageMedia, MessageEntity, MessageForward } from './messages'
+import { mapMessage } from './messages'
 import Long from 'long'
 
 // ============================================================================
@@ -27,6 +29,9 @@ export interface Comment {
   replyToId?: number
   replies?: Comment[]
   reactions?: CommentReaction[]
+  media?: MessageMedia
+  entities?: MessageEntity[]
+  forward?: MessageForward
 }
 
 export interface CommentThread {
@@ -71,6 +76,44 @@ interface TLMessageReplyHeader {
   replyToTopId?: number
 }
 
+interface TLMedia {
+  _: string
+  // Photo
+  photo?: { sizes?: Array<{ w?: number; h?: number }> }
+  // Video/Document
+  document?: {
+    mimeType?: string
+    attributes?: Array<{
+      _: string
+      w?: number
+      h?: number
+      duration?: number
+      fileName?: string
+      title?: string
+      performer?: string
+      waveform?: Uint8Array
+    }>
+  }
+  // Geo
+  geo?: { lat?: number; long?: number }
+  // Venue
+  title?: string
+  address?: string
+  // Poll
+  poll?: { question?: { text?: string }; answers?: Array<{ text?: { text?: string } }> }
+  results?: { results?: Array<{ option?: Uint8Array; voters?: number }> }
+  // Contact
+  phoneNumber?: string
+  firstName?: string
+  lastName?: string
+  userId?: number
+  // Dice
+  emoticon?: string
+  value?: number
+  // Webpage
+  webpage?: { url?: string; title?: string; description?: string; siteName?: string }
+}
+
 interface TLMessage {
   _: string
   id: number
@@ -78,8 +121,22 @@ interface TLMessage {
   date: number
   fromId?: { _: string; userId?: number; channelId?: number }
   replyTo?: TLMessageReplyHeader
-  media?: unknown
+  media?: TLMedia
   reactions?: { results?: Array<{ reaction: { emoticon?: string }; count: number }> }
+  fwdFrom?: {
+    date?: number
+    fromId?: { _: string; userId?: number; channelId?: number }
+    fromName?: string
+    channelPost?: number
+    postAuthor?: string
+  }
+  entities?: Array<{
+    _: string
+    offset: number
+    length: number
+    url?: string
+    language?: string
+  }>
 }
 
 interface TLMessagesResponse {
@@ -176,9 +233,14 @@ function processCommentsResponse(
     if (result.chats) {
       for (const chat of result.chats) {
         chats.set(chat.id, chat)
-        // Get discussion chat ID (usually the first supergroup)
-        if (!discussionChatId && (chat._ === 'channel' || chat._ === 'chat')) {
-          discussionChatId = chat.id
+        // Get discussion chat ID (usually the first supergroup/channel)
+        // Convert to marked ID format that mtcute expects for getMessages
+        if (!discussionChatId && (chat._ === 'channel' || chat._ === 'channelForbidden')) {
+          // Channels/supergroups need -100 prefix for mtcute's getMessages
+          discussionChatId = -Number(`100${chat.id}`)
+        } else if (!discussionChatId && (chat._ === 'chat' || chat._ === 'chatForbidden')) {
+          // Regular chats use negative ID
+          discussionChatId = -chat.id
         }
       }
     }
@@ -419,6 +481,15 @@ function mapTLMessageToComment(
   // Map reactions if present
   const reactions = mapReactions(msg.reactions)
 
+  // Map media if present
+  const media = mapTLMedia(msg.media)
+
+  // Map entities if present
+  const entities = mapTLEntities(msg.entities)
+
+  // Map forward info if present
+  const forward = mapTLForward(msg.fwdFrom, users, chats)
+
   return {
     id: msg.id,
     text,
@@ -426,11 +497,233 @@ function mapTLMessageToComment(
     date: new Date(msg.date * 1000),
     replyToId,
     reactions,
+    media,
+    entities,
+    forward,
+  }
+}
+
+/**
+ * Map TL media to MessageMedia
+ */
+function mapTLMedia(media: TLMedia | undefined): MessageMedia | undefined {
+  if (!media) return undefined
+
+  const type = media._
+
+  // Photo
+  if (type === 'messageMediaPhoto' && media.photo) {
+    const sizes = media.photo.sizes ?? []
+    const largest = sizes[sizes.length - 1]
+    return {
+      type: 'photo',
+      width: largest?.w,
+      height: largest?.h,
+    }
+  }
+
+  // Document (video, audio, voice, sticker, animation, file)
+  if (type === 'messageMediaDocument' && media.document) {
+    const doc = media.document
+    const attrs = doc.attributes ?? []
+
+    // Check for video
+    const videoAttr = attrs.find((a) => a._ === 'documentAttributeVideo')
+    if (videoAttr) {
+      const isAnimation = attrs.some((a) => a._ === 'documentAttributeAnimated')
+      return {
+        type: isAnimation ? 'animation' : 'video',
+        width: videoAttr.w,
+        height: videoAttr.h,
+        duration: videoAttr.duration,
+        mimeType: doc.mimeType,
+      }
+    }
+
+    // Check for audio
+    const audioAttr = attrs.find((a) => a._ === 'documentAttributeAudio')
+    if (audioAttr) {
+      const isVoice = 'voice' in audioAttr
+      return {
+        type: isVoice ? 'voice' : 'audio',
+        duration: audioAttr.duration,
+        title: audioAttr.title,
+        performer: audioAttr.performer,
+        waveform: audioAttr.waveform ? Array.from(audioAttr.waveform) : undefined,
+        mimeType: doc.mimeType,
+      }
+    }
+
+    // Check for sticker
+    const stickerAttr = attrs.find((a) => a._ === 'documentAttributeSticker')
+    if (stickerAttr) {
+      const imageAttr = attrs.find((a) => a._ === 'documentAttributeImageSize')
+      return {
+        type: 'sticker',
+        width: imageAttr?.w,
+        height: imageAttr?.h,
+      }
+    }
+
+    // Generic document
+    const fileAttr = attrs.find((a) => a._ === 'documentAttributeFilename')
+    return {
+      type: 'document',
+      fileName: fileAttr?.fileName,
+      mimeType: doc.mimeType,
+    }
+  }
+
+  // Geo location
+  if ((type === 'messageMediaGeo' || type === 'messageMediaGeoLive') && media.geo) {
+    return {
+      type: 'location',
+      latitude: media.geo.lat,
+      longitude: media.geo.long,
+    }
+  }
+
+  // Venue
+  if (type === 'messageMediaVenue' && media.geo) {
+    return {
+      type: 'venue',
+      latitude: media.geo.lat,
+      longitude: media.geo.long,
+      venueTitle: media.title,
+      address: media.address,
+    }
+  }
+
+  // Poll
+  if (type === 'messageMediaPoll' && media.poll) {
+    return {
+      type: 'poll',
+      pollQuestion: media.poll.question?.text,
+      pollAnswers: media.poll.answers?.map((a, i) => ({
+        text: a.text?.text ?? '',
+        voters: media.results?.results?.[i]?.voters ?? 0,
+      })),
+    }
+  }
+
+  // Contact
+  if (type === 'messageMediaContact') {
+    return {
+      type: 'contact',
+      phoneNumber: media.phoneNumber,
+      firstName: media.firstName,
+      lastName: media.lastName,
+      contactUserId: media.userId,
+    }
+  }
+
+  // Dice
+  if (type === 'messageMediaDice') {
+    return {
+      type: 'dice',
+      emoji: media.emoticon,
+      value: media.value,
+    }
+  }
+
+  // Webpage
+  if (type === 'messageMediaWebPage' && media.webpage) {
+    return {
+      type: 'webpage',
+      webpageUrl: media.webpage.url,
+      webpageTitle: media.webpage.title,
+      webpageDescription: media.webpage.description,
+      webpageSiteName: media.webpage.siteName,
+    }
+  }
+
+  return undefined
+}
+
+/**
+ * Map TL entities to MessageEntity array
+ */
+function mapTLEntities(entities: TLMessage['entities']): MessageEntity[] | undefined {
+  if (!entities || entities.length === 0) return undefined
+
+  return entities.map((e) => {
+    const base = { offset: e.offset, length: e.length }
+
+    switch (e._) {
+      case 'messageEntityBold':
+        return { ...base, type: 'bold' as const }
+      case 'messageEntityItalic':
+        return { ...base, type: 'italic' as const }
+      case 'messageEntityUnderline':
+        return { ...base, type: 'underline' as const }
+      case 'messageEntityStrike':
+        return { ...base, type: 'strikethrough' as const }
+      case 'messageEntityCode':
+        return { ...base, type: 'code' as const }
+      case 'messageEntityPre':
+        return { ...base, type: 'pre' as const, language: e.language }
+      case 'messageEntityTextUrl':
+        return { ...base, type: 'link' as const, url: e.url }
+      case 'messageEntityMention':
+        return { ...base, type: 'mention' as const }
+      case 'messageEntityHashtag':
+        return { ...base, type: 'hashtag' as const }
+      case 'messageEntityEmail':
+        return { ...base, type: 'email' as const }
+      case 'messageEntityPhone':
+        return { ...base, type: 'phone' as const }
+      case 'messageEntitySpoiler':
+        return { ...base, type: 'spoiler' as const }
+      default:
+        return { ...base, type: 'bold' as const }
+    }
+  })
+}
+
+/**
+ * Map TL forward info to MessageForward
+ */
+function mapTLForward(
+  fwdFrom: TLMessage['fwdFrom'],
+  users: Map<number, TLUser>,
+  chats: Map<number, TLChat>
+): MessageForward | undefined {
+  if (!fwdFrom) return undefined
+
+  let senderName = fwdFrom.fromName ?? 'Unknown'
+  let senderId: number | undefined
+  let isChannel = false
+
+  if (fwdFrom.fromId) {
+    if (fwdFrom.fromId._ === 'peerUser' && fwdFrom.fromId.userId) {
+      const user = users.get(fwdFrom.fromId.userId)
+      if (user) {
+        senderName = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User'
+      }
+      senderId = fwdFrom.fromId.userId
+    } else if (fwdFrom.fromId._ === 'peerChannel' && fwdFrom.fromId.channelId) {
+      const chat = chats.get(fwdFrom.fromId.channelId)
+      if (chat) {
+        senderName = chat.title || 'Channel'
+      }
+      senderId = fwdFrom.fromId.channelId
+      isChannel = true
+    }
+  }
+
+  return {
+    date: fwdFrom.date ? new Date(fwdFrom.date * 1000) : new Date(),
+    senderName,
+    senderId,
+    isChannel,
+    messageId: fwdFrom.channelPost,
+    signature: fwdFrom.postAuthor,
   }
 }
 
 /**
  * Map high-level mtcute Message to Comment (for iterHistory response)
+ * Uses mapMessage internally to get full media/entities/forward support
  */
 function mapHighLevelMessage(msg: TgMessage): Comment | null {
   if (!msg.text && !msg.media) {
@@ -440,7 +733,12 @@ function mapHighLevelMessage(msg: TgMessage): Comment | null {
   const msgAny = msg as TgMessage & {
     replyToMessageId?: number
     replyToMessage?: { id: number }
+    chat?: { id: number }
   }
+
+  // Use mapMessage to get media, entities, forward
+  const chatId = msgAny.chat?.id ?? 0
+  const mapped = mapMessage(msg, chatId)
 
   return {
     id: msg.id,
@@ -451,6 +749,9 @@ function mapHighLevelMessage(msg: TgMessage): Comment | null {
     },
     date: msg.date,
     replyToId: msgAny.replyToMessageId ?? msgAny.replyToMessage?.id,
+    media: mapped?.media,
+    entities: mapped?.entities,
+    forward: mapped?.forward,
   }
 }
 

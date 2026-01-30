@@ -1,6 +1,6 @@
 import { For, Show, createSignal, createMemo, onCleanup, onMount, createEffect } from 'solid-js'
 import { Motion } from 'solid-motionone'
-import { downloadMedia, getCachedMedia } from '@/lib/telegram'
+import { downloadMedia, getCachedMedia, isClientReady } from '@/lib/telegram'
 import { useMedia } from '@/lib/query'
 import type { MessageMedia } from '@/lib/telegram'
 
@@ -82,6 +82,7 @@ function GalleryItem(props: {
 }) {
   const [thumbnailUrl, setThumbnailUrl] = createSignal<string | null>(null)
   const [hasStartedLoading, setHasStartedLoading] = createSignal(false)
+  const [waitingForClient, setWaitingForClient] = createSignal(false)
 
   let observer: IntersectionObserver | undefined
   let containerRef: HTMLDivElement | undefined
@@ -95,6 +96,7 @@ function GalleryItem(props: {
     itemKey()
     setThumbnailUrl(null)
     setHasStartedLoading(false)
+    setWaitingForClient(false)
 
     if (containerRef && isMounted) {
       const rect = containerRef.getBoundingClientRect()
@@ -106,14 +108,29 @@ function GalleryItem(props: {
     }
   })
 
+  // Retry loading when client becomes ready
+  createEffect(() => {
+    if (isClientReady() && waitingForClient() && !thumbnailUrl()) {
+      setWaitingForClient(false)
+      loadMedia()
+    }
+  })
+
   const loadMedia = async () => {
     const { channelId, messageId } = props.item
 
+    // Check cache first (works without client)
     const cached = getCachedMedia(channelId, messageId, 'large')
     if (cached) {
       if (isMounted && props.item.channelId === channelId && props.item.messageId === messageId) {
         setThumbnailUrl(cached)
       }
+      return
+    }
+
+    // Wait for client to be ready before downloading
+    if (!isClientReady()) {
+      setWaitingForClient(true)
       return
     }
 
@@ -314,7 +331,7 @@ function GalleryModal(props: {
                 src={url()}
                 class="max-w-full max-h-[90vh]"
                 controls
-                autoplay={currentItem().media.type === 'animation'}
+                autoplay
                 muted={currentItem().media.type === 'animation'}
                 loop={currentItem().media.type === 'animation'}
               />

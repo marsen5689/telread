@@ -6,6 +6,8 @@ import type { Comment } from '@/lib/telegram'
 
 interface CommentThreadProps {
   comment: Comment
+  /** Discussion chat ID for media loading */
+  discussionChatId?: number
   depth?: number
   maxDepth?: number
   onReply?: (text: string, replyToId?: number) => void
@@ -66,6 +68,7 @@ export function CommentThread(props: CommentThreadProps) {
         {/* The comment itself */}
         <CommentItem
           comment={props.comment}
+          discussionChatId={props.discussionChatId}
           onReply={() => setIsReplying(!isReplying())}
           isReplying={isReplying()}
         />
@@ -104,6 +107,7 @@ export function CommentThread(props: CommentThreadProps) {
             {(reply) => (
               <CommentThread
                 comment={reply}
+                discussionChatId={props.discussionChatId}
                 depth={depth() + 1}
                 maxDepth={maxDepth()}
                 onReply={props.onReply}

@@ -209,9 +209,6 @@ async function fetchInitialTimeline(): Promise<TimelineData> {
     .map((c) => c.lastMessage!)
     .sort((a, b) => getTime(b.date) - getTime(a.date))
 
-  // Populate centralized posts store
-  upsertPosts(posts)
-
   if (import.meta.env.DEV) {
     console.log(`[Timeline] fetchInitialTimeline done: ${posts.length} posts in ${Math.round(performance.now() - startTime)}ms`)
   }
@@ -242,12 +239,7 @@ async function fetchTimelineHistory(
     }
   }
 
-  const sorted = allMessages.sort((a, b) => getTime(b.date) - getTime(a.date)).slice(0, limit)
-
-  // Populate centralized store
-  upsertPosts(sorted)
-
-  return sorted
+  return allMessages.sort((a, b) => getTime(b.date) - getTime(a.date)).slice(0, limit)
 }
 
 /**
@@ -255,6 +247,7 @@ async function fetchTimelineHistory(
  *
  * Uses centralized posts store as single source of truth.
  * TanStack Query handles fetching, store handles state.
+ * On app open: shows cached data instantly, then syncs fresh data in background.
  */
 export function useOptimizedTimeline() {
   // Channels store (separate from posts)
@@ -287,26 +280,39 @@ export function useOptimizedTimeline() {
     staleTime: 1000 * 60 * 5,
   }))
 
-  // Sync channels data when fetched (or restored from cache)
+  // Populate stores when data loads (from cache or fresh fetch)
+  // This is the ONLY place where posts are added to the store
   createEffect(
     on(
       () => initialQuery.data,
       (data) => {
         if (!data) return
+
+        // Sync channels
         setChannels(reconcile(data.channels))
         setChannelMap(data.channelMap)
 
-        // Populate posts store from data (important for cached data!)
-        // When data comes from cache, queryFn doesn't run, so we need to populate here
-        const posts = data.channels
-          .filter((c) => c.lastMessage)
-          .map((c) => c.lastMessage!)
+        // Populate posts store
+        if (data.posts.length > 0) {
+          upsertPosts(data.posts)
+        }
+
+        // Process messages that arrived before timeline was ready
+        onTimelineLoaded()
+      }
+    )
+  )
+
+  // Populate posts from history pages (from cache or after scroll fetch)
+  createEffect(
+    on(
+      () => historyQuery.data?.pages,
+      (pages) => {
+        if (!pages || pages.length === 0) return
+        const posts = pages.flat()
         if (posts.length > 0) {
           upsertPosts(posts)
         }
-
-        // Process any messages that arrived before data was ready
-        onTimelineLoaded()
       }
     )
   )

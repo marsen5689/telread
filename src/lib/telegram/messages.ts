@@ -6,12 +6,30 @@ import type {
   Video,
   Document as TgDocument,
   Sticker,
+  Audio,
+  Voice,
+  Location,
+  LiveLocation,
+  Venue,
+  Poll,
+  Contact,
+  Dice,
+  WebPageMedia,
 } from '@mtcute/web'
 
 export interface MessageReaction {
   emoji: string
   count: number
   isPaid?: boolean
+}
+
+export interface MessageForward {
+  date: Date
+  senderName: string
+  senderId?: number
+  isChannel?: boolean
+  messageId?: number
+  signature?: string
 }
 
 export interface Message {
@@ -28,6 +46,7 @@ export interface Message {
     name: string
     photo?: string
   }
+  forward?: MessageForward
   media?: MessageMedia
   entities?: MessageEntity[]
   replyTo?: number
@@ -36,7 +55,7 @@ export interface Message {
 }
 
 export interface MessageMedia {
-  type: 'photo' | 'video' | 'document' | 'audio' | 'sticker' | 'animation'
+  type: 'photo' | 'video' | 'document' | 'audio' | 'voice' | 'sticker' | 'animation' | 'location' | 'venue' | 'poll' | 'contact' | 'dice' | 'webpage'
   url?: string
   thumbnailUrl?: string
   width?: number
@@ -45,6 +64,41 @@ export interface MessageMedia {
   fileName?: string
   mimeType?: string
   size?: number
+  // Audio specific
+  performer?: string
+  title?: string
+  // Voice specific
+  waveform?: number[]
+  // Location specific
+  latitude?: number
+  longitude?: number
+  // Live location
+  heading?: number
+  period?: number
+  // Venue specific
+  venueTitle?: string
+  address?: string
+  // Poll specific
+  pollQuestion?: string
+  pollAnswers?: Array<{ text: string; voters: number; chosen?: boolean; correct?: boolean }>
+  pollVoters?: number
+  pollClosed?: boolean
+  pollQuiz?: boolean
+  pollMultiple?: boolean
+  // Contact specific
+  phoneNumber?: string
+  firstName?: string
+  lastName?: string
+  contactUserId?: number
+  // Dice specific
+  emoji?: string
+  value?: number
+  // Webpage specific
+  webpageUrl?: string
+  webpageTitle?: string
+  webpageDescription?: string
+  webpageSiteName?: string
+  webpagePhoto?: { width?: number; height?: number }
 }
 
 export interface MessageEntity {
@@ -262,11 +316,48 @@ export function mapMessage(msg: TgMessage, channelId: number): Message | null {
           name: msg.sender.displayName,
         }
       : undefined,
+    forward: mapForward(msg),
     media: mapMedia(msg),
     entities: mapEntities(msg),
     replyTo: msg.replyToMessage?.id ?? undefined,
     groupedId: msg.groupedId ? BigInt(msg.groupedId.toString()) : undefined,
     reactions: mapReactions(msg),
+  }
+}
+
+function mapForward(msg: TgMessage): MessageForward | undefined {
+  const fwd = msg.forward
+  if (!fwd) return undefined
+
+  const sender = fwd.sender
+  // sender can be Peer (User/Chat), AnonymousSender, or string
+  let senderName: string
+  let senderId: number | undefined
+  let isChannel = false
+
+  if (typeof sender === 'string') {
+    // Hidden forward - just a name string
+    senderName = sender
+  } else if (sender && 'type' in sender && sender.type === 'anonymous') {
+    // AnonymousSender - has displayName but no id
+    senderName = sender.displayName
+  } else if (sender && 'id' in sender) {
+    // Peer (User or Chat) - has id and displayName
+    senderName = sender.displayName
+    senderId = sender.id
+    // Check if it's a channel (has 'username' property but no 'firstName')
+    isChannel = 'username' in sender && !('firstName' in sender)
+  } else {
+    senderName = 'Unknown'
+  }
+
+  return {
+    date: fwd.date,
+    senderName,
+    senderId,
+    isChannel,
+    messageId: fwd.fromMessageId ?? undefined,
+    signature: fwd.signature ?? undefined,
   }
 }
 
@@ -314,12 +405,46 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
 
   if (media.type === 'video') {
     const video = media as Video
+    // Check if it's an animation (GIF)
+    if (video.isAnimation) {
+      return {
+        type: 'animation',
+        width: video.width,
+        height: video.height,
+        duration: video.duration,
+        mimeType: video.mimeType,
+      }
+    }
     return {
       type: 'video',
       width: video.width,
       height: video.height,
       duration: video.duration,
       mimeType: video.mimeType,
+    }
+  }
+
+  if (media.type === 'audio') {
+    const audio = media as Audio
+    return {
+      type: 'audio',
+      duration: audio.duration,
+      performer: audio.performer ?? undefined,
+      title: audio.title ?? undefined,
+      fileName: audio.fileName ?? undefined,
+      mimeType: audio.mimeType,
+      size: audio.fileSize,
+    }
+  }
+
+  if (media.type === 'voice') {
+    const voice = media as Voice
+    return {
+      type: 'voice',
+      duration: voice.duration,
+      waveform: voice.waveform,
+      mimeType: voice.mimeType,
+      size: voice.fileSize,
     }
   }
 
@@ -342,7 +467,95 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
     }
   }
 
-  // Other media types not supported yet (audio, voice, etc.)
+  if (media.type === 'location') {
+    const loc = media as Location
+    return {
+      type: 'location',
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+    }
+  }
+
+  if (media.type === 'live_location') {
+    const loc = media as LiveLocation
+    return {
+      type: 'location',
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+      heading: loc.heading ?? undefined,
+      period: loc.period,
+    }
+  }
+
+  if (media.type === 'venue') {
+    const venue = media as Venue
+    return {
+      type: 'venue',
+      latitude: venue.location.latitude,
+      longitude: venue.location.longitude,
+      venueTitle: venue.title,
+      address: venue.address,
+    }
+  }
+
+  if (media.type === 'poll') {
+    const poll = media as Poll
+    return {
+      type: 'poll',
+      pollQuestion: poll.question,
+      pollAnswers: poll.answers.map((a) => ({
+        text: a.text,
+        voters: a.voters,
+        chosen: a.chosen || undefined,
+        correct: a.correct || undefined,
+      })),
+      pollVoters: poll.voters,
+      pollClosed: poll.isClosed || undefined,
+      pollQuiz: poll.isQuiz || undefined,
+      pollMultiple: poll.isMultiple || undefined,
+    }
+  }
+
+  if (media.type === 'contact') {
+    const contact = media as Contact
+    return {
+      type: 'contact',
+      phoneNumber: contact.phoneNumber,
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      contactUserId: contact.userId || undefined,
+    }
+  }
+
+  if (media.type === 'dice') {
+    const dice = media as Dice
+    return {
+      type: 'dice',
+      emoji: dice.emoji,
+      value: dice.value,
+    }
+  }
+
+  if (media.type === 'webpage') {
+    const webpage = media as WebPageMedia
+    const preview = webpage.preview
+    return {
+      type: 'webpage',
+      webpageUrl: preview.url,
+      webpageTitle: preview.title ?? undefined,
+      webpageDescription: preview.description ?? undefined,
+      webpageSiteName: preview.siteName ?? undefined,
+      webpagePhoto: preview.photo ? {
+        width: preview.photo.width,
+        height: preview.photo.height,
+      } : undefined,
+    }
+  }
+
+  // Unknown media type - log for debugging
+  if (import.meta.env.DEV) {
+    console.log('[mapMedia] Unknown media type:', media.type)
+  }
   return undefined
 }
 
