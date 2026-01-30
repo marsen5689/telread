@@ -1,4 +1,4 @@
-import { createSignal, Show, Match, Switch, onCleanup, createEffect } from 'solid-js'
+import { createSignal, Show, Match, Switch, onCleanup, createEffect, createMemo } from 'solid-js'
 import { Motion } from 'solid-motionone'
 import { downloadMedia, getCachedMedia } from '@/lib/telegram'
 import { DEFAULT_ASPECT_RATIO } from '@/config/constants'
@@ -20,61 +20,76 @@ interface PostMediaProps {
 export function PostMedia(props: PostMediaProps) {
   const [isExpanded, setIsExpanded] = createSignal(false)
   const [thumbnailUrl, setThumbnailUrl] = createSignal<string | null>(null)
+  const [hasStartedLoading, setHasStartedLoading] = createSignal(false)
 
   let observer: IntersectionObserver | undefined
-  let hasStartedLoading = false
+  let isMounted = true
+
+  // Memoized aspect ratio calculation
+  const aspectRatio = createMemo(() => {
+    const width = props.media.width
+    const height = props.media.height
+    if (width && height && height > 0) {
+      return width / height
+    }
+    return DEFAULT_ASPECT_RATIO
+  })
+
+  const containerStyle = createMemo(() => ({
+    'aspect-ratio': aspectRatio().toString(),
+    'max-height': '300px',
+  }))
 
   // Setup Intersection Observer for lazy loading
   const setupObserver = (el: HTMLDivElement) => {
     observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting && !hasStartedLoading) {
-          hasStartedLoading = true
+        if (entries[0]?.isIntersecting && !hasStartedLoading()) {
+          setHasStartedLoading(true)
           loadMedia()
           observer?.disconnect()
         }
       },
       {
-        rootMargin: '400px', // Start loading 400px before visible
+        rootMargin: '400px',
         threshold: 0
       }
     )
     observer.observe(el)
   }
 
-  // Load media when visible
+  // Load media when visible (with unmount protection)
   const loadMedia = async () => {
     // Check cache first
     const cached = getCachedMedia(props.channelId, props.messageId, 'large')
     if (cached) {
-      setThumbnailUrl(cached)
+      if (isMounted) setThumbnailUrl(cached)
       return
     }
 
-    const url = await downloadMedia(props.channelId, props.messageId, 'large')
-    setThumbnailUrl(url)
+    try {
+      const url = await downloadMedia(props.channelId, props.messageId, 'large')
+      if (isMounted) setThumbnailUrl(url)
+    } catch (error) {
+      // Silently fail - skeleton will remain visible
+      if (import.meta.env.DEV) {
+        console.warn('[PostMedia] Failed to load:', props.messageId, error)
+      }
+    }
+  }
+
+  // Handle keyboard interaction for accessibility
+  const handleImageKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      setIsExpanded(true)
+    }
   }
 
   // Cleanup
   onCleanup(() => {
+    isMounted = false
     observer?.disconnect()
-  })
-
-  // Calculate aspect ratio with safety check for division by zero
-  const aspectRatio = () => {
-    const width = props.media.width
-    const height = props.media.height
-
-    // Guard against division by zero and invalid dimensions
-    if (width && height && height > 0) {
-      return width / height
-    }
-    return DEFAULT_ASPECT_RATIO
-  }
-
-  const containerStyle = () => ({
-    'aspect-ratio': aspectRatio().toString(),
-    'max-height': '300px',
   })
 
   return (
@@ -85,16 +100,19 @@ export function PostMedia(props: PostMediaProps) {
           <div class="relative w-full" style={containerStyle()}>
             <Show
               when={thumbnailUrl()}
-              fallback={
-                <div class="absolute inset-0 skeleton rounded-none" />
-              }
+              fallback={<div class="absolute inset-0 skeleton rounded-none" />}
             >
-              <img
-                src={thumbnailUrl()!}
-                alt="Post media"
-                class="w-full h-full object-cover cursor-pointer"
-                onClick={() => setIsExpanded(true)}
-              />
+              {(url) => (
+                <img
+                  src={url()}
+                  alt="Post media"
+                  class="w-full h-full object-cover cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent"
+                  onClick={() => setIsExpanded(true)}
+                  onKeyDown={handleImageKeyDown}
+                  tabIndex={0}
+                  role="button"
+                />
+              )}
             </Show>
           </div>
         </Match>
@@ -104,41 +122,45 @@ export function PostMedia(props: PostMediaProps) {
           <div class="relative w-full" style={containerStyle()}>
             <Show
               when={thumbnailUrl()}
-              fallback={
-                <div class="absolute inset-0 skeleton rounded-none" />
-              }
+              fallback={<div class="absolute inset-0 skeleton rounded-none" />}
             >
-              <div class="relative w-full h-full">
-                <img
-                  src={thumbnailUrl()!}
-                  alt="Video thumbnail"
-                  class="w-full h-full object-cover"
-                />
-                {/* Play button overlay */}
-                <div class="absolute inset-0 flex items-center justify-center bg-black/20">
-                  <button
-                    type="button"
-                    aria-label="Play video"
-                    onClick={() => setIsExpanded(true)}
-                    class="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center
-                           shadow-lg hover:bg-white hover:scale-105 transition-all"
-                  >
-                    <svg
-                      class="w-8 h-8 text-gray-900 ml-1"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
+              {(url) => (
+                <div class="relative w-full h-full">
+                  <img
+                    src={url()}
+                    alt="Video thumbnail"
+                    class="w-full h-full object-cover"
+                  />
+                  {/* Play button overlay */}
+                  <div class="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <button
+                      type="button"
+                      aria-label="Play video"
+                      onClick={() => setIsExpanded(true)}
+                      class="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center
+                             shadow-lg hover:bg-white hover:scale-105 transition-all
+                             focus:outline-none focus:ring-2 focus:ring-accent"
                     >
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  </button>
-                </div>
-                {/* Duration badge */}
-                <Show when={props.media.duration}>
-                  <div class="absolute bottom-2 right-2 px-2 py-1 rounded bg-black/70 text-white text-xs font-medium">
-                    {formatDuration(props.media.duration!)}
+                      <svg
+                        class="w-8 h-8 text-gray-900 ml-1"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </button>
                   </div>
-                </Show>
-              </div>
+                  {/* Duration badge */}
+                  <Show when={props.media.duration}>
+                    {(duration) => (
+                      <div class="absolute bottom-2 right-2 px-2 py-1 rounded bg-black/70 text-white text-xs font-medium">
+                        {formatDuration(duration())}
+                      </div>
+                    )}
+                  </Show>
+                </div>
+              )}
             </Show>
           </div>
         </Match>
@@ -152,6 +174,7 @@ export function PostMedia(props: PostMediaProps) {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   stroke-linecap="round"
@@ -179,11 +202,13 @@ export function PostMedia(props: PostMediaProps) {
               when={thumbnailUrl()}
               fallback={<Skeleton class="w-full h-full" rounded="lg" />}
             >
-              <img
-                src={thumbnailUrl()!}
-                alt="Sticker"
-                class="w-full h-full object-contain"
-              />
+              {(url) => (
+                <img
+                  src={url()}
+                  alt="Sticker"
+                  class="w-full h-full object-contain"
+                />
+              )}
             </Show>
           </div>
         </Match>
@@ -211,11 +236,11 @@ function MediaModal(props: {
   media: MessageMedia
   onClose: () => void
 }) {
-  // Load full resolution (undefined = no thumbnail, full size)
+  // Load full resolution
   const fullQuery = useMedia(
     () => props.channelId,
     () => props.messageId,
-    () => undefined  // Full resolution, not thumbnail
+    () => undefined
   )
 
   // Close on escape
@@ -223,14 +248,15 @@ function MediaModal(props: {
     if (e.key === 'Escape') props.onClose()
   }
 
+  // Setup event listeners with proper cleanup
   createEffect(() => {
     document.addEventListener('keydown', handleKeyDown)
     document.body.style.overflow = 'hidden'
 
-    return () => {
+    onCleanup(() => {
       document.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = ''
-    }
+    })
   })
 
   return (
@@ -244,10 +270,11 @@ function MediaModal(props: {
       <button
         type="button"
         aria-label="Close"
-        class="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors"
+        class="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors
+               focus:outline-none focus:ring-2 focus:ring-white"
         onClick={props.onClose}
       >
-        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -266,11 +293,13 @@ function MediaModal(props: {
                 <div class="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full" />
               }
             >
-              <img
-                src={fullQuery.data!}
-                alt="Full size"
-                class="max-w-full max-h-[90vh] object-contain"
-              />
+              {(url) => (
+                <img
+                  src={url()}
+                  alt="Full size"
+                  class="max-w-full max-h-[90vh] object-contain"
+                />
+              )}
             </Show>
           </Match>
 
@@ -281,13 +310,16 @@ function MediaModal(props: {
                 <div class="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full" />
               }
             >
-              <video
-                src={fullQuery.data!}
-                class="max-w-full max-h-[90vh]"
-                controls
-                autoplay
-                loop={props.media.type === 'animation'}
-              />
+              {(url) => (
+                <video
+                  src={url()}
+                  class="max-w-full max-h-[90vh]"
+                  controls
+                  autoplay={props.media.type === 'animation'}
+                  muted={props.media.type === 'animation'}
+                  loop={props.media.type === 'animation'}
+                />
+              )}
             </Show>
           </Match>
         </Switch>

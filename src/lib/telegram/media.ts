@@ -1,5 +1,9 @@
 import { getTelegramClient } from './client'
 import { MEDIA_CACHE_MAX_SIZE } from '@/config/constants'
+import type { Photo, Video, Document, Sticker, Audio, Voice } from '@mtcute/web'
+
+// Union type for media that supports thumbnails
+type MediaWithThumbnails = Photo | Video | Document | Sticker | Audio | Voice
 
 // ============================================================================
 // LRU Cache for Media URLs
@@ -272,10 +276,10 @@ export async function downloadMedia(
       : undefined
 
     try {
-      const media = msg.media as any
-      debugLog(`Media object:`, { type: media.type, hasThumbnail: typeof media.getThumbnail === 'function' })
+      const media = msg.media as MediaWithThumbnails
+      debugLog(`Media object:`, { type: media.type, hasThumbnail: 'getThumbnail' in media })
 
-      if (thumbType && typeof media.getThumbnail === 'function') {
+      if (thumbType && 'getThumbnail' in media && typeof media.getThumbnail === 'function') {
         // For photos/videos/documents with thumbnails, get the thumbnail first
         const thumbnail = media.getThumbnail(thumbType)
           ?? media.getThumbnail('m')  // fallback to medium
@@ -334,9 +338,9 @@ export async function downloadMedia(
           }
 
           if (freshMessages?.[0]?.media) {
-            const freshMedia = freshMessages[0].media as any
+            const freshMedia = freshMessages[0].media as MediaWithThumbnails
 
-            if (thumbType && typeof freshMedia.getThumbnail === 'function') {
+            if (thumbType && 'getThumbnail' in freshMedia && typeof freshMedia.getThumbnail === 'function') {
               const thumbnail = freshMedia.getThumbnail(thumbType)
                 ?? freshMedia.getThumbnail('m')
                 ?? freshMedia.getThumbnail('s')
@@ -370,7 +374,7 @@ export async function downloadMedia(
 
     // Thumbnails are always JPEG images
     const mimeType = thumbSize ? 'image/jpeg' : getMimeType(msg.media)
-    // Convert to regular array for Blob compatibility
+    // Note: new Uint8Array wrapper needed for TypeScript compatibility with mtcute's buffer type
     const blob = new Blob([new Uint8Array(buffer)], { type: mimeType })
     const url = URL.createObjectURL(blob)
 
@@ -431,7 +435,7 @@ export async function downloadProfilePhoto(
       `profilePhoto(${peerId})`
     )
     debugLog(`Profile photo downloaded, size: ${buffer?.length ?? 0} bytes`)
-    if (!buffer?.length) {
+    if (!buffer || buffer.length === 0) {
       return null
     }
 
@@ -456,18 +460,19 @@ async function resolvePeerWithPhoto(
   client: ReturnType<typeof getTelegramClient>,
   peerId: number
 ) {
-  // Try as channel/chat
+  // Try as channel/chat first
   try {
     return await withTimeout(client.getChat(peerId), DOWNLOAD_TIMEOUT, `getChat(${peerId})`)
-  } catch {
-    // Not a chat, try as user
+  } catch (error) {
+    debugLog(`getChat(${peerId}) failed, trying as user`, error)
   }
 
-  // Try as user
+  // Fallback to user
   try {
     const users = await withTimeout(client.getUsers([peerId]), DOWNLOAD_TIMEOUT, `getUsers(${peerId})`)
     return users?.[0] ?? null
-  } catch {
+  } catch (error) {
+    debugLog(`getUsers(${peerId}) failed`, error)
     return null
   }
 }
@@ -543,9 +548,8 @@ export function getMediaCacheStats(): { size: number; maxSize: number } {
 }
 
 function getMimeType(media: { type: string; mimeType?: string }): string {
-  const anyMedia = media as any
-  if (anyMedia.mimeType) {
-    return anyMedia.mimeType
+  if (media.mimeType) {
+    return media.mimeType
   }
 
   switch (media.type) {
