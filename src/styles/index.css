@@ -426,11 +426,13 @@
   }
 
   .post-header {
-    @apply flex items-center gap-3 mb-3 px-4;
+    @apply flex items-center gap-3 mb-3 px-4 min-w-0;
   }
 
   .post-content {
     @apply px-4 mb-3;
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
 
   .post-media {

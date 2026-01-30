@@ -61,11 +61,11 @@ export function CommentItem(props: CommentItemProps) {
         </Show>
 
         {/* Header */}
-        <div class="flex items-center gap-2 flex-wrap">
-          <span class="font-medium text-primary text-sm">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="font-medium text-primary text-sm truncate">
             {props.comment.author.name}
           </span>
-          <span class="text-xs text-tertiary">
+          <span class="text-xs text-tertiary flex-shrink-0">
             {timeAgo()}
           </span>
         </div>

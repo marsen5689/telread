@@ -254,29 +254,29 @@ export function ChannelCard(props: ChannelCardProps) {
         {/* Channel info */}
         <div class="space-y-3">
           {/* Name and username */}
-          <div>
-            <h1 class="text-xl font-bold text-primary flex items-center gap-2">
-              {props.channel.title}
+          <div class="min-w-0">
+            <h1 class="text-xl font-bold text-primary flex items-center gap-2 min-w-0">
+              <span class="truncate">{props.channel.title}</span>
               <Show when={props.channel.isVerified}>
-                <svg class="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
+                <svg class="w-5 h-5 text-blue-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                 </svg>
               </Show>
             </h1>
             <Show when={props.channel.username}>
-              <p class="text-sm text-secondary">@{props.channel.username}</p>
+              <p class="text-sm text-secondary truncate">@{props.channel.username}</p>
             </Show>
           </div>
 
           {/* Description */}
           <Show when={props.channel.description}>
-            <p class="text-sm text-primary leading-relaxed whitespace-pre-wrap">
+            <p class="text-sm text-primary leading-relaxed whitespace-pre-wrap line-clamp-4">
               {props.channel.description}
             </p>
           </Show>
 
           {/* Stats row */}
-          <div class="flex items-center gap-4 pt-2">
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2">
             <Show when={formattedSubscribers()}>
               <div class="flex items-center gap-1.5">
                 <svg class="w-4 h-4 text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
