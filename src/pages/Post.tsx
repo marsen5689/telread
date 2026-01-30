@@ -6,7 +6,7 @@ import { PostContent, PostMedia, PostActions, MediaGallery } from '@/components/
 import { CommentSection } from '@/components/comments'
 import { usePost, useResolveChannel, useChannelInfo } from '@/lib/query'
 import { postsState } from '@/lib/store'
-import { ChevronLeft } from 'lucide-solid'
+import { ChevronLeft, CornerDownRight } from 'lucide-solid'
 import type { Message } from '@/lib/telegram'
 
 /**
@@ -140,6 +140,31 @@ function Post() {
           animate={{ opacity: 1, y: 0 }}
           class="post"
         >
+          {/* Forward indicator */}
+          <Show when={postQuery.data!.forward}>
+            {(forward) => (
+              <button
+                type="button"
+                class="flex items-center gap-2 px-4 pt-3 pb-1 text-sm text-tertiary hover:text-accent transition-colors w-full text-left"
+                onClick={() => {
+                  const fwd = forward()
+                  if (fwd.senderId) {
+                    navigate(`/channel/${fwd.senderId}`)
+                  }
+                }}
+              >
+                <CornerDownRight size={16} class="flex-shrink-0" />
+                <span class="truncate">
+                  Forwarded from{' '}
+                  <span class="text-accent font-medium">{forward().senderName}</span>
+                  <Show when={forward().signature}>
+                    {(sig) => <span class="text-tertiary"> ({sig()})</span>}
+                  </Show>
+                </span>
+              </button>
+            )}
+          </Show>
+
           {/* Header */}
           <div class="post-header cursor-pointer" onClick={handleChannelClick}>
             <ChannelAvatar channelId={channelId()} name={channel()!.title} size="md" />

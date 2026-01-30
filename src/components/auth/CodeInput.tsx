@@ -66,7 +66,7 @@ export function CodeInput(props: CodeInputProps) {
 
   return (
     <div class="space-y-6">
-      <button onClick={props.onBack} class="pill">
+      <button type="button" onClick={props.onBack} class="pill">
         <ChevronLeft size={16} />
         Back
       </button>
@@ -83,7 +83,7 @@ export function CodeInput(props: CodeInputProps) {
 
       <div class="space-y-4">
         {/* Code input boxes */}
-        <div class="flex justify-center gap-3" onPaste={handlePaste}>
+        <div class="flex justify-center gap-3">
           <For each={Array(CODE_LENGTH).fill(0)}>
             {(_, index) => (
               <input
@@ -94,6 +94,7 @@ export function CodeInput(props: CodeInputProps) {
                 value={code()[index()]}
                 onInput={(e) => handleInput(index(), e.currentTarget.value)}
                 onKeyDown={(e) => handleKeyDown(index(), e)}
+                onPaste={handlePaste}
                 class={`
                   w-12 h-14 text-center text-2xl font-mono
                   glass-input rounded-xl
@@ -117,6 +118,7 @@ export function CodeInput(props: CodeInputProps) {
         <p class="text-sm text-center text-secondary">
           Didn't receive a code?{' '}
           <button
+            type="button"
             class="text-accent hover:underline"
             onClick={props.onBack}
           >

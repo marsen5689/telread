@@ -59,11 +59,14 @@ function GalleryItem(props: {
   const [isVisible, setIsVisible] = createSignal(false)
   let observer: IntersectionObserver | undefined
 
+  const isAnimation = () => props.item.media.type === 'animation'
+
   // Use query hook - handles all async/cleanup automatically
+  // For animations, load full file; for others, load thumbnail
   const mediaQuery = useMedia(
     () => props.item.channelId,
     () => props.item.messageId,
-    () => 'large',
+    () => isAnimation() ? undefined : 'large',
     isVisible
   )
 
@@ -115,7 +118,10 @@ function GalleryItem(props: {
       aria-label={`View ${mediaType()} in fullscreen`}
       class="relative h-[240px] flex-shrink-0 cursor-pointer overflow-hidden rounded-2xl snap-start focus:outline-none focus:ring-2 focus:ring-[var(--accent)] shadow-sm hover:shadow-md transition-shadow"
       style={{ width: `${240 * aspectRatio()}px`, 'min-width': '160px', 'max-width': '320px' }}
-      onClick={props.onClick}
+      onClick={(e) => {
+        e.stopPropagation()
+        props.onClick()
+      }}
       onKeyDown={handleKeyDown}
     >
       <Show
@@ -123,17 +129,32 @@ function GalleryItem(props: {
         fallback={<div class="absolute inset-0 skeleton" />}
       >
         {(url) => (
-          <img
-            src={url()}
-            alt={`Media ${mediaType()}`}
-            class="w-full h-full object-cover hover:scale-[1.02] transition-transform duration-200"
-            loading="lazy"
-          />
+          <Show
+            when={isAnimation()}
+            fallback={
+              <img
+                src={url()}
+                alt={`Media ${mediaType()}`}
+                class="w-full h-full object-cover hover:scale-[1.02] transition-transform duration-200"
+                loading="lazy"
+              />
+            }
+          >
+            {/* GIF/Animation plays inline */}
+            <video
+              src={url()}
+              class="w-full h-full object-cover"
+              autoplay
+              muted
+              loop
+              playsinline
+            />
+          </Show>
         )}
       </Show>
 
-      {/* Video indicator */}
-      <Show when={props.item.media.type === 'video' || props.item.media.type === 'animation'}>
+      {/* Video indicator - only for actual videos, not GIFs */}
+      <Show when={props.item.media.type === 'video'}>
         <div class="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
           <div class="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
             <Play size={20} class="text-gray-900 ml-0.5" fill="currentColor" />
@@ -190,7 +211,7 @@ function GalleryModal(props: {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      class="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
+      class="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
       onClick={props.onClose}
     >
       {/* Close button */}
@@ -204,7 +225,7 @@ function GalleryModal(props: {
       </button>
 
       {/* Counter */}
-      <div class="absolute top-4 left-4 text-white/70 text-sm">
+      <div class="absolute top-4 left-4 text-white/70 text-sm z-10">
         {currentIndex() + 1} / {props.items.length}
       </div>
 
@@ -213,7 +234,7 @@ function GalleryModal(props: {
         <button
           type="button"
           aria-label="Previous"
-          class="absolute left-4 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white transition-colors"
+          class="absolute left-4 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white transition-colors z-10"
           onClick={(e) => { e.stopPropagation(); goToPrev() }}
         >
           <ChevronLeft size={32} />
@@ -224,7 +245,7 @@ function GalleryModal(props: {
         <button
           type="button"
           aria-label="Next"
-          class="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white transition-colors"
+          class="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white transition-colors z-10"
           onClick={(e) => { e.stopPropagation(); goToNext() }}
         >
           <ChevronRight size={32} />
@@ -232,7 +253,11 @@ function GalleryModal(props: {
       </Show>
 
       {/* Media content */}
-      <div class="max-w-full max-h-full p-4" onClick={(e) => e.stopPropagation()}>
+      <div
+        class="w-full h-full flex items-center justify-center p-4"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <Show
           when={fullQuery.data}
           fallback={
@@ -246,13 +271,13 @@ function GalleryModal(props: {
                 <img
                   src={url()}
                   alt=""
-                  class="max-w-full max-h-[90vh] object-contain"
+                  class="max-w-full max-h-full object-contain"
                 />
               }
             >
               <video
                 src={url()}
-                class="max-w-full max-h-[90vh]"
+                class="max-w-full max-h-full"
                 controls
                 autoplay
                 muted={currentItem().media.type === 'animation'}

@@ -48,7 +48,7 @@ export function QRCodeLogin(props: QRCodeLoginProps) {
 
   return (
     <div class="space-y-6">
-      <button onClick={props.onBack} class="pill">
+      <button type="button" onClick={props.onBack} class="pill">
         <ChevronLeft size={16} />
         Back
       </button>

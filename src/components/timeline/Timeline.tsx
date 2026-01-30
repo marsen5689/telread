@@ -125,22 +125,41 @@ export function Timeline(props: TimelineProps) {
     return map
   })
 
-  // Scroll position storage key
+  // Scroll position storage keys
   const getScrollKey = () => props.scrollKey ? `timeline-scroll:${props.scrollKey}` : null
+  const getRenderCountKey = () => props.scrollKey ? `timeline-render:${props.scrollKey}` : null
 
-  // Save scroll position to sessionStorage
+  // Save scroll position and render count to sessionStorage
   const saveScrollPosition = () => {
-    const key = getScrollKey()
-    if (key && scrollParent) {
-      sessionStorage.setItem(key, String(scrollParent.scrollTop))
+    const scrollKey = getScrollKey()
+    const renderKey = getRenderCountKey()
+    if (scrollKey && scrollParent) {
+      sessionStorage.setItem(scrollKey, String(scrollParent.scrollTop))
+    }
+    if (renderKey) {
+      sessionStorage.setItem(renderKey, String(renderCount()))
     }
   }
 
-  // Restore scroll position from sessionStorage
-  const restoreScrollPosition = () => {
-    const key = getScrollKey()
-    if (key && scrollParent) {
-      const saved = sessionStorage.getItem(key)
+  // Restore render count first (sync), then scroll position (async)
+  const restoreState = () => {
+    const renderKey = getRenderCountKey()
+    const scrollKey = getScrollKey()
+    
+    // Restore render count first so content is available
+    if (renderKey) {
+      const savedRenderCount = sessionStorage.getItem(renderKey)
+      if (savedRenderCount) {
+        const count = parseInt(savedRenderCount, 10)
+        if (!isNaN(count) && count > INITIAL_RENDER_COUNT) {
+          setRenderCount(count)
+        }
+      }
+    }
+    
+    // Then restore scroll position after content renders
+    if (scrollKey && scrollParent) {
+      const saved = sessionStorage.getItem(scrollKey)
       if (saved) {
         const scrollTop = parseInt(saved, 10)
         if (!isNaN(scrollTop)) {
@@ -191,8 +210,8 @@ export function Timeline(props: TimelineProps) {
     scrollParent = getScrollParent(containerRef ?? null)
     if (scrollParent) {
       scrollParent.addEventListener('scroll', handleScroll, { passive: true })
-      // Wait for content to be ready then restore position
-      restoreTimer = setTimeout(restoreScrollPosition, 50)
+      // Wait for content to be ready then restore state
+      restoreTimer = setTimeout(restoreState, 50)
     }
   })
 

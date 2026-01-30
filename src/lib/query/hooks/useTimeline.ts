@@ -5,6 +5,7 @@ import {
   fetchMessages,
   fetchChannelsWithLastMessages,
   onTimelineLoaded,
+  sliceWithCompleteGroups,
   type Message,
   type ChannelWithLastMessage,
 } from '@/lib/telegram'
@@ -80,11 +81,13 @@ export function useInfiniteMessages(channelId: () => number) {
 }
 
 /**
- * Timeline data structure - channels only (posts are in postsState)
+ * Timeline data structure - channels and grouped posts
  * Note: channelMap is derived in useOptimizedTimeline via createMemo
  */
 export interface TimelineData {
   channels: ChannelWithLastMessage[]
+  /** Additional posts from media groups (albums) */
+  groupedPosts: Message[]
 }
 
 /**
@@ -302,14 +305,14 @@ async function fetchInitialTimeline(): Promise<TimelineData> {
     console.log('[Timeline] fetchInitialTimeline starting...')
   }
 
-  const channels = await fetchChannelsWithLastMessages()
+  const { channels, groupedPosts } = await fetchChannelsWithLastMessages()
 
   if (import.meta.env.DEV) {
     const postCount = channels.filter((c) => c.lastMessage).length
-    console.log(`[Timeline] fetchInitialTimeline done: ${channels.length} channels, ${postCount} posts in ${Math.round(performance.now() - startTime)}ms`)
+    console.log(`[Timeline] fetchInitialTimeline done: ${channels.length} channels, ${postCount} posts, ${groupedPosts.length} grouped posts in ${Math.round(performance.now() - startTime)}ms`)
   }
 
-  return { channels }
+  return { channels, groupedPosts }
 }
 
 /**
@@ -340,7 +343,8 @@ async function fetchTimelineHistory(
     await new Promise(resolve => setTimeout(resolve, 200))
   }
 
-  return allMessages.sort((a, b) => getTime(b.date) - getTime(a.date)).slice(0, limit)
+  const sorted = allMessages.sort((a, b) => getTime(b.date) - getTime(a.date))
+  return sliceWithCompleteGroups(sorted, limit)
 }
 
 /**
@@ -451,16 +455,19 @@ export function useOptimizedTimeline() {
 
         // Always extract and upsert posts from channels
         // upsertPosts handles duplicates (only updates if newer)
-        const posts = data.channels
+        const lastMessages = data.channels
           .filter((c) => c.lastMessage)
           .map((c) => c.lastMessage!)
         
+        // Include grouped posts (complete albums) from initial fetch
+        const groupedPosts = data.groupedPosts ?? []
+        
         // Also restore synced posts from persistent cache (survives page reload)
         const syncedPosts = getSyncedPostsFromCache()
-        const allPosts = [...posts, ...syncedPosts]
+        const allPosts = [...lastMessages, ...groupedPosts, ...syncedPosts]
         
         if (import.meta.env.DEV) {
-          console.log(`[Timeline] Restoring: ${posts.length} from lastMessage, ${syncedPosts.length} from persistent cache`)
+          console.log(`[Timeline] Restoring: ${lastMessages.length} from lastMessage, ${groupedPosts.length} from groups, ${syncedPosts.length} from persistent cache`)
         }
         
         if (allPosts.length > 0) {

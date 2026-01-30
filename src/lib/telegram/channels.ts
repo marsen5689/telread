@@ -52,6 +52,16 @@ export interface ChannelWithLastMessage extends Channel {
 }
 
 /**
+ * Result of fetching channels with their last messages
+ * Includes additional posts from media groups (albums)
+ */
+export interface ChannelsWithPostsResult {
+  channels: ChannelWithLastMessage[]
+  /** Additional posts from media groups - needed to display complete albums */
+  groupedPosts: Message[]
+}
+
+/**
  * Fetch all subscribed channels
  *
  * Channels are cached with staleTime: Infinity, so this only runs:
@@ -100,9 +110,12 @@ export async function fetchChannels(): Promise<Channel[]> {
  * This is the optimized version - extracts lastMessage from dialogs
  * instead of making separate API calls for each channel.
  *
- * PERFORMANCE: 1 API call instead of 10+ calls
+ * For messages that are part of a media group (album), fetches the complete
+ * group using getMessageGroup API.
+ *
+ * PERFORMANCE: 1 API call for dialogs + 1 call per album group
  */
-export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMessage[]> {
+export async function fetchChannelsWithLastMessages(): Promise<ChannelsWithPostsResult> {
   const startTime = performance.now()
   if (import.meta.env.DEV) {
     console.log('[Channels] Starting fetchChannelsWithLastMessages...')
@@ -110,6 +123,8 @@ export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMe
 
   const client = getTelegramClient()
   const channels: ChannelWithLastMessage[] = []
+  // Track messages that are part of groups - we'll fetch complete groups later
+  const groupedMessages: Array<{ channelId: number; messageId: number; groupedId: bigint }> = []
 
   const iterator = client.iterDialogs()[Symbol.asyncIterator]()
   let dialogCount = 0
@@ -146,6 +161,15 @@ export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMe
             const mapped = mapMessage(lastMessage as TgMessage, channel.id)
             if (mapped) {
               mappedLastMessage = mapped
+              
+              // Track if this message is part of a group (album)
+              if (mapped.groupedId) {
+                groupedMessages.push({
+                  channelId: channel.id,
+                  messageId: mapped.id,
+                  groupedId: mapped.groupedId,
+                })
+              }
             }
           } catch {
             // Skip messages that fail to map
@@ -170,7 +194,55 @@ export async function fetchChannelsWithLastMessages(): Promise<ChannelWithLastMe
     console.log(`[Channels] Done! ${dialogCount} dialogs → ${channels.length} channels in ${Math.round(performance.now() - startTime)}ms`)
   }
 
-  return channels
+  // Fetch complete groups for messages that are part of albums
+  const groupedPosts: Message[] = []
+  
+  if (groupedMessages.length > 0) {
+    if (import.meta.env.DEV) {
+      console.log(`[Channels] Fetching ${groupedMessages.length} media groups...`)
+    }
+
+    // Collect existing IDs to avoid duplicates
+    const existingIds = new Set(
+      channels.map((c) => c.lastMessage ? `${c.lastMessage.channelId}:${c.lastMessage.id}` : null).filter(Boolean)
+    )
+
+    // Fetch groups in small batches to avoid FLOOD_WAIT
+    const BATCH_SIZE = 5
+    for (let i = 0; i < groupedMessages.length; i += BATCH_SIZE) {
+      const batch = groupedMessages.slice(i, i + BATCH_SIZE)
+      
+      const results = await Promise.allSettled(
+        batch.map(async ({ channelId, messageId }) => {
+          const groupMessages = await client.getMessageGroup({ chatId: channelId, message: messageId })
+          return groupMessages.map((msg) => mapMessage(msg as TgMessage, channelId)).filter(Boolean) as Message[]
+        })
+      )
+
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          for (const msg of result.value) {
+            const key = `${msg.channelId}:${msg.id}`
+            if (!existingIds.has(key)) {
+              groupedPosts.push(msg)
+              existingIds.add(key)
+            }
+          }
+        }
+      }
+
+      // Small delay between batches
+      if (i + BATCH_SIZE < groupedMessages.length) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+    }
+
+    if (import.meta.env.DEV) {
+      console.log(`[Channels] Fetched ${groupedPosts.length} additional posts from media groups`)
+    }
+  }
+
+  return { channels, groupedPosts }
 }
 
 /**

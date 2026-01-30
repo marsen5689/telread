@@ -24,7 +24,6 @@ export function PhoneInput(props: PhoneInputProps) {
   }
 
   const formatPhone = (value: string) => {
-    // Allow only numbers and + at the start
     let cleaned = value.replace(/[^\d+]/g, '')
     if (!cleaned.startsWith('+') && cleaned.length > 0) {
       cleaned = '+' + cleaned
@@ -34,21 +33,23 @@ export function PhoneInput(props: PhoneInputProps) {
 
   return (
     <div class="space-y-6">
-      <div class="text-center space-y-2">
+      {/* Header */}
+      <div class="space-y-2">
         <h2 class="text-2xl font-semibold text-primary">
-          Welcome to TelRead
+          Sign in with Telegram
         </h2>
         <p class="text-secondary">
           Enter your phone number to continue
         </p>
       </div>
 
+      {/* Form */}
       <form onSubmit={handleSubmit} class="space-y-4">
         <GlassInput
           type="tel"
           value={phone()}
           onInput={(value) => setPhone(formatPhone(value))}
-          placeholder="+1 234 567 8900"
+          placeholder="+380 XX XXX XXXX"
           autofocus
           error={props.error}
           icon={<Phone size={20} />}
@@ -65,15 +66,17 @@ export function PhoneInput(props: PhoneInputProps) {
         </GlassButton>
       </form>
 
+      {/* Divider */}
       <div class="relative">
         <div class="absolute inset-0 flex items-center">
-          <div class="w-full border-t border-[var(--glass-border)]" />
+          <div class="w-full border-t border-[var(--nav-border)]" />
         </div>
         <div class="relative flex justify-center text-sm">
-          <span class="px-2 bg-[var(--color-bg)] text-tertiary">or</span>
+          <span class="px-3 bg-[var(--color-bg)] text-tertiary">or</span>
         </div>
       </div>
 
+      {/* QR option */}
       <GlassButton
         variant="ghost"
         class="w-full"
@@ -83,13 +86,14 @@ export function PhoneInput(props: PhoneInputProps) {
         Login with QR Code
       </GlassButton>
 
+      {/* Terms */}
       <p class="text-xs text-center text-tertiary">
-        By continuing, you agree to the Telegram{' '}
+        By continuing, you agree to Telegram's{' '}
         <a
           href="https://telegram.org/tos"
           target="_blank"
           rel="noopener"
-          class="text-accent hover:underline"
+          class="text-[#0088cc] hover:underline"
         >
           Terms of Service
         </a>

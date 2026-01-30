@@ -106,7 +106,10 @@ export function PostMedia(props: PostMediaProps) {
                   src={url()}
                   alt="Post media"
                   class="w-full h-full object-cover cursor-pointer hover:scale-[1.02] transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-accent"
-                  onClick={() => setIsExpanded(true)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setIsExpanded(true)
+                  }}
                   onKeyDown={handleImageKeyDown}
                   tabIndex={0}
                   role="button"
@@ -117,7 +120,7 @@ export function PostMedia(props: PostMediaProps) {
         </Match>
 
         {/* Video - Threads style */}
-        <Match when={props.media.type === 'video' || props.media.type === 'animation'}>
+        <Match when={props.media.type === 'video'}>
           <div 
             class="relative rounded-2xl overflow-hidden flex-shrink-0 shadow-sm hover:shadow-md transition-shadow" 
             style={containerStyle()}
@@ -134,11 +137,16 @@ export function PostMedia(props: PostMediaProps) {
                     class="w-full h-full object-cover"
                   />
                   {/* Play button overlay */}
-                  <div class="absolute inset-0 flex items-center justify-center bg-black/20">
+                  <div
+                    class="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setIsExpanded(true)
+                    }}
+                  >
                     <button
                       type="button"
                       aria-label="Play video"
-                      onClick={() => setIsExpanded(true)}
                       class="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center
                              shadow-lg hover:bg-white hover:scale-105 transition-all
                              focus:outline-none focus:ring-2 focus:ring-accent"
@@ -158,6 +166,17 @@ export function PostMedia(props: PostMediaProps) {
               )}
             </Show>
           </div>
+        </Match>
+
+        {/* GIF/Animation - plays inline automatically */}
+        <Match when={props.media.type === 'animation'}>
+          <GifPlayer
+            channelId={props.channelId}
+            messageId={props.messageId}
+            media={props.media}
+            containerStyle={containerStyle()}
+            isVisible={isVisible}
+          />
         </Match>
 
         {/* Document */}
@@ -213,7 +232,10 @@ export function PostMedia(props: PostMediaProps) {
             <button
               type="button"
               aria-label="Play audio"
-              onClick={() => setIsExpanded(true)}
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsExpanded(true)
+              }}
               class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center flex-shrink-0
                      hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-accent"
             >
@@ -228,7 +250,10 @@ export function PostMedia(props: PostMediaProps) {
             <button
               type="button"
               aria-label="Play voice message"
-              onClick={() => setIsExpanded(true)}
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsExpanded(true)
+              }}
               class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center flex-shrink-0
                      hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-accent"
             >
@@ -426,6 +451,48 @@ export function PostMedia(props: PostMediaProps) {
 }
 
 /**
+ * Inline GIF player - auto-plays without needing to open modal
+ */
+function GifPlayer(props: {
+  channelId: number
+  messageId: number
+  media: MessageMedia
+  containerStyle: Record<string, string>
+  isVisible: () => boolean
+}) {
+  // Load full GIF file (not thumbnail)
+  const gifQuery = useMedia(
+    () => props.channelId,
+    () => props.messageId,
+    () => undefined, // Full resolution
+    props.isVisible
+  )
+
+  return (
+    <div 
+      class="relative rounded-2xl overflow-hidden flex-shrink-0 shadow-sm hover:shadow-md transition-shadow" 
+      style={props.containerStyle}
+    >
+      <Show
+        when={gifQuery.data}
+        fallback={<div class="absolute inset-0 skeleton" />}
+      >
+        {(url) => (
+          <video
+            src={url()}
+            class="w-full h-full object-cover"
+            autoplay
+            muted
+            loop
+            playsinline
+          />
+        )}
+      </Show>
+    </div>
+  )
+}
+
+/**
  * Fullscreen media modal
  */
 function MediaModal(props: {
@@ -462,20 +529,24 @@ function MediaModal(props: {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      class="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
+      class="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
       onClick={props.onClose}
     >
       <button
         type="button"
         aria-label="Close"
-        class="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors
+        class="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors z-10
                focus:outline-none focus:ring-2 focus:ring-white"
         onClick={props.onClose}
       >
         <X size={32} />
       </button>
 
-      <div class="max-w-full max-h-full p-4" onClick={(e) => e.stopPropagation()}>
+      <div
+        class="w-full h-full flex items-center justify-center p-4"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <Switch>
           <Match when={props.media.type === 'photo'}>
             <Show
@@ -488,7 +559,7 @@ function MediaModal(props: {
                 <img
                   src={url()}
                   alt="Full size"
-                  class="max-w-full max-h-[90vh] object-contain"
+                  class="max-w-full max-h-full object-contain"
                 />
               )}
             </Show>
@@ -504,7 +575,7 @@ function MediaModal(props: {
               {(url) => (
                 <video
                   src={url()}
-                  class="max-w-full max-h-[90vh]"
+                  class="max-w-full max-h-full"
                   controls
                   autoplay
                   muted={props.media.type === 'animation'}
@@ -522,7 +593,11 @@ function MediaModal(props: {
               }
             >
               {(url) => (
-                <div class="bg-white/10 rounded-2xl p-6 min-w-[300px]">
+                <div
+                  class="bg-white/10 rounded-2xl p-6 min-w-[300px]"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
                   <Show when={props.media.type === 'audio'}>
                     <div class="text-center mb-4">
                       <p class="text-white font-medium">{props.media.title || 'Audio'}</p>
@@ -536,6 +611,8 @@ function MediaModal(props: {
                     class="w-full"
                     controls
                     autoplay
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
                   />
                 </div>
               )}

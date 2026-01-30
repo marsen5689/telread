@@ -1,7 +1,7 @@
-import { Show } from 'solid-js'
+import { Show, For, createMemo } from 'solid-js'
 import { UserAvatar } from '@/components/ui'
 import { PostContent, PostMedia } from '@/components/post'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, globalNow } from '@/lib/utils'
 import type { Comment } from '@/lib/telegram'
 import { CornerDownRight } from 'lucide-solid'
 
@@ -22,7 +22,11 @@ interface CommentItemProps {
  * Content on right with author, time, text, media, reactions.
  */
 export function CommentItem(props: CommentItemProps) {
-  const timeAgo = () => formatRelativeTime(props.comment.date)
+  // Reactive time display - updates when globalNow changes
+  const timeAgo = createMemo(() => {
+    globalNow() // Subscribe to time updates
+    return formatRelativeTime(props.comment.date)
+  })
 
   return (
     <div class="flex gap-3">
@@ -110,12 +114,14 @@ export function CommentItem(props: CommentItemProps) {
         {/* Reactions */}
         <Show when={props.comment.reactions && props.comment.reactions.length > 0}>
           <div class="flex flex-wrap gap-1 mt-2">
-            {props.comment.reactions!.map((reaction) => (
-              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--glass-bg)] text-xs">
-                <span>{reaction.emoji}</span>
-                <span class="text-tertiary">{reaction.count}</span>
-              </span>
-            ))}
+            <For each={props.comment.reactions}>
+              {(reaction) => (
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--glass-bg)] text-xs">
+                  <span>{reaction.emoji}</span>
+                  <span class="text-tertiary">{reaction.count}</span>
+                </span>
+              )}
+            </For>
           </div>
         </Show>
 

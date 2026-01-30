@@ -3,7 +3,7 @@ import { createMemo, Show } from 'solid-js'
 import { Timeline } from '@/components/timeline'
 import { ChannelCard } from '@/components/channel'
 import { Skeleton } from '@/components/ui'
-import { useResolveChannel, useChannelInfo, useMessages, useLeaveChannel } from '@/lib/query'
+import { useResolveChannel, useChannelInfo, useMessages } from '@/lib/query'
 import { groupPostsByMediaGroup } from '@/lib/utils'
 import { ChevronLeft } from 'lucide-solid'
 
@@ -28,19 +28,10 @@ function Channel() {
 
   const channelInfoQuery = useChannelInfo(channelId)
   const messagesQuery = useMessages(channelId)
-  const leaveMutation = useLeaveChannel()
-
   // Use full info if available, fallback to resolved channel
   const channel = createMemo(() =>
     channelInfoQuery.data ?? resolvedChannel.data
   )
-
-  const handleLeave = async () => {
-    if (confirm('Are you sure you want to unsubscribe from this channel?')) {
-      await leaveMutation.mutateAsync(channelId())
-      navigate('/')
-    }
-  }
 
   const handleBack = () => {
     const referrer = document.referrer
@@ -88,11 +79,7 @@ function Channel() {
           }
         >
           {(ch) => (
-            <ChannelCard
-              channel={ch()}
-              onUnsubscribe={handleLeave}
-              isUnsubscribing={leaveMutation.isPending}
-            />
+            <ChannelCard channel={ch()} />
           )}
         </Show>
       </div>

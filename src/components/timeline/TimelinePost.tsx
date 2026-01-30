@@ -123,7 +123,7 @@ export function TimelinePost(props: TimelinePostProps) {
 
       {/* Media */}
       <Show when={props.post.media}>
-        <div class="post-media" onClick={(e) => e.stopPropagation()}>
+        <div class="post-media">
           <PostMedia
             channelId={props.post.channelId}
             messageId={props.post.id}

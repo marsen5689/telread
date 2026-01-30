@@ -121,7 +121,7 @@ export function TimelineGroup(props: TimelineGroupProps) {
 
       {/* Media gallery */}
       <Show when={mediaItems().length > 0}>
-        <div class="post-media" onClick={(e) => e.stopPropagation()}>
+        <div class="post-media">
           <MediaGallery items={mediaItems()} class="mx-4" />
         </div>
       </Show>

@@ -129,7 +129,16 @@ export interface FetchMessagesOptions {
 }
 
 /**
+ * Extra messages to fetch to ensure we don't cut media groups
+ * Telegram albums can have up to 10 items
+ */
+const GROUP_BUFFER = 10
+
+/**
  * Fetch messages from a channel
+ * 
+ * Fetches extra messages to ensure media groups (albums) are complete,
+ * then trims the result without cutting groups in the middle.
  */
 export async function fetchMessages(
   channelId: number,
@@ -139,18 +148,55 @@ export async function fetchMessages(
   const messages: Message[] = []
   const limit = options.limit ?? 20
 
-  // Use iterHistory which is the standard method for getting messages
-  for await (const msg of client.iterHistory(channelId, { limit })) {
+  // Fetch extra to avoid cutting groups at boundary
+  const fetchLimit = limit + GROUP_BUFFER
+
+  const iterOptions: { limit: number; maxId?: number } = { limit: fetchLimit }
+  if (options.offsetId) iterOptions.maxId = options.offsetId
+  if (options.maxId) iterOptions.maxId = options.maxId
+
+  for await (const msg of client.iterHistory(channelId, iterOptions)) {
     if (msg) {
       const mapped = mapMessage(msg, channelId)
       if (mapped) {
         messages.push(mapped)
       }
     }
-    if (messages.length >= limit) break
   }
 
-  return messages
+  // Trim to limit without cutting groups
+  return sliceWithCompleteGroups(messages, limit)
+}
+
+/**
+ * Slice messages array without cutting media groups in the middle
+ * 
+ * If the message at the cut point has a groupedId, includes all messages
+ * from that group (both before and after the cut point).
+ */
+export function sliceWithCompleteGroups(messages: Message[], limit: number): Message[] {
+  if (messages.length <= limit) return messages
+  
+  const messageAtLimit = messages[limit - 1]
+  
+  // No group at boundary - simple slice
+  if (!messageAtLimit?.groupedId) {
+    return messages.slice(0, limit)
+  }
+  
+  // Find where this group ends
+  const groupId = messageAtLimit.groupedId.toString()
+  let endIndex = limit
+  
+  while (endIndex < messages.length) {
+    const msg = messages[endIndex]
+    if (!msg?.groupedId || msg.groupedId.toString() !== groupId) {
+      break
+    }
+    endIndex++
+  }
+  
+  return messages.slice(0, endIndex)
 }
 
 /**
@@ -211,7 +257,7 @@ export async function fetchTimeline(
   }
 
   allMessages.sort((a, b) => b.date.getTime() - a.date.getTime())
-  return allMessages.slice(0, limit)
+  return sliceWithCompleteGroups(allMessages, limit)
 }
 
 /**

@@ -34,6 +34,7 @@ export {
   type Channel,
   type ChannelWithLastMessage,
   type ChannelFullInfo,
+  type ChannelsWithPostsResult,
 } from './channels'
 export {
   fetchMessages,
@@ -41,6 +42,7 @@ export {
   mapMessage,
   sendReaction,
   getAvailableReactions,
+  sliceWithCompleteGroups,
   type Message,
   type MessageMedia,
   type MessageEntity,

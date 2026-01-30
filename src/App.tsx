@@ -155,11 +155,15 @@ export function App() {
         // This ensures we don't miss any updates that arrive immediately
         startUpdatesListener()
 
-        client.startUpdatesLoop().then(() => {
-          if (import.meta.env.DEV) {
-            console.log('[App] Updates loop started')
-          }
-        })
+        client.startUpdatesLoop()
+          .then(() => {
+            if (import.meta.env.DEV) {
+              console.log('[App] Updates loop started')
+            }
+          })
+          .catch((error) => {
+            console.error('[App] Failed to start updates loop:', error)
+          })
       }
     } catch (error) {
       console.error('Auth check failed:', error)

@@ -16,6 +16,7 @@ import {
   type CommentUpdate,
   type CommentSubscription,
 } from '@/lib/telegram'
+import { authStore } from '@/lib/store'
 import { queryKeys } from '../keys'
 
 /**
@@ -297,13 +298,13 @@ export function useSendComment(channelId: () => number, messageId: () => number)
         queryKeys.comments.thread(channelId(), messageId())
       )
 
-      // Optimistically add the new comment
+      // Optimistically add the new comment with actual user data
       const optimisticComment: Comment = {
         id: Date.now(), // Temporary ID
         text: text.trim(),
         author: {
-          id: 0,
-          name: 'You',
+          id: authStore.user?.id ?? 0,
+          name: authStore.user?.displayName ?? 'You',
         },
         date: new Date(),
         replyToId: replyToCommentId,
