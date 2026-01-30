@@ -25,21 +25,21 @@ export function CommentItem(props: CommentItemProps) {
 
   return (
     <div class="flex gap-3">
-      {/* Avatar column with optional thread line */}
-      <div class="flex flex-col items-center">
+      {/* Avatar column with thread line */}
+      <div class="flex flex-col items-center flex-shrink-0">
         <UserAvatar
           userId={props.comment.author.id}
           name={props.comment.author.name}
           size="sm"
         />
-        {/* Thread line extending below avatar */}
+        {/* Thread line connecting to next comment */}
         <Show when={props.showThreadLine}>
-          <div class="w-0.5 flex-1 min-h-[12px] bg-[var(--nav-border)] mt-2" />
+          <div class="w-0.5 flex-1 bg-[var(--nav-border)] mt-1" />
         </Show>
       </div>
 
       {/* Content */}
-      <div class="flex-1 min-w-0 pb-3">
+      <div class="flex-1 min-w-0 pb-4">
         {/* Forward indicator */}
         <Show when={props.comment.forward}>
           {(forward) => (

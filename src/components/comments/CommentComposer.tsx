@@ -1,18 +1,16 @@
-import { createSignal, Show, createEffect } from 'solid-js'
+import { createSignal, Show } from 'solid-js'
 import { GlassButton, UserAvatar } from '@/components/ui'
 import { authStore } from '@/lib/store'
 
 interface CommentComposerProps {
-  placeholder?: string
   onSubmit: (text: string) => void
   isSending?: boolean
-  autoFocus?: boolean
 }
 
 /**
- * Main comment composer for top-level comments
+ * Comment composer - mobile-friendly
  *
- * Twitter-style input with user avatar and expanding textarea.
+ * Clean input with user avatar and expanding textarea.
  */
 export function CommentComposer(props: CommentComposerProps) {
   const [text, setText] = createSignal('')
@@ -46,52 +44,38 @@ export function CommentComposer(props: CommentComposerProps) {
     target.style.height = `${target.scrollHeight}px`
   }
 
-  // Auto-focus if requested
-  createEffect(() => {
-    if (props.autoFocus && textareaRef) {
-      textareaRef.focus()
-    }
-  })
-
   return (
     <div class="flex gap-3 items-start">
-        {/* User avatar */}
-        <UserAvatar
-          userId={authStore.user?.id ?? 0}
-          name={authStore.user?.displayName ?? 'You'}
-          size="md"
+      <UserAvatar
+        userId={authStore.user?.id ?? 0}
+        name={authStore.user?.displayName ?? 'You'}
+        size="md"
+      />
+
+      <div class="flex-1 glass rounded-2xl px-4 py-3">
+        <textarea
+          ref={textareaRef}
+          value={text()}
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          rows={1}
+          class="w-full bg-transparent resize-none outline-none text-primary text-sm min-h-[24px] max-h-[200px]"
         />
 
-        {/* Input area */}
-        <div class="flex-1">
-          <textarea
-            ref={textareaRef}
-            value={text()}
-            onInput={handleInput}
-            onKeyDown={handleKeyDown}
-            rows={1}
-            class={`
-              w-full bg-transparent resize-none outline-none
-              text-primary placeholder:text-tertiary
-              min-h-[44px] max-h-[200px] py-2
-            `}
-          />
-
-          {/* Send button - show when has content */}
-          <Show when={text().trim().length > 0}>
-            <div class="flex items-center justify-end mt-2">
-              <GlassButton
-                variant="primary"
-                size="sm"
-                onClick={handleSubmit}
-                disabled={!text().trim() || props.isSending}
-                loading={props.isSending}
-              >
-                Reply
-              </GlassButton>
-            </div>
-          </Show>
-        </div>
+        <Show when={text().trim().length > 0}>
+          <div class="flex items-center justify-end mt-3 pt-3 border-t border-[var(--glass-border)]">
+            <GlassButton
+              variant="primary"
+              size="sm"
+              onClick={handleSubmit}
+              disabled={!text().trim() || props.isSending}
+              loading={props.isSending}
+            >
+              Send
+            </GlassButton>
+          </div>
+        </Show>
+      </div>
     </div>
   )
 }

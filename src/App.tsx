@@ -9,6 +9,7 @@ import {
   startUpdatesListener,
   stopUpdatesListener,
   isUpdatesListenerActive,
+  clearMediaCache,
 } from '@/lib/telegram'
 import { validateConfig } from '@/config/telegram'
 import { MainLayout } from '@/layouts'
@@ -188,9 +189,11 @@ export function App() {
             startUpdatesListener()
           }
         } else {
+          // Cleanup on logout
           stopUpdatesListener()
-          // Clear posts store on logout to prevent stale data
           clearPosts()
+          clearMediaCache()
+          queryClient.clear()
         }
       }
     )
