@@ -1,4 +1,5 @@
 import { createSignal, Match, Switch, Show } from 'solid-js'
+import iconSvg from '/icons/icon.svg'
 import { Motion, Presence } from 'solid-motionone'
 import { PhoneInput } from './PhoneInput'
 import { CodeInput } from './CodeInput'
@@ -104,7 +105,7 @@ export function AuthFlow(props: AuthFlowProps) {
         {/* Top - Logo */}
         <div>
           <div class="flex items-center gap-3">
-            <img src="/icons/icon.svg" alt="TelRead" class="w-10 h-10 rounded-xl" />
+            <img src={iconSvg} alt="TelRead" class="w-10 h-10 rounded-xl" />
             <span class="text-xl font-semibold text-primary">TelRead</span>
           </div>
         </div>
@@ -155,7 +156,7 @@ export function AuthFlow(props: AuthFlowProps) {
         {/* Mobile header - only visible on small screens */}
         <div class="lg:hidden p-6 border-b border-[var(--nav-border)]">
           <div class="flex items-center gap-3">
-            <img src="/icons/icon.svg" alt="TelRead" class="w-9 h-9 rounded-lg" />
+            <img src={iconSvg} alt="TelRead" class="w-9 h-9 rounded-lg" />
             <span class="text-lg font-semibold text-primary">TelRead</span>
           </div>
         </div>

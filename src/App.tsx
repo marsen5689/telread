@@ -230,7 +230,7 @@ export function App() {
       }}
     >
       <QueryClientProvider client={queryClient}>
-        <Router base={import.meta.env.BASE_URL}>
+        <Router base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <Route path="/login" component={Login} />
           <Route path="/" component={HomePage} />
           <Route path="/channels" component={ChannelsPage} />
