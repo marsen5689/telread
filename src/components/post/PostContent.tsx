@@ -24,6 +24,10 @@ const PRIORITY: Record<string, number> = {
   custom_emoji: 12,
 }
 
+// Auto-detect URLs in text (when Telegram doesn't mark them as entities)
+// Matches: https://..., http://..., www....
+const URL_REGEX = /^(https?:\/\/|www\.)\S+$/i
+
 /**
  * Wrap text with a single entity type
  */
@@ -126,43 +130,48 @@ function SegmentRenderer(props: { segment: TextSegment }) {
   const text = props.segment.text
   const entities = props.segment.entities
 
-  // No entities - just text
+  // Check if text is a URL but has no url/link entity (auto-detect)
+  const hasLinkEntity = entities.some(e => e.type === 'url' || e.type === 'link')
+  const isAutoUrl = !hasLinkEntity && URL_REGEX.test(text)
+  const autoHref = isAutoUrl ? (text.startsWith('http') ? text : `https://${text}`) : ''
+
+  // No entities - check for auto-URL
   if (entities.length === 0) {
+    if (isAutoUrl) {
+      return (
+        <a href={autoHref} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline" onClick={(e) => e.stopPropagation()}>
+          {text}
+        </a>
+      )
+    }
     return <>{text}</>
   }
 
   // Sort by priority
   const sorted = [...entities].sort((a, b) => (PRIORITY[a.type] ?? 99) - (PRIORITY[b.type] ?? 99))
 
-  // Build nested structure based on count
-  if (sorted.length === 1) {
-    return (
-      <EntityTag type={sorted[0].type} url={sorted[0].url} text={text}>
-        {text}
+  // Build content (innermost)
+  let content: any = text
+
+  // Wrap with entities from inside out (reverse order)
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    content = (
+      <EntityTag type={sorted[i].type} url={sorted[i].url} text={text}>
+        {content}
       </EntityTag>
     )
   }
 
-  if (sorted.length === 2) {
+  // If auto-URL detected, wrap everything with link
+  if (isAutoUrl) {
     return (
-      <EntityTag type={sorted[0].type} url={sorted[0].url} text={text}>
-        <EntityTag type={sorted[1].type} url={sorted[1].url} text={text}>
-          {text}
-        </EntityTag>
-      </EntityTag>
+      <a href={autoHref} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline" onClick={(e) => e.stopPropagation()}>
+        {content}
+      </a>
     )
   }
 
-  // 3+ entities
-  return (
-    <EntityTag type={sorted[0].type} url={sorted[0].url} text={text}>
-      <EntityTag type={sorted[1].type} url={sorted[1].url} text={text}>
-        <EntityTag type={sorted[2].type} url={sorted[2].url} text={text}>
-          {text}
-        </EntityTag>
-      </EntityTag>
-    </EntityTag>
-  )
+  return content
 }
 
 /**
