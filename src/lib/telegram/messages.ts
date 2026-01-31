@@ -69,10 +69,162 @@ export interface Message {
   reactions?: MessageReaction[]
 }
 
+// ============================================================================
+// Discriminated Union for MessageMedia - proper type safety!
+// ============================================================================
+
+/** Base fields shared by visual media types */
+interface MediaWithDimensions {
+  url?: string
+  /** Base64-encoded stripped thumbnail bytes (needs conversion to JPEG) */
+  thumb?: string
+  width?: number
+  height?: number
+}
+
+/** Base fields for downloadable media */
+interface MediaWithFile {
+  url?: string
+  fileName?: string
+  mimeType?: string
+  size?: number
+}
+
+export interface PhotoMedia extends MediaWithDimensions {
+  type: 'photo'
+}
+
+export interface VideoMedia extends MediaWithDimensions {
+  type: 'video'
+  duration?: number
+  mimeType?: string
+}
+
+export interface VideoNoteMedia extends MediaWithDimensions {
+  type: 'video_note'
+  duration?: number
+  mimeType?: string
+}
+
+export interface AnimationMedia extends MediaWithDimensions {
+  type: 'animation'
+  duration?: number
+  mimeType?: string
+}
+
+export interface DocumentMedia extends MediaWithFile {
+  type: 'document'
+  thumb?: string
+}
+
+export interface AudioMedia extends MediaWithFile {
+  type: 'audio'
+  duration?: number
+  performer?: string
+  title?: string
+}
+
+export interface VoiceMedia {
+  type: 'voice'
+  url?: string
+  duration?: number
+  waveform?: number[]
+  mimeType?: string
+  size?: number
+}
+
+export interface StickerMedia extends MediaWithDimensions {
+  type: 'sticker'
+  stickerType?: 'static' | 'animated' | 'video'
+  stickerEmoji?: string
+  mimeType?: string
+}
+
+export interface LocationMedia {
+  type: 'location'
+  latitude: number
+  longitude: number
+  /** Live location heading */
+  heading?: number
+  /** Live location period */
+  period?: number
+}
+
+export interface VenueMedia {
+  type: 'venue'
+  latitude: number
+  longitude: number
+  venueTitle: string
+  address: string
+}
+
+export interface PollAnswer {
+  text: string
+  voters: number
+  chosen?: boolean
+  correct?: boolean
+}
+
+export interface PollMedia {
+  type: 'poll'
+  pollQuestion: string
+  pollAnswers: PollAnswer[]
+  pollVoters: number
+  pollClosed?: boolean
+  pollQuiz?: boolean
+  pollMultiple?: boolean
+}
+
+export interface ContactMedia {
+  type: 'contact'
+  phoneNumber: string
+  firstName: string
+  lastName?: string
+  contactUserId?: number
+}
+
+export interface DiceMedia {
+  type: 'dice'
+  emoji: string
+  value: number
+}
+
+export interface WebpageMedia {
+  type: 'webpage'
+  url?: string
+  thumb?: string
+  webpageUrl: string
+  webpageTitle?: string
+  webpageDescription?: string
+  webpageSiteName?: string
+  webpagePhoto?: { width?: number; height?: number }
+}
+
+/** Discriminated union of all media types (strict) */
+export type MessageMediaStrict =
+  | PhotoMedia
+  | VideoMedia
+  | VideoNoteMedia
+  | AnimationMedia
+  | DocumentMedia
+  | AudioMedia
+  | VoiceMedia
+  | StickerMedia
+  | LocationMedia
+  | VenueMedia
+  | PollMedia
+  | ContactMedia
+  | DiceMedia
+  | WebpageMedia
+
+/**
+ * MessageMedia with all fields optional for easier use in components.
+ * SolidJS's Match doesn't narrow TypeScript types, so we need this flexibility.
+ * Use MessageMediaStrict when you need precise type checking.
+ */
 export interface MessageMedia {
   type: 'photo' | 'video' | 'video_note' | 'document' | 'audio' | 'voice' | 'sticker' | 'animation' | 'location' | 'venue' | 'poll' | 'contact' | 'dice' | 'webpage'
   url?: string
-  /** Base64-encoded stripped thumbnail bytes (needs conversion to JPEG) */
   thumb?: string
   width?: number
   height?: number
@@ -80,45 +232,38 @@ export interface MessageMedia {
   fileName?: string
   mimeType?: string
   size?: number
-  // Audio specific
   performer?: string
   title?: string
-  // Voice specific
   waveform?: number[]
-  // Location specific
   latitude?: number
   longitude?: number
-  // Live location
   heading?: number
   period?: number
-  // Venue specific
   venueTitle?: string
   address?: string
-  // Poll specific
   pollQuestion?: string
-  pollAnswers?: Array<{ text: string; voters: number; chosen?: boolean; correct?: boolean }>
+  pollAnswers?: PollAnswer[]
   pollVoters?: number
   pollClosed?: boolean
   pollQuiz?: boolean
   pollMultiple?: boolean
-  // Contact specific
   phoneNumber?: string
   firstName?: string
   lastName?: string
   contactUserId?: number
-  // Sticker specific
   stickerType?: 'static' | 'animated' | 'video'
   stickerEmoji?: string
-  // Dice specific
   emoji?: string
   value?: number
-  // Webpage specific
   webpageUrl?: string
   webpageTitle?: string
   webpageDescription?: string
   webpageSiteName?: string
   webpagePhoto?: { width?: number; height?: number }
 }
+
+/** Helper type to get media by type */
+export type MediaOfType<T extends MessageMedia['type']> = Extract<MessageMediaStrict, { type: T }>
 
 export interface MessageEntity {
   type:
@@ -661,6 +806,10 @@ function mapEntities(msg: TgMessage): MessageEntity[] | undefined {
 
   for (const entity of msg.entities) {
     try {
+      // Debug: log all entity kinds
+      if (import.meta.env.DEV) {
+        console.log('[mapEntities] kind:', entity.kind, 'raw:', entity.raw._)
+      }
       const base = { offset: entity.offset, length: entity.length }
       const kind = entity.kind
 
@@ -728,6 +877,10 @@ function mapEntities(msg: TgMessage): MessageEntity[] | undefined {
         case 'blockquote':
           result.push({ ...base, type: 'blockquote' })
           break
+        case 'bank_card':
+          // Bank card numbers - render as code
+          result.push({ ...base, type: 'code' })
+          break
         case 'emoji':
           result.push({
             ...base,
@@ -735,7 +888,11 @@ function mapEntities(msg: TgMessage): MessageEntity[] | undefined {
             emojiId: entity.is('emoji') ? String(entity.params.emojiId) : undefined,
           })
           break
-        // Skip unknown types
+        default:
+          // Log unknown types in dev
+          if (import.meta.env.DEV) {
+            console.log('[mapEntities] Unknown kind:', entity.kind)
+          }
       }
     } catch {
       // Skip malformed entities

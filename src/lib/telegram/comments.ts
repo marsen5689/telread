@@ -611,8 +611,8 @@ function mapTLMedia(media: TLMedia | undefined): MessageMedia | undefined {
   if ((type === 'messageMediaGeo' || type === 'messageMediaGeoLive') && media.geo) {
     return {
       type: 'location',
-      latitude: media.geo.lat,
-      longitude: media.geo.long,
+      latitude: media.geo.lat ?? 0,
+      longitude: media.geo.long ?? 0,
     }
   }
 
@@ -620,22 +620,24 @@ function mapTLMedia(media: TLMedia | undefined): MessageMedia | undefined {
   if (type === 'messageMediaVenue' && media.geo) {
     return {
       type: 'venue',
-      latitude: media.geo.lat,
-      longitude: media.geo.long,
-      venueTitle: media.title,
-      address: media.address,
+      latitude: media.geo.lat ?? 0,
+      longitude: media.geo.long ?? 0,
+      venueTitle: media.title ?? '',
+      address: media.address ?? '',
     }
   }
 
   // Poll
   if (type === 'messageMediaPoll' && media.poll) {
+    const results = media.results?.results ?? []
     return {
       type: 'poll',
-      pollQuestion: media.poll.question?.text,
+      pollQuestion: media.poll.question?.text ?? '',
       pollAnswers: media.poll.answers?.map((a, i) => ({
         text: a.text?.text ?? '',
-        voters: media.results?.results?.[i]?.voters ?? 0,
-      })),
+        voters: results[i]?.voters ?? 0,
+      })) ?? [],
+      pollVoters: results.reduce((sum, r) => sum + (r.voters ?? 0), 0),
     }
   }
 
@@ -643,10 +645,10 @@ function mapTLMedia(media: TLMedia | undefined): MessageMedia | undefined {
   if (type === 'messageMediaContact') {
     return {
       type: 'contact',
-      phoneNumber: media.phoneNumber,
-      firstName: media.firstName,
-      lastName: media.lastName,
-      contactUserId: media.userId,
+      phoneNumber: media.phoneNumber ?? '',
+      firstName: media.firstName ?? '',
+      lastName: media.lastName ?? undefined,
+      contactUserId: media.userId ?? undefined,
     }
   }
 
@@ -654,19 +656,19 @@ function mapTLMedia(media: TLMedia | undefined): MessageMedia | undefined {
   if (type === 'messageMediaDice') {
     return {
       type: 'dice',
-      emoji: media.emoticon,
-      value: media.value,
+      emoji: media.emoticon ?? '🎲',
+      value: media.value ?? 0,
     }
   }
 
   // Webpage
-  if (type === 'messageMediaWebPage' && media.webpage) {
+  if (type === 'messageMediaWebPage' && media.webpage && 'url' in media.webpage) {
     return {
       type: 'webpage',
-      webpageUrl: media.webpage.url,
-      webpageTitle: media.webpage.title,
-      webpageDescription: media.webpage.description,
-      webpageSiteName: media.webpage.siteName,
+      webpageUrl: media.webpage.url ?? '',
+      webpageTitle: media.webpage.title ?? undefined,
+      webpageDescription: media.webpage.description ?? undefined,
+      webpageSiteName: media.webpage.siteName ?? undefined,
     }
   }
 
