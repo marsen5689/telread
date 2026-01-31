@@ -1,4 +1,4 @@
-import { For, createMemo } from 'solid-js'
+import { For, createMemo, createSignal } from 'solid-js'
 import type { MessageEntity } from '@/lib/telegram'
 
 interface PostContentProps {
@@ -14,16 +14,18 @@ interface TextSegment {
   entities: MessageEntity[]
 }
 
-// Priority order for nesting (lower = outer)
+// Priority order for nesting (lower = outer wrapper)
 const PRIORITY: Record<string, number> = {
-  link: 0, mention: 1, hashtag: 2, email: 3, phone: 4,
-  spoiler: 5, pre: 6, code: 7, bold: 8, italic: 9,
-  underline: 10, strikethrough: 11,
+  blockquote: 0,
+  link: 1, url: 1, mention: 2, text_mention: 2, hashtag: 3, cashtag: 3, bot_command: 3,
+  email: 4, phone: 4,
+  spoiler: 5, pre: 6, code: 7, 
+  bold: 8, italic: 9, underline: 10, strikethrough: 11,
+  custom_emoji: 12,
 }
 
 /**
  * Wrap text with a single entity type
- * Uses plain JS switch instead of SolidJS Switch/Match for stability
  */
 function EntityTag(props: { type: string; url?: string; text: string; children: any }) {
   const { type, url, text, children } = props
@@ -32,51 +34,91 @@ function EntityTag(props: { type: string; url?: string; text: string; children: 
     case 'bold':
       return <strong class="font-semibold">{children}</strong>
     case 'italic':
-      return <em class="italic">{children}</em>
+      return <em>{children}</em>
     case 'underline':
-      return <span class="underline">{children}</span>
+      return <u>{children}</u>
     case 'strikethrough':
-      return <span class="line-through">{children}</span>
+      return <s class="text-tertiary">{children}</s>
     case 'code':
       return (
-        <code class="px-1.5 py-0.5 rounded bg-[var(--glass-bg)] font-mono text-sm text-accent">
+        <code class="px-1 py-0.5 mx-0.5 rounded bg-[var(--bg-tertiary)] font-mono text-[0.9em]">
           {children}
         </code>
       )
     case 'pre':
       return (
-        <pre class="my-2 p-3 rounded-lg bg-[var(--glass-bg)] overflow-x-auto max-w-full">
-          <code class="font-mono text-sm">{children}</code>
+        <pre class="my-2 p-3 rounded-xl bg-[var(--bg-tertiary)] overflow-x-auto text-sm">
+          <code class="font-mono">{children}</code>
         </pre>
       )
     case 'link':
+    case 'url':
       return (
-        <a href={url || '#'} target="_blank" rel="noopener noreferrer" class="text-accent hover:underline transition-colors">
+        <a 
+          href={url || text} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          class="text-accent hover:underline break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
           {children}
         </a>
       )
     case 'mention':
+    case 'text_mention':
+      return <span class="text-accent font-medium">{children}</span>
     case 'hashtag':
-      return <span class="text-accent cursor-pointer hover:underline">{children}</span>
+    case 'cashtag':
+      return <span class="text-accent">{children}</span>
+    case 'bot_command':
+      return <span class="text-accent font-mono text-[0.95em]">{children}</span>
     case 'email':
-      return <a href={`mailto:${text}`} class="text-accent hover:underline">{children}</a>
-    case 'phone':
-      return <a href={`tel:${text}`} class="text-accent hover:underline">{children}</a>
-    case 'spoiler':
       return (
-        <span
-          class="spoiler-hidden"
-          onClick={(e) => {
-            e.currentTarget.classList.remove('spoiler-hidden')
-            e.currentTarget.classList.add('spoiler-revealed')
-          }}
-        >
+        <a href={`mailto:${text}`} class="text-accent hover:underline" onClick={(e) => e.stopPropagation()}>
           {children}
-        </span>
+        </a>
       )
+    case 'phone':
+      return (
+        <a href={`tel:${text.replace(/\s/g, '')}`} class="text-accent hover:underline" onClick={(e) => e.stopPropagation()}>
+          {children}
+        </a>
+      )
+    case 'spoiler':
+      return <SpoilerTag>{children}</SpoilerTag>
+    case 'blockquote':
+      return (
+        <blockquote class="border-l-[3px] border-accent/50 pl-3 my-1 text-secondary">
+          {children}
+        </blockquote>
+      )
+    case 'custom_emoji':
+      // For now, just render as text (custom emoji needs special handling)
+      return <>{children}</>
     default:
       return <>{children}</>
   }
+}
+
+function SpoilerTag(props: { children: any }) {
+  const [revealed, setRevealed] = createSignal(false)
+  
+  return (
+    <span
+      class={revealed() 
+        ? 'transition-all duration-200' 
+        : 'bg-[var(--text-tertiary)] text-transparent rounded select-none cursor-pointer hover:bg-[var(--text-secondary)] transition-colors'
+      }
+      onClick={(e) => {
+        if (!revealed()) {
+          e.stopPropagation()
+          setRevealed(true)
+        }
+      }}
+    >
+      {props.children}
+    </span>
+  )
 }
 
 /**

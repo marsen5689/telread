@@ -139,6 +139,8 @@ interface TLMessage {
     length: number
     url?: string
     language?: string
+    userId?: number
+    documentId?: bigint
   }>
 }
 
@@ -677,38 +679,71 @@ function mapTLMedia(media: TLMedia | undefined): MessageMedia | undefined {
 function mapTLEntities(entities: TLMessage['entities']): MessageEntity[] | undefined {
   if (!entities || entities.length === 0) return undefined
 
-  return entities.map((e) => {
+  const result: MessageEntity[] = []
+
+  for (const e of entities) {
     const base = { offset: e.offset, length: e.length }
 
     switch (e._) {
       case 'messageEntityBold':
-        return { ...base, type: 'bold' as const }
+        result.push({ ...base, type: 'bold' })
+        break
       case 'messageEntityItalic':
-        return { ...base, type: 'italic' as const }
+        result.push({ ...base, type: 'italic' })
+        break
       case 'messageEntityUnderline':
-        return { ...base, type: 'underline' as const }
+        result.push({ ...base, type: 'underline' })
+        break
       case 'messageEntityStrike':
-        return { ...base, type: 'strikethrough' as const }
+        result.push({ ...base, type: 'strikethrough' })
+        break
       case 'messageEntityCode':
-        return { ...base, type: 'code' as const }
+        result.push({ ...base, type: 'code' })
+        break
       case 'messageEntityPre':
-        return { ...base, type: 'pre' as const, language: e.language }
+        result.push({ ...base, type: 'pre', language: e.language })
+        break
       case 'messageEntityTextUrl':
-        return { ...base, type: 'link' as const, url: e.url }
+        result.push({ ...base, type: 'link', url: e.url })
+        break
+      case 'messageEntityUrl':
+        result.push({ ...base, type: 'url' })
+        break
       case 'messageEntityMention':
-        return { ...base, type: 'mention' as const }
+        result.push({ ...base, type: 'mention' })
+        break
+      case 'messageEntityMentionName':
+        result.push({ ...base, type: 'text_mention', userId: e.userId })
+        break
       case 'messageEntityHashtag':
-        return { ...base, type: 'hashtag' as const }
+        result.push({ ...base, type: 'hashtag' })
+        break
+      case 'messageEntityCashtag':
+        result.push({ ...base, type: 'cashtag' })
+        break
+      case 'messageEntityBotCommand':
+        result.push({ ...base, type: 'bot_command' })
+        break
       case 'messageEntityEmail':
-        return { ...base, type: 'email' as const }
+        result.push({ ...base, type: 'email' })
+        break
       case 'messageEntityPhone':
-        return { ...base, type: 'phone' as const }
+        result.push({ ...base, type: 'phone' })
+        break
       case 'messageEntitySpoiler':
-        return { ...base, type: 'spoiler' as const }
-      default:
-        return { ...base, type: 'bold' as const }
+        result.push({ ...base, type: 'spoiler' })
+        break
+      case 'messageEntityBlockquote':
+        result.push({ ...base, type: 'blockquote' })
+        break
+      case 'messageEntityCustomEmoji':
+        result.push({ ...base, type: 'custom_emoji', emojiId: String(e.documentId) })
+        break
+      // Skip unknown types
     }
-  })
+  }
+
+  return result.length > 0 ? result : undefined
 }
 
 /**

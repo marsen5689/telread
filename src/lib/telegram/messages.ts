@@ -1,7 +1,6 @@
 import { getTelegramClient } from './client'
 import type {
   Message as TgMessage,
-  MessageEntity as TgMessageEntity,
   Photo,
   Video,
   Document as TgDocument,
@@ -131,14 +130,22 @@ export interface MessageEntity {
     | 'pre'
     | 'link'
     | 'mention'
+    | 'text_mention'
     | 'hashtag'
+    | 'cashtag'
+    | 'bot_command'
+    | 'url'
     | 'email'
     | 'phone'
     | 'spoiler'
+    | 'blockquote'
+    | 'custom_emoji'
   offset: number
   length: number
   url?: string
   language?: string
+  userId?: number
+  emojiId?: string
 }
 
 export interface FetchMessagesOptions {
@@ -650,62 +657,92 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
 function mapEntities(msg: TgMessage): MessageEntity[] | undefined {
   if (!msg.entities || msg.entities.length === 0) return undefined
 
-  return msg.entities.map((entity: TgMessageEntity) => {
-    try {
-      const base = {
-        offset: entity.offset,
-        length: entity.length,
-      }
+  const result: MessageEntity[] = []
 
-      // Use mtcute's kind property for entity type
+  for (const entity of msg.entities) {
+    try {
+      const base = { offset: entity.offset, length: entity.length }
       const kind = entity.kind
 
       switch (kind) {
         case 'bold':
-          return { ...base, type: 'bold' as const }
+          result.push({ ...base, type: 'bold' })
+          break
         case 'italic':
-          return { ...base, type: 'italic' as const }
+          result.push({ ...base, type: 'italic' })
+          break
         case 'underline':
-          return { ...base, type: 'underline' as const }
+          result.push({ ...base, type: 'underline' })
+          break
         case 'strikethrough':
-          return { ...base, type: 'strikethrough' as const }
+          result.push({ ...base, type: 'strikethrough' })
+          break
         case 'code':
-          return { ...base, type: 'code' as const }
+          result.push({ ...base, type: 'code' })
+          break
         case 'pre':
-          return {
+          result.push({
             ...base,
-            type: 'pre' as const,
+            type: 'pre',
             language: entity.is('pre') ? entity.params.language : undefined,
-          }
+          })
+          break
         case 'text_link':
-          return {
+          result.push({
             ...base,
-            type: 'link' as const,
+            type: 'link',
             url: entity.is('text_link') ? entity.params.url : undefined,
-          }
+          })
+          break
+        case 'url':
+          result.push({ ...base, type: 'url' })
+          break
         case 'mention':
-          return { ...base, type: 'mention' as const }
+          result.push({ ...base, type: 'mention' })
+          break
+        case 'text_mention':
+          result.push({
+            ...base,
+            type: 'text_mention',
+            userId: entity.is('text_mention') ? entity.params.userId : undefined,
+          })
+          break
         case 'hashtag':
-          return { ...base, type: 'hashtag' as const }
+          result.push({ ...base, type: 'hashtag' })
+          break
+        case 'cashtag':
+          result.push({ ...base, type: 'cashtag' })
+          break
+        case 'bot_command':
+          result.push({ ...base, type: 'bot_command' })
+          break
         case 'email':
-          return { ...base, type: 'email' as const }
+          result.push({ ...base, type: 'email' })
+          break
         case 'phone_number':
-          return { ...base, type: 'phone' as const }
+          result.push({ ...base, type: 'phone' })
+          break
         case 'spoiler':
-          return { ...base, type: 'spoiler' as const }
-        default:
-          // For unknown types, return as bold (fallback)
-          return { ...base, type: 'bold' as const }
+          result.push({ ...base, type: 'spoiler' })
+          break
+        case 'blockquote':
+          result.push({ ...base, type: 'blockquote' })
+          break
+        case 'emoji':
+          result.push({
+            ...base,
+            type: 'custom_emoji',
+            emojiId: entity.is('emoji') ? String(entity.params.emojiId) : undefined,
+          })
+          break
+        // Skip unknown types
       }
     } catch {
-      // If entity is malformed, skip it with a safe fallback
-      return {
-        offset: entity.offset ?? 0,
-        length: entity.length ?? 0,
-        type: 'bold' as const,
-      }
+      // Skip malformed entities
     }
-  })
+  }
+
+  return result.length > 0 ? result : undefined
 }
 
 // Cache for global available reactions
