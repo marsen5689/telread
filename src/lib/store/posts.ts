@@ -99,7 +99,14 @@ function trimToMaxPosts(s: PostsState): void {
 }
 
 /**
- * Add or update a single post - new posts go to pending (Twitter-style)
+ * Add or update a single post
+ * 
+ * For real-time updates:
+ * - If post is NEWER than the top visible post → add to pendingKeys (show "N new posts" button)
+ * - If post is OLDER → add directly to sortedKeys (no button, just insert in correct position)
+ * 
+ * This prevents showing "N new posts" for old posts (scheduled, forwards with old dates)
+ * that would just appear somewhere in the middle of the feed anyway.
  */
 export function upsertPost(post: Message): void {
   const key = makeKey(post.channelId, post.id)
@@ -114,19 +121,37 @@ export function upsertPost(post: Message): void {
       if (newTime <= existingTime) return
       s.byId[key] = post
     } else {
-      // New post - add to pending (Twitter-style)
+      // New post - check if it's actually newer than the top visible post
       s.byId[key] = post
-      s.pendingKeys = insertSorted(s.pendingKeys, key, s.byId)
+      const postTime = getTime(post.date)
       
-      // Auto-reveal if too many pending (prevents unbounded growth)
-      if (s.pendingKeys.length > MAX_PENDING) {
-        // Move oldest pending posts to sorted
-        const overflow = s.pendingKeys.slice(MAX_PENDING)
-        s.pendingKeys = s.pendingKeys.slice(0, MAX_PENDING)
-        for (const k of overflow) {
-          s.sortedKeys = insertSorted(s.sortedKeys, k, s.byId)
+      // Get the time of the top visible post (first in sortedKeys)
+      const topKey = s.sortedKeys[0]
+      const topPost = topKey ? s.byId[topKey] : null
+      const topTime = topPost ? getTime(topPost.date) : 0
+      
+      if (postTime > topTime) {
+        // Post is newer than top → add to pending (show "N new posts" button)
+        s.pendingKeys = insertSorted(s.pendingKeys, key, s.byId)
+        
+        // Auto-reveal if too many pending (prevents unbounded growth)
+        if (s.pendingKeys.length > MAX_PENDING) {
+          // Move oldest pending posts to sorted
+          const overflow = s.pendingKeys.slice(MAX_PENDING)
+          s.pendingKeys = s.pendingKeys.slice(0, MAX_PENDING)
+          for (const k of overflow) {
+            s.sortedKeys = insertSorted(s.sortedKeys, k, s.byId)
+          }
+          trimToMaxPosts(s)
         }
+      } else {
+        // Post is older than top → add directly to sorted (no button)
+        s.sortedKeys = insertSorted(s.sortedKeys, key, s.byId)
         trimToMaxPosts(s)
+        
+        if (import.meta.env.DEV) {
+          console.log(`[Posts] Old post inserted directly (date: ${post.date}, top: ${topPost?.date})`)
+        }
       }
     }
   }))
@@ -217,6 +242,10 @@ export function removePosts(channelId: number, messageIds: number[]): void {
  * Called when user clicks "N new posts" button
  * 
  * IMPORTANT: This must be a single atomic setState to avoid race conditions
+ * 
+ * Since upsertPost only adds posts to pendingKeys if they're newer than the top,
+ * all pending posts are guaranteed to be newer than all sorted posts.
+ * So we can simply prepend them (no merge sort needed).
  */
 export function revealPendingPosts(): void {
   // Early exit check (read outside produce is OK for this)
@@ -235,36 +264,18 @@ export function revealPendingPosts(): void {
   setState(produce((s) => {
     if (s.pendingKeys.length === 0) return // Double-check inside produce
     
-    // Merge pending into sorted (both are already sorted)
-    const merged: PostKey[] = []
-    let i = 0, j = 0
+    const pendingCount = s.pendingKeys.length
     
-    while (i < s.pendingKeys.length && j < s.sortedKeys.length) {
-      const pendingPost = s.byId[s.pendingKeys[i]]
-      const sortedPost = s.byId[s.sortedKeys[j]]
-      
-      if (!pendingPost) { i++; continue }
-      if (!sortedPost) { j++; continue }
-      
-      if (getTime(pendingPost.date) >= getTime(sortedPost.date)) {
-        merged.push(s.pendingKeys[i++])
-      } else {
-        merged.push(s.sortedKeys[j++])
-      }
-    }
-    
-    while (i < s.pendingKeys.length) merged.push(s.pendingKeys[i++])
-    while (j < s.sortedKeys.length) merged.push(s.sortedKeys[j++])
-    
-    if (import.meta.env.DEV) {
-      console.log(`[Posts] Merged: ${merged.length} total`)
-    }
-    
-    // Update state atomically
-    s.sortedKeys = merged
+    // Pending posts are guaranteed to be newer than sorted (enforced in upsertPost)
+    // Just prepend them to maintain sorted order (newest first)
+    s.sortedKeys = [...s.pendingKeys, ...s.sortedKeys]
     s.pendingKeys = []
     
-    // Trim if needed (inside same produce for atomicity)
+    if (import.meta.env.DEV) {
+      console.log(`[Posts] Revealed ${pendingCount} posts, total: ${s.sortedKeys.length}`)
+    }
+    
+    // Trim from bottom (oldest posts)
     trimToMaxPosts(s)
   }))
 }
