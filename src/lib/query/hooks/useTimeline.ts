@@ -1,5 +1,5 @@
 import { createQuery, createInfiniteQuery } from '@tanstack/solid-query'
-import { createEffect, on, createMemo, untrack, onCleanup } from 'solid-js'
+import { createEffect, on, createMemo, onCleanup } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
 import {
   fetchMessages,
@@ -548,14 +548,10 @@ export function useOptimizedTimeline() {
   )
 
   // Reactive timeline from centralized store
-  // Only recalculate when sortedKeys change (posts added/removed)
-  // Use untrack for byId access - individual post updates are handled by component-level reactivity
+  // Tracks both sortedKeys AND individual post changes (for edits, reactions)
   const timeline = createMemo(() => {
     const keys = postsState.sortedKeys
-    // untrack byId access so changes to individual posts don't trigger full recalculation
-    const posts = untrack(() => 
-      keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
-    )
+    const posts = keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
     // Group posts by groupedId for albums
     return groupPostsByMediaGroup(posts)
   })
@@ -564,9 +560,7 @@ export function useOptimizedTimeline() {
   const pendingCount = createMemo(() => {
     const keys = postsState.pendingKeys
     if (keys.length === 0) return 0
-    const posts = untrack(() =>
-      keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
-    )
+    const posts = keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
     return groupPostsByMediaGroup(posts).length
   })
 

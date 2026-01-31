@@ -1,9 +1,10 @@
 import { useParams, useNavigate } from '@solidjs/router'
-import { createMemo, Show } from 'solid-js'
+import { createMemo, createEffect, onCleanup, Show } from 'solid-js'
 import { Timeline } from '@/components/timeline'
 import { ChannelCard } from '@/components/channel'
 import { Skeleton } from '@/components/ui'
 import { useResolveChannel, useChannelInfo, useMessages } from '@/lib/query'
+import { openChannel, closeChannel } from '@/lib/telegram'
 import { groupPostsByMediaGroup } from '@/lib/utils'
 import { ChevronLeft } from 'lucide-solid'
 
@@ -32,6 +33,25 @@ function Channel() {
   const channel = createMemo(() =>
     channelInfoQuery.data ?? resolvedChannel.data
   )
+
+  // Open channel for real-time updates when viewing it
+  // This is MTProto requirement - openChat ensures we receive updates
+  createEffect(() => {
+    const id = channelId()
+    if (!id) return
+
+    // Open the channel
+    openChannel(id).catch(() => {
+      // Ignore errors - channel might be invalid
+    })
+
+    // Close when leaving the page
+    onCleanup(() => {
+      closeChannel(id).catch(() => {
+        // Ignore cleanup errors
+      })
+    })
+  })
 
   const handleBack = () => {
     const referrer = document.referrer

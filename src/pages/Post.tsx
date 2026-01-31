@@ -1,11 +1,12 @@
 import { useParams, useNavigate } from '@solidjs/router'
-import { Show, createMemo } from 'solid-js'
+import { Show, createMemo, createEffect, onCleanup } from 'solid-js'
 import { Motion } from 'solid-motionone'
 import { ChannelAvatar, PostSkeleton, ErrorState } from '@/components/ui'
 import { PostContent, PostMedia, PostActions, MediaGallery } from '@/components/post'
 import { CommentSection } from '@/components/comments'
 import { usePost, useResolveChannel, useChannelInfo } from '@/lib/query'
 import { postsState } from '@/lib/store'
+import { openChannel, closeChannel } from '@/lib/telegram'
 import { ChevronLeft, CornerDownRight } from 'lucide-solid'
 import type { Message } from '@/lib/telegram'
 
@@ -36,6 +37,18 @@ function Post() {
 
   // Use resolved channel or full info
   const channel = createMemo(() => channelInfoQuery.data ?? resolvedChannel.data)
+
+  // Open channel for real-time updates (new comments, reactions)
+  createEffect(() => {
+    const id = channelId()
+    if (!id) return
+
+    openChannel(id).catch(() => {})
+
+    onCleanup(() => {
+      closeChannel(id).catch(() => {})
+    })
+  })
 
   // Find all posts in the same media group
   const groupedPosts = createMemo(() => {

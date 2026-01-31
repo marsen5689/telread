@@ -31,25 +31,6 @@ const openChannels = new Set<number>()
 const pendingOpens = new Set<number>()
 
 /**
- * Channels currently visible on screen (tracked via Intersection Observer)
- * Map of channelId -> timestamp when it became visible
- */
-const visibleChannels = new Map<number, number>()
-
-/**
- * Debounce timer for updating open channels based on visibility
- * Longer debounce (1s) to reduce API calls on mobile during fast scrolling
- */
-let visibilityUpdateTimer: ReturnType<typeof setTimeout> | null = null
-const VISIBILITY_UPDATE_DEBOUNCE = 1000 // ms - longer for mobile optimization
-
-/**
- * Cooldown between openChat batches to avoid FLOOD_WAIT
- */
-let lastOpenChatTime = 0
-const OPEN_CHAT_COOLDOWN = 2000 // ms - min time between batch operations
-
-/**
  * Whether the open chats system is active
  */
 let isActive = false
@@ -229,132 +210,10 @@ export function isChannelOpen(channelId: number): boolean {
 /**
  * Get statistics about open chats
  */
-export function getOpenChatsStats(): { open: number; max: number; isActive: boolean; visible: number } {
+export function getOpenChatsStats(): { open: number; max: number; isActive: boolean } {
   return {
     open: openChannels.size,
     max: MAX_OPEN_CHATS,
     isActive,
-    visible: visibleChannels.size,
-  }
-}
-
-// ============================================================================
-// Visibility-based Channel Opening
-// ============================================================================
-
-/**
- * Mark a channel as visible (post from this channel is on screen)
- * Called by Timeline component via Intersection Observer
- */
-export function markChannelVisible(channelId: number): void {
-  if (!visibleChannels.has(channelId)) {
-    visibleChannels.set(channelId, Date.now())
-    scheduleVisibilityUpdate()
-  }
-}
-
-/**
- * Mark a channel as no longer visible
- */
-export function markChannelHidden(channelId: number): void {
-  if (visibleChannels.has(channelId)) {
-    visibleChannels.delete(channelId)
-    scheduleVisibilityUpdate()
-  }
-}
-
-/**
- * Schedule an update of open channels based on visibility
- * Debounced to avoid rapid open/close during fast scrolling
- */
-function scheduleVisibilityUpdate(): void {
-  if (visibilityUpdateTimer) {
-    clearTimeout(visibilityUpdateTimer)
-  }
-  
-  visibilityUpdateTimer = setTimeout(() => {
-    visibilityUpdateTimer = null
-    updateOpenChannelsFromVisibility()
-  }, VISIBILITY_UPDATE_DEBOUNCE)
-}
-
-/**
- * Update which channels are open based on current visibility
- * Prioritizes channels that are currently visible on screen
- * 
- * Optimized for mobile:
- * - Cooldown between operations to avoid FLOOD_WAIT
- * - Only open channels, don't close (closing is unnecessary overhead)
- * - Limit operations per batch
- */
-async function updateOpenChannelsFromVisibility(): Promise<void> {
-  if (!isClientReady() || !isActive) {
-    return
-  }
-
-  // Cooldown check - avoid too frequent API calls
-  const now = Date.now()
-  if (now - lastOpenChatTime < OPEN_CHAT_COOLDOWN) {
-    // Reschedule for later
-    scheduleVisibilityUpdate()
-    return
-  }
-
-  // Get visible channels sorted by how long they've been visible (oldest first = most stable)
-  const sortedVisible = [...visibleChannels.entries()]
-    .sort((a, b) => a[1] - b[1]) // Sort by timestamp, oldest first
-    .slice(0, MAX_OPEN_CHATS)
-    .map(([id]) => id)
-
-  if (sortedVisible.length === 0) {
-    return // Keep existing channels open if nothing visible
-  }
-
-  // Find channels to open (visible but not open)
-  // Don't close channels - unnecessary API calls, they'll timeout naturally
-  const channelsToOpen = sortedVisible.filter(id => !openChannels.has(id))
-
-  if (channelsToOpen.length === 0) {
-    return // All visible channels already open
-  }
-
-  // Limit to 2 channels per batch to avoid rate limits
-  const batch = channelsToOpen.slice(0, 2)
-
-  if (import.meta.env.DEV) {
-    console.log(`[OpenChats] Opening ${batch.length} channels (${channelsToOpen.length} pending)`)
-  }
-
-  lastOpenChatTime = now
-
-  // Open channels with delay between
-  for (const channelId of batch) {
-    if (openChannels.size >= MAX_OPEN_CHATS) {
-      // At capacity - close oldest non-visible channel first
-      const nonVisibleOpen = [...openChannels].find(id => !visibleChannels.has(id))
-      if (nonVisibleOpen) {
-        await closeChannel(nonVisibleOpen)
-      } else {
-        break // Can't make room
-      }
-    }
-    await openChannel(channelId)
-    await new Promise(resolve => setTimeout(resolve, 100))
-  }
-
-  // If more channels to open, schedule another update
-  if (channelsToOpen.length > batch.length) {
-    scheduleVisibilityUpdate()
-  }
-}
-
-/**
- * Clear all visibility tracking (e.g., on page change)
- */
-export function clearVisibilityTracking(): void {
-  visibleChannels.clear()
-  if (visibilityUpdateTimer) {
-    clearTimeout(visibilityUpdateTimer)
-    visibilityUpdateTimer = null
   }
 }
