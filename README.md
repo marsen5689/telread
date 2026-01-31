@@ -1,28 +1,43 @@
-## Usage
+# TelRead
 
-```bash
-$ npm install # or pnpm install or yarn install
+Telegram channel reader with a unified timeline. Read your subscribed channels like a Twitter feed.
+
+Built with SolidJS, mtcute, and Tailwind CSS. Runs entirely in browser via MTProto.
+
+## Features
+
+- Unified timeline from all subscribed channels
+- Individual channel views
+- Comments and replies
+- Media galleries (photos, videos, video notes)
+- Bookmarks (local)
+- QR code login
+- PWA support
+
+## Setup
+
+1. Get API credentials from [my.telegram.org](https://my.telegram.org)
+
+2. Create `.env`:
+```
+VITE_TELEGRAM_API_ID=your_api_id
+VITE_TELEGRAM_API_HASH=your_api_hash
 ```
 
-### Learn more on the [Solid Website](https://solidjs.com) and come chat with us on our [Discord](https://discord.com/invite/solidjs)
+3. Install and run:
+```bash
+npm install
+npm run dev
+```
 
-## Available Scripts
+## Tech
 
-In the project directory, you can run:
+- [SolidJS](https://solidjs.com) - UI
+- [mtcute](https://mtcute.dev) - Telegram MTProto client
+- [TanStack Query](https://tanstack.com/query) - Data fetching
+- [Tailwind CSS](https://tailwindcss.com) - Styling
+- [Vite](https://vite.dev) - Build
 
-### `npm run dev`
+## License
 
-Runs the app in the development mode.<br>
-Open [http://localhost:5173](http://localhost:5173) to view it in the browser.
-
-### `npm run build`
-
-Builds the app for production to the `dist` folder.<br>
-It correctly bundles Solid in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.<br>
-Your app is ready to be deployed!
-
-## Deployment
-
-Learn more about deploying your application with the [documentations](https://vite.dev/guide/static-deploy.html)
+AGPL-3.0 - see [LICENSE](LICENSE)

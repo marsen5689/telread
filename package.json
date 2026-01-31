@@ -2,7 +2,24 @@
   "name": "telread",
   "version": "1.0.0",
   "description": "Twitter-like Telegram Channel Reader PWA with Liquid Glass design",
-  "private": true,
+  "license": "AGPL-3.0-only",
+  "author": "Yuri Ly",
+  "keywords": [
+    "telegram",
+    "reader",
+    "channels",
+    "pwa",
+    "solidjs",
+    "mtproto"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnomalyCo/telread.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AnomalyCo/telread/issues"
+  },
+  "homepage": "https://github.com/AnomalyCo/telread#readme",
   "type": "module",
   "scripts": {
     "dev": "vite",
