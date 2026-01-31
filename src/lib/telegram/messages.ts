@@ -806,10 +806,6 @@ function mapEntities(msg: TgMessage): MessageEntity[] | undefined {
 
   for (const entity of msg.entities) {
     try {
-      // Debug: log all entity kinds
-      if (import.meta.env.DEV) {
-        console.log('[mapEntities] kind:', entity.kind, 'raw:', entity.raw._)
-      }
       const base = { offset: entity.offset, length: entity.length }
       const kind = entity.kind
 
@@ -881,18 +877,9 @@ function mapEntities(msg: TgMessage): MessageEntity[] | undefined {
           // Bank card numbers - render as code
           result.push({ ...base, type: 'code' })
           break
-        case 'emoji':
-          result.push({
-            ...base,
-            type: 'custom_emoji',
-            emojiId: entity.is('emoji') ? String(entity.params.emojiId) : undefined,
-          })
+        case 'unknown':
+          // Skip unknown entity types
           break
-        default:
-          // Log unknown types in dev
-          if (import.meta.env.DEV) {
-            console.log('[mapEntities] Unknown kind:', entity.kind)
-          }
       }
     } catch {
       // Skip malformed entities
