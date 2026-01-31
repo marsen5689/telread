@@ -14,12 +14,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AnomalyCo/telread.git"
+    "url": "git+https://github.com/LyoSU/telread.git"
   },
   "bugs": {
-    "url": "https://github.com/AnomalyCo/telread/issues"
+    "url": "https://github.com/LyoSU/telread/issues"
   },
-  "homepage": "https://github.com/AnomalyCo/telread#readme",
+  "homepage": "https://github.com/LyoSU/telread#readme",
   "type": "module",
   "scripts": {
     "dev": "vite",

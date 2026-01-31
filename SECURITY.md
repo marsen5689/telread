@@ -4,14 +4,12 @@
 
 If you find a security issue, **do not** open a public issue.
 
-Email: [your-email] with details.
+Use [GitHub Security Advisories](https://github.com/LyoSU/telread/security/advisories/new) to report privately.
 
 Include:
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
-
-I'll respond within 48 hours.
 
 ## Scope
 
