@@ -16,6 +16,22 @@ import type {
   Dice,
   WebPageMedia,
 } from '@mtcute/web'
+import type { tl } from '@mtcute/web'
+import { strippedToDataUrl } from './media'
+
+/**
+ * Extract stripped thumbnail from photo/document sizes as data URL
+ */
+function getStrippedThumb(sizes: tl.TypePhotoSize[] | undefined): string | undefined {
+  if (!sizes) return undefined
+  
+  for (const size of sizes) {
+    if (size._ === 'photoStrippedSize') {
+      return strippedToDataUrl(size.bytes)
+    }
+  }
+  return undefined
+}
 
 export interface MessageReaction {
   emoji: string
@@ -57,7 +73,8 @@ export interface Message {
 export interface MessageMedia {
   type: 'photo' | 'video' | 'video_note' | 'document' | 'audio' | 'voice' | 'sticker' | 'animation' | 'location' | 'venue' | 'poll' | 'contact' | 'dice' | 'webpage'
   url?: string
-  thumbnailUrl?: string
+  /** Base64-encoded stripped thumbnail bytes (needs conversion to JPEG) */
+  thumb?: string
   width?: number
   height?: number
   duration?: number
@@ -450,11 +467,13 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
       type: 'photo',
       width: photo.width,
       height: photo.height,
+      thumb: getStrippedThumb(photo.raw.sizes),
     }
   }
 
   if (media.type === 'video') {
     const video = media as Video
+    const thumb = getStrippedThumb(video.raw.thumbs)
     // Check if it's an animation (GIF)
     if (video.isAnimation) {
       return {
@@ -463,6 +482,7 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
         height: video.height,
         duration: video.duration,
         mimeType: video.mimeType,
+        thumb,
       }
     }
     // Check if it's a round video (video note / кружок)
@@ -473,6 +493,7 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
         height: video.height,
         duration: video.duration,
         mimeType: video.mimeType,
+        thumb,
       }
     }
     return {
@@ -481,6 +502,7 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
       height: video.height,
       duration: video.duration,
       mimeType: video.mimeType,
+      thumb,
     }
   }
 
@@ -515,6 +537,7 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
       fileName: doc.fileName ?? undefined,
       mimeType: doc.mimeType,
       size: doc.fileSize,
+      thumb: getStrippedThumb(doc.raw.thumbs),
     }
   }
 
@@ -527,6 +550,7 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
       stickerType: sticker.sourceType,
       stickerEmoji: sticker.emoji || undefined,
       mimeType: sticker.mimeType,
+      thumb: getStrippedThumb(sticker.raw.thumbs),
     }
   }
 
@@ -612,6 +636,7 @@ function mapMedia(msg: TgMessage): MessageMedia | undefined {
         width: preview.photo.width,
         height: preview.photo.height,
       } : undefined,
+      thumb: preview.photo ? getStrippedThumb(preview.photo.raw.sizes) : undefined,
     }
   }
 

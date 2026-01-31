@@ -215,11 +215,26 @@ export function removePosts(channelId: number, messageIds: number[]): void {
 /**
  * Reveal pending posts - move them to visible timeline
  * Called when user clicks "N new posts" button
+ * 
+ * IMPORTANT: This must be a single atomic setState to avoid race conditions
  */
 export function revealPendingPosts(): void {
-  if (state.pendingKeys.length === 0) return
+  // Early exit check (read outside produce is OK for this)
+  if (state.pendingKeys.length === 0) {
+    if (import.meta.env.DEV) {
+      console.log('[Posts] No pending posts to reveal')
+    }
+    return
+  }
 
+  if (import.meta.env.DEV) {
+    console.log(`[Posts] revealPendingPosts: ${state.pendingKeys.length} pending, ${state.sortedKeys.length} sorted`)
+  }
+
+  // Single atomic update to avoid race conditions
   setState(produce((s) => {
+    if (s.pendingKeys.length === 0) return // Double-check inside produce
+    
     // Merge pending into sorted (both are already sorted)
     const merged: PostKey[] = []
     let i = 0, j = 0
@@ -241,8 +256,15 @@ export function revealPendingPosts(): void {
     while (i < s.pendingKeys.length) merged.push(s.pendingKeys[i++])
     while (j < s.sortedKeys.length) merged.push(s.sortedKeys[j++])
     
+    if (import.meta.env.DEV) {
+      console.log(`[Posts] Merged: ${merged.length} total`)
+    }
+    
+    // Update state atomically
     s.sortedKeys = merged
     s.pendingKeys = []
+    
+    // Trim if needed (inside same produce for atomicity)
     trimToMaxPosts(s)
   }))
 }

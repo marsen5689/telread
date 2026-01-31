@@ -30,7 +30,8 @@ const pendingMessages: TgMessage[] = []
 // Batched Updates Processing
 // ============================================================================
 
-const BATCH_INTERVAL_MS = 300
+// Reduced from 300ms to 150ms for faster response on mobile
+const BATCH_INTERVAL_MS = 150
 
 interface UpdateBatch {
   messages: TgMessage[]
@@ -55,7 +56,23 @@ function processBatch(): void {
   const { messages } = pendingBatch
   pendingBatch.messages = []
 
-  if (messages.length === 0) return
+  if (messages.length === 0) {
+    // Even if batch is empty, try to process any pending messages
+    // that were queued before store was ready
+    if (isStoreReady() && pendingMessages.length > 0) {
+      processPendingMessages()
+    }
+    return
+  }
+
+  // Check if store is ready - if not, move messages to pending queue
+  if (!isStoreReady()) {
+    if (import.meta.env.DEV) {
+      console.log(`[Updates] Store not ready, queueing ${messages.length} messages`)
+    }
+    pendingMessages.push(...messages)
+    return
+  }
 
   // Deduplicate - keep latest version of each message
   const uniqueByKey = new Map<string, TgMessage>()
@@ -66,13 +83,35 @@ function processBatch(): void {
 
   // Filter to channel messages and map
   const mapped: Message[] = []
+  let skippedNonChannel = 0
+  let skippedNoContent = 0
+  
   for (const msg of uniqueByKey.values()) {
     const peer = msg.chat
-    if (!peer || peer.type !== 'chat') continue
-    if ((peer as Chat).chatType !== 'channel') continue
+    if (!peer || peer.type !== 'chat') {
+      skippedNonChannel++
+      continue
+    }
+    if ((peer as Chat).chatType !== 'channel') {
+      skippedNonChannel++
+      continue
+    }
 
     const post = mapMessage(msg, peer.id)
-    if (post) mapped.push(post)
+    if (post) {
+      mapped.push(post)
+    } else {
+      skippedNoContent++
+    }
+  }
+
+  if (import.meta.env.DEV) {
+    const total = uniqueByKey.size
+    if (skippedNonChannel > 0 || skippedNoContent > 0) {
+      console.log(`[Updates] Batch: ${total} unique, ${mapped.length} mapped, ${skippedNonChannel} non-channel, ${skippedNoContent} no content`)
+    } else if (mapped.length > 0) {
+      console.log(`[Updates] Processed ${mapped.length} messages`)
+    }
   }
 
   if (mapped.length === 0) return
@@ -83,8 +122,9 @@ function processBatch(): void {
   }
   addPostsToCache(mapped)
 
-  if (import.meta.env.DEV && mapped.length > 1) {
-    console.log(`[Updates] Processed ${mapped.length} messages`)
+  // Also process any pending messages that were queued before store was ready
+  if (pendingMessages.length > 0) {
+    processPendingMessages()
   }
 }
 
@@ -212,20 +252,24 @@ export function startUpdatesListener(): UpdatesCleanup {
 
     try {
       const chatId = message.chat?.id
-      if (!chatId) return
-
-      // Queue if store not ready yet
-      if (!isStoreReady()) {
-        pendingMessages.push(message)
+      if (!chatId) {
+        if (import.meta.env.DEV) {
+          console.log('[Updates] Skipped message without chatId:', message.id)
+        }
         return
       }
 
       const peer = message.chat
-      if (!peer || peer.type !== 'chat') return
+      if (!peer || peer.type !== 'chat') {
+        if (import.meta.env.DEV) {
+          console.log('[Updates] Skipped non-chat message:', chatId, message.id, peer?.type)
+        }
+        return
+      }
 
       const chat = peer as Chat
       
-      // Handle channel posts
+      // Handle channel posts - always queue, processBatch will check store readiness
       if (chat.chatType === 'channel') {
         queueMessage(message)
         return
@@ -235,6 +279,10 @@ export function startUpdatesListener(): UpdatesCleanup {
       if (chat.chatType === 'supergroup') {
         handleCommentMessage(message)
         return
+      }
+      
+      if (import.meta.env.DEV) {
+        console.log('[Updates] Skipped message from:', chat.chatType, chatId)
       }
     } catch (error) {
       console.error('[Updates] Error handling new message:', error)

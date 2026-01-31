@@ -49,8 +49,7 @@ export function MediaGallery(props: MediaGalleryProps) {
 }
 
 /**
- * Single item in the gallery - Threads style
- * Fixed height with natural aspect ratio
+ * Single item in the gallery - shows inline thumb, then full image
  */
 function GalleryItem(props: {
   item: MediaItem
@@ -61,8 +60,7 @@ function GalleryItem(props: {
 
   const isAnimation = () => props.item.media.type === 'animation'
 
-  // Use query hook - handles all async/cleanup automatically
-  // For animations, load full file; for others, load thumbnail
+  // Load full resolution (animations need full, others need large)
   const mediaQuery = useMedia(
     () => props.item.channelId,
     () => props.item.messageId,
@@ -124,10 +122,8 @@ function GalleryItem(props: {
       }}
       onKeyDown={handleKeyDown}
     >
-      <Show
-        when={mediaQuery.data}
-        fallback={<div class="absolute inset-0 skeleton" />}
-      >
+      {/* Full media (shows when loaded) */}
+      <Show when={mediaQuery.data}>
         {(url) => (
           <Show
             when={isAnimation()}
@@ -151,6 +147,12 @@ function GalleryItem(props: {
             />
           </Show>
         )}
+      </Show>
+      {/* Inline thumbnail with blur (shows while full loads) */}
+      <Show when={!mediaQuery.data}>
+        <Show when={props.item.media.thumb} fallback={<div class="absolute inset-0 skeleton" />}>
+          <img src={props.item.media.thumb} alt="" class="absolute inset-0 w-full h-full object-cover blur-sm scale-105" />
+        </Show>
       </Show>
 
       {/* Video indicator - only for actual videos, not GIFs */}

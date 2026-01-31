@@ -6,6 +6,8 @@ import {
   fetchChannelsWithLastMessages,
   onTimelineLoaded,
   sliceWithCompleteGroups,
+  updateOpenChannels,
+  closeAllChannels,
   type Message,
   type ChannelWithLastMessage,
 } from '@/lib/telegram'
@@ -480,10 +482,25 @@ export function useOptimizedTimeline() {
           markStoreInitialized()
           // Process messages that arrived before timeline was ready
           onTimelineLoaded()
+          
+          // Open top channels for real-time updates (MTProto requirement)
+          // This is critical for receiving consistent updates
+          updateOpenChannels(data.channels).catch((error) => {
+            if (import.meta.env.DEV) {
+              console.warn('[Timeline] Failed to open channels:', error)
+            }
+          })
         }
       }
     )
   )
+  
+  // Cleanup: close all open channels when component unmounts
+  onCleanup(() => {
+    closeAllChannels().catch(() => {
+      // Ignore errors during cleanup
+    })
+  })
 
   // Populate posts from history pages (from cache or after scroll fetch)
   // Track processed page count to avoid re-processing

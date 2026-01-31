@@ -106,6 +106,18 @@ export {
   type UpdatesCleanup,
 } from './updates'
 export {
+  openChannel,
+  closeChannel,
+  closeAllChannels,
+  updateOpenChannels,
+  getOpenChannels,
+  isChannelOpen,
+  getOpenChatsStats,
+  markChannelVisible,
+  markChannelHidden,
+  clearVisibilityTracking,
+} from './openChats'
+export {
   subscribeToComments,
   onCommentUpdate,
   getActiveSubscriptionCount,

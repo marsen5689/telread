@@ -28,8 +28,7 @@ export function PostMedia(props: PostMediaProps) {
   
   let observer: IntersectionObserver | undefined
 
-  // Use query hook - handles all async/cleanup automatically
-  // Only fetches when visible (enabled signal)
+  // Load full resolution image
   const mediaQuery = useMedia(
     () => props.channelId,
     () => props.messageId,
@@ -91,16 +90,14 @@ export function PostMedia(props: PostMediaProps) {
   return (
     <div ref={setupObserver} class={`relative ${props.class ?? ''}`}>
       <Switch>
-        {/* Photo - Threads style */}
+        {/* Photo - shows inline thumbnail first, then full image */}
         <Match when={props.media.type === 'photo'}>
           <div 
             class="relative rounded-2xl overflow-hidden flex-shrink-0 shadow-sm hover:shadow-md transition-shadow" 
             style={containerStyle()}
           >
-            <Show
-              when={mediaQuery.data}
-              fallback={<div class="absolute inset-0 skeleton" />}
-            >
+            {/* Full image (shows when loaded) */}
+            <Show when={mediaQuery.data}>
               {(url) => (
                 <img
                   src={url()}
@@ -115,6 +112,19 @@ export function PostMedia(props: PostMediaProps) {
                   role="button"
                 />
               )}
+            </Show>
+            {/* Inline thumbnail with blur (shows while full loads) */}
+            <Show when={!mediaQuery.data}>
+              <Show
+                when={props.media.thumb}
+                fallback={<div class="absolute inset-0 skeleton" />}
+              >
+                <img
+                  src={props.media.thumb}
+                  alt=""
+                  class="absolute inset-0 w-full h-full object-cover blur-sm scale-105"
+                />
+              </Show>
             </Show>
           </div>
         </Match>
@@ -314,40 +324,35 @@ export function PostMedia(props: PostMediaProps) {
           </div>
         </Match>
 
-        {/* Webpage preview */}
+        {/* Webpage preview - compact Twitter style */}
         <Match when={props.media.type === 'webpage'}>
           <a
             href={props.media.webpageUrl}
             target="_blank"
             rel="noopener noreferrer"
-            class="glass rounded-xl overflow-hidden block hover:bg-[var(--bg-secondary)] transition-colors"
+            class="block rounded-xl border border-[var(--text-tertiary)]/20 overflow-hidden hover:border-[var(--text-tertiary)]/40 transition-colors"
           >
-            <Show when={props.media.webpagePhoto && mediaQuery.data}>
-              {(url) => (
-                <div class="relative w-full" style={{ 'aspect-ratio': '1.91' }}>
-                  <img
-                    src={url()}
-                    alt=""
-                    class="w-full h-full object-cover"
-                  />
-                </div>
-              )}
+            <Show when={props.media.webpagePhoto}>
+              <div class="relative w-full aspect-[2/1] bg-[var(--bg-secondary)]">
+                <Show when={mediaQuery.data}>
+                  {(url) => <img src={url()} alt="" class="w-full h-full object-cover" />}
+                </Show>
+                <Show when={!mediaQuery.data}>
+                  <Show when={props.media.thumb} fallback={<div class="absolute inset-0 skeleton" />}>
+                    <img src={props.media.thumb} alt="" class="absolute inset-0 w-full h-full object-cover blur-sm scale-105" />
+                  </Show>
+                </Show>
+              </div>
             </Show>
-            <div class="p-4">
-              <Show when={props.media.webpageSiteName}>
-                <p class="text-xs text-accent font-medium uppercase tracking-wide mb-1">
-                  {props.media.webpageSiteName}
-                </p>
-              </Show>
-              <Show when={props.media.webpageTitle}>
-                <p class="text-sm font-medium text-primary line-clamp-2 mb-1">
-                  {props.media.webpageTitle}
-                </p>
-              </Show>
-              <Show when={props.media.webpageDescription}>
-                <p class="text-xs text-tertiary line-clamp-3">
-                  {props.media.webpageDescription}
-                </p>
+            <div class="px-3 py-2">
+              <p class="text-[13px] text-secondary truncate leading-4">
+                {props.media.webpageTitle || (() => {
+                  try { return new URL(props.media.webpageUrl ?? '').hostname.replace('www.', '') }
+                  catch { return props.media.webpageSiteName ?? '' }
+                })()}
+              </p>
+              <Show when={props.media.webpageTitle && props.media.webpageDescription}>
+                <p class="text-[13px] text-tertiary leading-4 truncate">{props.media.webpageDescription}</p>
               </Show>
             </div>
           </a>
@@ -522,6 +527,7 @@ function InlineVoicePlayer(props: {
 
 /**
  * Inline Video Note (кружок) - Circular video player like Telegram
+ * Shows thumbnail first, then loads full video
  */
 function InlineVideoNote(props: {
   channelId: number
@@ -561,23 +567,16 @@ function InlineVideoNote(props: {
   )
 
   const progress = () => duration() > 0 ? (currentTime() / duration()) * 100 : 0
-  
-  // Size - кружки зазвичай маленькі
   const size = 200
 
   const handleClick = (e: MouseEvent) => {
     e.stopPropagation()
     if (!videoRef) return
-    
-    if (isPlaying()) {
-      videoRef.pause()
-    } else {
-      videoRef.play()
-    }
+    if (isPlaying()) videoRef.pause()
+    else videoRef.play()
   }
 
-  // Calculate stroke dash for circular progress
-  const circumference = 2 * Math.PI * 96 // radius = 96
+  const circumference = 2 * Math.PI * 96
   const strokeDashoffset = () => circumference - (progress() / 100) * circumference
 
   return (
@@ -589,12 +588,7 @@ function InlineVideoNote(props: {
     >
       {/* Circular video container */}
       <div class="w-full h-full rounded-full overflow-hidden bg-black/20">
-        <Show
-          when={videoQuery.data}
-          fallback={
-            <div class="w-full h-full skeleton rounded-full" />
-          }
-        >
+        <Show when={videoQuery.data}>
           {(url) => (
             <video
               ref={videoRef}
@@ -609,6 +603,14 @@ function InlineVideoNote(props: {
               preload="metadata"
             />
           )}
+        </Show>
+        <Show when={!videoQuery.data}>
+          <Show
+            when={props.media.thumb}
+            fallback={<div class="w-full h-full skeleton rounded-full" />}
+          >
+            <img src={props.media.thumb} alt="" class="w-full h-full object-cover blur-sm scale-105" />
+          </Show>
         </Show>
       </div>
 
@@ -829,7 +831,7 @@ function InlineVideoPlayer(props: {
     visibilityObserver.observe(el)
   }
 
-  // Load thumbnail first
+  // Load large thumbnail for video preview
   const thumbQuery = useMedia(
     () => props.channelId,
     () => props.messageId,
@@ -851,24 +853,15 @@ function InlineVideoPlayer(props: {
     setLoadVideo(true)
   }
 
-  // Auto-play when video is loaded
   createEffect(() => {
-    if (videoQuery.data && videoRef) {
-      videoRef.play()
-    }
+    if (videoQuery.data && videoRef) videoRef.play()
   })
 
   const handleVideoClick = (e: MouseEvent) => {
     e.stopPropagation()
     if (!videoRef) return
-    
-    if (isPlaying()) {
-      videoRef.pause()
-    } else {
-      videoRef.play()
-    }
-    
-    // Show controls briefly
+    if (isPlaying()) videoRef.pause()
+    else videoRef.play()
     setShowControls(true)
     clearTimeout(hideControlsTimeout)
     hideControlsTimeout = window.setTimeout(() => {
@@ -878,10 +871,7 @@ function InlineVideoPlayer(props: {
 
   const handleExpand = (e: MouseEvent) => {
     e.stopPropagation()
-    // Stop inline video before opening fullscreen
-    if (videoRef) {
-      videoRef.pause()
-    }
+    if (videoRef) videoRef.pause()
     props.onExpand()
   }
 
@@ -912,19 +902,14 @@ function InlineVideoPlayer(props: {
         )}
       </Show>
 
-      {/* Thumbnail (before video loads) */}
+      {/* Video thumbnail - show large when ready, inline thumb as placeholder */}
       <Show when={!videoQuery.data}>
-        <Show
-          when={thumbQuery.data}
-          fallback={<div class="absolute inset-0 skeleton" />}
-        >
-          {(url) => (
-            <img
-              src={url()}
-              alt="Video thumbnail"
-              class="w-full h-full object-cover"
-            />
-          )}
+        <Show when={thumbQuery.data} fallback={
+          <Show when={props.media.thumb} fallback={<div class="absolute inset-0 skeleton" />}>
+            <img src={props.media.thumb} alt="" class="w-full h-full object-cover blur-sm scale-105" />
+          </Show>
+        }>
+          {(url) => <img src={url()} alt="Video thumbnail" class="w-full h-full object-cover" />}
         </Show>
       </Show>
 
@@ -995,38 +980,17 @@ function StickerPlayer(props: {
   const stickerType = () => props.media.stickerType ?? 'static'
 
   return (
-    <div class="w-40 h-40">
-      <Show
-        when={mediaQuery.data}
-        fallback={<Skeleton class="w-full h-full" rounded="lg" />}
-      >
+    <div class="w-40 h-40 relative">
+      <Show when={mediaQuery.data}>
         {(url) => (
           <Switch>
-            {/* Static sticker (WebP) */}
             <Match when={stickerType() === 'static'}>
-              <img
-                src={url()}
-                alt={props.media.stickerEmoji || 'Sticker'}
-                class="w-full h-full object-contain drop-shadow-md"
-              />
+              <img src={url()} alt={props.media.stickerEmoji || 'Sticker'} class="w-full h-full object-contain drop-shadow-md" />
             </Match>
-
-            {/* Video sticker (WebM) */}
             <Match when={stickerType() === 'video'}>
-              <video
-                src={url()}
-                class="w-full h-full object-contain drop-shadow-md"
-                autoplay
-                muted
-                loop
-                playsinline
-              />
+              <video src={url()} class="w-full h-full object-contain drop-shadow-md" autoplay muted loop playsinline />
             </Match>
-
-            {/* Animated sticker (Lottie TGS) - fallback to static for now */}
             <Match when={stickerType() === 'animated'}>
-              {/* TODO: Add Lottie player for .tgs files */}
-              {/* For now, show as static image if available */}
               <div class="w-full h-full flex items-center justify-center bg-[var(--accent)]/10 rounded-xl">
                 <span class="text-4xl">{props.media.stickerEmoji || '🎭'}</span>
               </div>
@@ -1034,12 +998,17 @@ function StickerPlayer(props: {
           </Switch>
         )}
       </Show>
+      <Show when={!mediaQuery.data}>
+        <Show when={props.media.thumb} fallback={<Skeleton class="w-full h-full" rounded="lg" />}>
+          <img src={props.media.thumb} alt="" class="absolute inset-0 w-full h-full object-contain blur-sm" />
+        </Show>
+      </Show>
     </div>
   )
 }
 
 /**
- * Inline GIF player - auto-plays without needing to open modal
+ * Inline GIF player - auto-plays, shows inline thumb while loading
  */
 function GifPlayer(props: {
   channelId: number
@@ -1048,11 +1017,10 @@ function GifPlayer(props: {
   containerStyle: Record<string, string>
   isVisible: () => boolean
 }) {
-  // Load full GIF file (not thumbnail)
   const gifQuery = useMedia(
     () => props.channelId,
     () => props.messageId,
-    () => undefined, // Full resolution
+    () => undefined,
     props.isVisible
   )
 
@@ -1061,20 +1029,15 @@ function GifPlayer(props: {
       class="relative rounded-2xl overflow-hidden flex-shrink-0 shadow-sm hover:shadow-md transition-shadow" 
       style={props.containerStyle}
     >
-      <Show
-        when={gifQuery.data}
-        fallback={<div class="absolute inset-0 skeleton" />}
-      >
+      <Show when={gifQuery.data}>
         {(url) => (
-          <video
-            src={url()}
-            class="w-full h-full object-cover"
-            autoplay
-            muted
-            loop
-            playsinline
-          />
+          <video src={url()} class="w-full h-full object-cover" autoplay muted loop playsinline />
         )}
+      </Show>
+      <Show when={!gifQuery.data}>
+        <Show when={props.media.thumb} fallback={<div class="absolute inset-0 skeleton" />}>
+          <img src={props.media.thumb} alt="" class="absolute inset-0 w-full h-full object-cover blur-sm scale-105" />
+        </Show>
       </Show>
     </div>
   )

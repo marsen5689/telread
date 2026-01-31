@@ -4,6 +4,7 @@ import { TimelineGroup } from './TimelineGroup'
 import { PostSkeleton } from '@/components/ui'
 import { INFINITE_SCROLL_THRESHOLD, SCROLL_THROTTLE_MS } from '@/config/constants'
 import { Newspaper } from 'lucide-solid'
+import { markChannelVisible, markChannelHidden, clearVisibilityTracking } from '@/lib/telegram'
 import type { Channel } from '@/lib/telegram'
 import type { TimelineItem } from '@/lib/utils'
 
@@ -99,6 +100,16 @@ export function Timeline(props: TimelineProps) {
   let restoreTimer: ReturnType<typeof setTimeout> | null = null
   let rafId: number | null = null
   let ticking = false
+  let visibilityObserver: IntersectionObserver | null = null
+  
+  // Track which elements are being observed (element -> channelId)
+  // WeakMap prevents memory leaks - entries are auto-removed when elements are GC'd
+  const observedElements = new WeakMap<Element, number>()
+  
+  // Track which channels already have an observed element (optimization)
+  // We only need ONE element per channel, not every post
+  // Map channelId -> element for cleanup when element leaves DOM
+  const channelToElement = new Map<number, Element>()
 
   // Incremental rendering - start with few items, render more on scroll
   const [renderCount, setRenderCount] = createSignal(INITIAL_RENDER_COUNT)
@@ -213,6 +224,28 @@ export function Timeline(props: TimelineProps) {
       // Wait for content to be ready then restore state
       restoreTimer = setTimeout(restoreState, 50)
     }
+    
+    // Setup IntersectionObserver for visibility-based openChat
+    // This tracks which channels are currently visible on screen
+    visibilityObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const channelId = observedElements.get(entry.target)
+          if (channelId === undefined) continue
+          
+          if (entry.isIntersecting) {
+            markChannelVisible(channelId)
+          } else {
+            markChannelHidden(channelId)
+          }
+        }
+      },
+      {
+        root: scrollParent,
+        rootMargin: '100px 0px', // Start tracking slightly before visible
+        threshold: 0.1, // 10% visible is enough
+      }
+    )
   })
 
   // Cleanup on unmount
@@ -238,7 +271,48 @@ export function Timeline(props: TimelineProps) {
       cancelAnimationFrame(rafId)
       rafId = null
     }
+    
+    // Cleanup visibility observer
+    if (visibilityObserver) {
+      visibilityObserver.disconnect()
+      visibilityObserver = null
+    }
+    // WeakMap auto-cleans when elements are GC'd, but clear channelToElement
+    channelToElement.clear()
+    clearVisibilityTracking()
   })
+  
+  /**
+   * Register an element for visibility tracking
+   * Called via ref callback on post elements
+   * 
+   * OPTIMIZATION: Only observe ONE element per channel
+   * Multiple posts from same channel don't need separate observers
+   * 
+   * Uses WeakMap for observedElements to prevent memory leaks
+   */
+  const observePostVisibility = (element: HTMLElement | null, channelId: number) => {
+    if (!element || !visibilityObserver) return
+    
+    // Don't re-observe the same element
+    if (observedElements.has(element)) return
+    
+    // Check if we already have an element for this channel
+    const existingElement = channelToElement.get(channelId)
+    if (existingElement) {
+      // Check if existing element is still in DOM
+      if (existingElement.isConnected) {
+        return // Already tracking this channel with a connected element
+      }
+      // Old element was removed from DOM - unobserve it and track new one
+      visibilityObserver.unobserve(existingElement)
+    }
+    
+    // Track this element for this channel
+    channelToElement.set(channelId, element)
+    observedElements.set(element, channelId)
+    visibilityObserver.observe(element)
+  }
 
   // Get channel by ID
   const getChannel = (channelId: number) => channelMap().get(channelId)
@@ -288,23 +362,36 @@ export function Timeline(props: TimelineProps) {
 
       {/* Items list - handles both single posts and groups */}
       {/* Incremental rendering - only render visible items for performance */}
+      {/* Each item is wrapped for visibility tracking (MTProto openChat) */}
       <For each={visibleItems()}>
-        {(item) => (
-          <Show
-            when={item.type === 'single'}
-            fallback={
-              <GroupPostItem
-                item={item as { type: 'group'; posts: any[]; groupedId: bigint }}
-                getChannel={getChannel}
-              />
-            }
-          >
-            <SinglePostItem
-              item={item as { type: 'single'; post: any }}
-              getChannel={getChannel}
-            />
-          </Show>
-        )}
+        {(item) => {
+          // Get channelId for visibility tracking
+          const channelId = item.type === 'single' 
+            ? item.post.channelId 
+            : item.posts[0]?.channelId
+          
+          return (
+            <div 
+              ref={(el) => channelId && observePostVisibility(el, channelId)}
+              data-channel-id={channelId}
+            >
+              <Show
+                when={item.type === 'single'}
+                fallback={
+                  <GroupPostItem
+                    item={item as { type: 'group'; posts: any[]; groupedId: bigint }}
+                    getChannel={getChannel}
+                  />
+                }
+              >
+                <SinglePostItem
+                  item={item as { type: 'single'; post: any }}
+                  getChannel={getChannel}
+                />
+              </Show>
+            </div>
+          )
+        }}
       </For>
 
       {/* Load more indicator */}
