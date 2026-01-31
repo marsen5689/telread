@@ -32,23 +32,23 @@ function EntityTag(props: { type: string; url?: string; text: string; children: 
 
   switch (type) {
     case 'bold':
-      return <strong class="font-semibold">{children}</strong>
+      return <strong class="font-bold">{children}</strong>
     case 'italic':
       return <em>{children}</em>
     case 'underline':
-      return <u>{children}</u>
+      return <u class="decoration-1 underline-offset-2">{children}</u>
     case 'strikethrough':
-      return <s class="text-tertiary">{children}</s>
+      return <s>{children}</s>
     case 'code':
       return (
-        <code class="px-1 py-0.5 mx-0.5 rounded bg-[var(--bg-tertiary)] font-mono text-[0.9em]">
+        <code class="px-1 py-0.5 rounded bg-[var(--text-primary)]/[0.06] font-mono text-[0.9em] text-[var(--text-primary)]">
           {children}
         </code>
       )
     case 'pre':
       return (
-        <pre class="my-2 p-3 rounded-xl bg-[var(--bg-tertiary)] overflow-x-auto text-sm">
-          <code class="font-mono">{children}</code>
+        <pre class="my-2 p-3 rounded-lg bg-[var(--text-primary)]/[0.06] overflow-x-auto text-[0.9em]">
+          <code class="font-mono text-[var(--text-primary)]">{children}</code>
         </pre>
       )
     case 'link':
@@ -58,7 +58,7 @@ function EntityTag(props: { type: string; url?: string; text: string; children: 
           href={url || text} 
           target="_blank" 
           rel="noopener noreferrer" 
-          class="text-accent hover:underline break-all"
+          class="text-accent hover:underline"
           onClick={(e) => e.stopPropagation()}
         >
           {children}
@@ -66,12 +66,10 @@ function EntityTag(props: { type: string; url?: string; text: string; children: 
       )
     case 'mention':
     case 'text_mention':
-      return <span class="text-accent font-medium">{children}</span>
     case 'hashtag':
     case 'cashtag':
-      return <span class="text-accent">{children}</span>
     case 'bot_command':
-      return <span class="text-accent font-mono text-[0.95em]">{children}</span>
+      return <span class="text-accent">{children}</span>
     case 'email':
       return (
         <a href={`mailto:${text}`} class="text-accent hover:underline" onClick={(e) => e.stopPropagation()}>
@@ -88,12 +86,11 @@ function EntityTag(props: { type: string; url?: string; text: string; children: 
       return <SpoilerTag>{children}</SpoilerTag>
     case 'blockquote':
       return (
-        <blockquote class="border-l-[3px] border-accent/50 pl-3 my-1 text-secondary">
+        <blockquote class="border-l-[3px] border-[var(--text-tertiary)]/50 pl-3 my-1">
           {children}
         </blockquote>
       )
     case 'custom_emoji':
-      // For now, just render as text (custom emoji needs special handling)
       return <>{children}</>
     default:
       return <>{children}</>
