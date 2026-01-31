@@ -214,7 +214,7 @@ export function App() {
 
         if (isCleanNodeError) {
           // Redirect immediately - no flash
-          window.location.replace('/')
+          window.location.replace(import.meta.env.BASE_URL)
           // Return minimal element to prevent further rendering
           return <div style={{ display: 'none' }} />
         }
@@ -224,7 +224,7 @@ export function App() {
             title="Something went wrong"
             description="We're sorry, but something unexpected happened. Please try again or return to the home page."
             onRetry={() => window.location.reload()}
-            onGoHome={() => window.location.replace('/')}
+            onGoHome={() => window.location.replace(import.meta.env.BASE_URL)}
           />
         )
       }}
