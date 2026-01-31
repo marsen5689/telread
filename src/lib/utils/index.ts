@@ -3,3 +3,4 @@ export {
   groupPostsByMediaGroup,
   type TimelineItem,
 } from './groupPosts'
+export { haptic, hapticClick, withHaptic, canVibrate } from './haptic'

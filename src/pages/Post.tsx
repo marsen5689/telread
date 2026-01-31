@@ -240,7 +240,7 @@ function Post() {
 
         {/* Comments section - only if channel has comments enabled */}
         <Show when={postQuery.data!.replies !== undefined}>
-          <div class="px-4 pt-4 pb-24">
+          <div class="px-4 pt-4 pb-4">
             <CommentSection
               channelId={channelId()}
               messageId={messageId()}
