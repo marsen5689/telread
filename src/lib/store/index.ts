@@ -22,8 +22,15 @@ export {
   hasChannel,
   getChannel,
   getChannels,
+  getAllChannels,
   createChannelMap,
   channelsState,
   restoreChannelsFromCache,
   type ChannelWithLastMessage,
 } from './channels'
+export {
+  folderStore,
+  setSelectedFolder,
+  clearSelectedFolder,
+  setFolderChannelIds,
+} from './folders'

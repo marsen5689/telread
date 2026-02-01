@@ -3,3 +3,4 @@ export { useMessages, useInfiniteMessages, useOptimizedTimeline, addPostToCache,
 export { usePost, usePrefetchPost, useAvailableReactions, useSendReaction } from './usePost'
 export { useComments, useSendComment } from './useComments'
 export { useMedia, useProfilePhoto } from './useMedia'
+export { useFolders, useFolderInfoList, useFolder } from './useFolders'

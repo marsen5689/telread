@@ -37,6 +37,13 @@ export {
   type ChannelsWithPostsResult,
 } from './channels'
 export {
+  fetchDialogFilters,
+  getChannelIdsInFolder,
+  getFolderInfoList,
+  type DialogFilter,
+  type FolderInfo,
+} from './folders'
+export {
   fetchMessages,
   getMessage,
   mapMessage,

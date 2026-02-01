@@ -148,7 +148,7 @@ function Settings() {
                 <Send size={20} class="text-accent" />
               </div>
               <div class="flex-1">
-                <p class="text-sm font-medium text-primary">@lyblog</p>
+                <p class="text-sm font-medium text-primary">@lyblog & <a href="https://t.me/floodLy" target="_blank" rel="noopener noreferrer">floodLy</a> members</p>
                 <p class="text-xs text-tertiary">Author's channel</p>
               </div>
               <ChevronRight size={20} class="text-tertiary" />

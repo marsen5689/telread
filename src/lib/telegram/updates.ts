@@ -1,6 +1,8 @@
 import { getTelegramClient, getClientVersion } from './client'
 import { mapMessage, type MessageReaction, type Message } from './messages'
 import { mapChatToChannel } from './channels'
+import { clearFoldersCache } from './folders'
+import { queryClient, queryKeys } from '@/lib/query'
 import {
   handleCommentMessage,
   handleCommentEdit,
@@ -18,6 +20,8 @@ import {
 } from '@/lib/store'
 import { addPostsToCache, removePostsFromCache } from '@/lib/query/hooks'
 import type { Message as TgMessage, RawUpdateInfo, Chat } from '@mtcute/web'
+
+
 
 export type UpdatesCleanup = () => void
 
@@ -88,7 +92,7 @@ function processBatch(): void {
   const mapped: Message[] = []
   let skippedNonChannel = 0
   let skippedNoContent = 0
-  
+
   for (const msg of uniqueByKey.values()) {
     const peer = msg.chat
     if (!peer || peer.type !== 'chat') {
@@ -96,7 +100,7 @@ function processBatch(): void {
       continue
     }
     const chat = peer as Chat
-    
+
     // Accept both broadcast channels AND supergroups (channels with comments)
     // chatType can be: 'channel' (broadcast), 'supergroup', 'gigagroup'
     const isChannel = chat.chatType === 'channel' || chat.chatType === 'supergroup' || chat.chatType === 'gigagroup'
@@ -187,7 +191,7 @@ function handleVisibilityChange(): void {
 }
 
 function startVisibilityListener(): () => void {
-  if (typeof document === 'undefined') return () => {}
+  if (typeof document === 'undefined') return () => { }
 
   document.addEventListener('visibilitychange', handleVisibilityChange)
   return () => {
@@ -285,19 +289,19 @@ export function startUpdatesListener(): UpdatesCleanup {
       }
 
       const chat = peer as Chat
-      
+
       // Handle channel posts - always queue, processBatch will check store readiness
       if (chat.chatType === 'channel') {
         queueMessage(message)
         return
       }
-      
+
       // Handle discussion group messages (comments)
       if (chat.chatType === 'supergroup') {
         handleCommentMessage(message)
         return
       }
-      
+
       if (import.meta.env.DEV) {
         console.log('[Updates] Skipped message from:', chat.chatType, chatId)
       }
@@ -322,13 +326,13 @@ export function startUpdatesListener(): UpdatesCleanup {
       const peer = message.chat
       if (!peer || peer.type !== 'chat') return
       const chat = peer as Chat
-      
+
       // Handle channel posts
       if (chat.chatType === 'channel') {
         queueMessage(message)
         return
       }
-      
+
       // Handle discussion group messages (comments)
       if (chat.chatType === 'supergroup') {
         handleCommentEdit(message)
@@ -349,7 +353,7 @@ export function startUpdatesListener(): UpdatesCleanup {
       // Try to handle as channel post deletion
       removePosts(channelId, update.messageIds)
       removePostsFromCache(channelId, update.messageIds)
-      
+
       // Also try to handle as comment deletion (if subscribed)
       handleCommentDelete(channelId, update.messageIds)
     } catch (error) {
@@ -370,6 +374,27 @@ export function startUpdatesListener(): UpdatesCleanup {
 
     try {
       const update = info.update as any
+
+      // Handle folder updates (created, deleted, reordered)
+      if (
+        update._ === 'updateDialogFilter' ||
+        update._ === 'updateDialogFilters' ||
+        update._ === 'updateDialogFilterOrder'
+      ) {
+        if (import.meta.env.DEV) {
+          console.log(`[Updates] Folders changed (${update._}), invalidating cache`)
+        }
+
+        // 1. Clear internal memory cache
+        clearFoldersCache()
+
+        // 2. Invalidate Query cache to trigger UI update
+        // We use void promise here as we can't await in a sync handler
+        queryClient.invalidateQueries({ queryKey: queryKeys.folders.all }).catch(e => {
+          console.error('[Updates] Failed to invalidate folders query:', e)
+        })
+        return
+      }
 
       // Handle view count updates
       if (update._ === 'updateChannelMessageViews') {
@@ -410,7 +435,7 @@ export function startUpdatesListener(): UpdatesCleanup {
               chosen: chosenMap.get(emoji) ?? false,
             })
           }
-          
+
           updatePostReactions(channelId, update.msgId, reactions)
         }
         return
@@ -445,7 +470,7 @@ export function startUpdatesListener(): UpdatesCleanup {
       if (pendingBatch.messages.length > 0) {
         processBatch()
       }
-      
+
       // Clear pending messages queue (messages that arrived before store was ready)
       pendingMessages.length = 0
 

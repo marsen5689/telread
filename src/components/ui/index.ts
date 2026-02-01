@@ -6,6 +6,7 @@ export { ConfirmDialog } from './ConfirmDialog'
 export { Avatar } from './Avatar'
 export { ChannelAvatar } from './ChannelAvatar'
 export { UserAvatar } from './UserAvatar'
+export { FolderChip } from './FolderChip'
 export {
   Skeleton,
   AvatarSkeleton,

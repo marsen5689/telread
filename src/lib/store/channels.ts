@@ -47,7 +47,7 @@ export function setChannels(channels: ChannelWithLastMessage[]): void {
       s.ids.push(channel.id)
     }
   }))
-  
+
   if (import.meta.env.DEV) {
     console.log(`[Channels] Set ${channels.length} channels`)
   }
@@ -60,7 +60,7 @@ export function setChannels(channels: ChannelWithLastMessage[]): void {
  */
 export function upsertChannel(channel: ChannelWithLastMessage): void {
   let isNew = false
-  
+
   setState(produce((s) => {
     const existing = s.byId[channel.id]
     if (!existing) {
@@ -72,7 +72,7 @@ export function upsertChannel(channel: ChannelWithLastMessage): void {
     }
     s.byId[channel.id] = channel
   }))
-  
+
   // Persist dynamically discovered channels to IndexedDB
   if (isNew) {
     persistChannelToCache(channel)
@@ -85,18 +85,18 @@ export function upsertChannel(channel: ChannelWithLastMessage): void {
 function persistChannelToCache(channel: ChannelWithLastMessage): void {
   queryClient.setQueryData<SyncedChannelsData>(SYNCED_CHANNELS_KEY, (old) => {
     const existing = old?.channels ?? []
-    
+
     // Skip if already cached
     if (existing.some(c => c.id === channel.id)) {
       return old
     }
-    
+
     const newChannels = [...existing, channel]
-    
+
     if (import.meta.env.DEV) {
       console.log(`[Channels] Persisted to cache: ${channel.id} "${channel.title}", total cached: ${newChannels.length}`)
     }
-    
+
     return { channels: newChannels }
   })
 }
@@ -108,11 +108,11 @@ function persistChannelToCache(channel: ChannelWithLastMessage): void {
 export function restoreChannelsFromCache(): void {
   const data = queryClient.getQueryData<SyncedChannelsData>(SYNCED_CHANNELS_KEY)
   const cachedChannels = data?.channels ?? []
-  
+
   if (cachedChannels.length === 0) return
-  
+
   let restoredCount = 0
-  
+
   setState(produce((s) => {
     for (const channel of cachedChannels) {
       // Only add if not already present (from initial load)
@@ -123,7 +123,7 @@ export function restoreChannelsFromCache(): void {
       }
     }
   }))
-  
+
   if (import.meta.env.DEV && restoredCount > 0) {
     console.log(`[Channels] Restored ${restoredCount} channels from cache`)
   }
@@ -148,6 +148,14 @@ export function getChannel(channelId: number): ChannelWithLastMessage | undefine
  */
 export function getChannels(): ChannelWithLastMessage[] {
   return state.ids.map(id => state.byId[id]).filter(Boolean)
+}
+
+/**
+ * Get all channels (alias for compatibility)
+ * Returns the same as getChannels - unfiltered list
+ */
+export function getAllChannels(): ChannelWithLastMessage[] {
+  return getChannels()
 }
 
 /**

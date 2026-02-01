@@ -19,6 +19,7 @@ import {
   getChannels,
   createChannelMap,
   restoreChannelsFromCache,
+  folderStore,
 } from '@/lib/store'
 import { getTime, groupPostsByMediaGroup } from '@/lib/utils'
 import { queryKeys } from '../keys'
@@ -127,25 +128,25 @@ if (typeof window !== 'undefined') {
 
 function flushPersistentCache(): void {
   if (pendingPersistPosts.length === 0) return
-  
+
   const postsToAdd = [...pendingPersistPosts]
   pendingPersistPosts.length = 0
   persistTimer = null
 
   queryClient.setQueryData<SyncedPostsData>(queryKeys.timeline.syncedPosts, (old) => {
     const existingPosts = old?.posts ?? []
-    
+
     // Create a map of existing posts by key for deduplication
     const postsMap = new Map<string, Message>()
     for (const post of existingPosts) {
       postsMap.set(`${post.channelId}:${post.id}`, post)
     }
-    
+
     // Add/update with new posts (newer wins)
     for (const post of postsToAdd) {
       const key = `${post.channelId}:${post.id}`
       const existing = postsMap.get(key)
-      
+
       if (!existing) {
         postsMap.set(key, post)
       } else {
@@ -157,16 +158,16 @@ function flushPersistentCache(): void {
         }
       }
     }
-    
+
     // Convert back to array and sort by date (newest first)
     const allPosts = Array.from(postsMap.values())
       .sort((a, b) => getTime(b.date) - getTime(a.date))
       .slice(0, MAX_SYNCED_POSTS)
-    
+
     if (import.meta.env.DEV) {
       console.log(`[Timeline] Persisted ${postsToAdd.length} posts, total in cache: ${allPosts.length}`)
     }
-    
+
     return { posts: allPosts }
   })
 }
@@ -176,9 +177,9 @@ function flushPersistentCache(): void {
  */
 function queuePostsForPersistence(posts: Message[]): void {
   if (posts.length === 0) return
-  
+
   pendingPersistPosts.push(...posts)
-  
+
   if (!persistTimer) {
     persistTimer = setTimeout(flushPersistentCache, PERSIST_DEBOUNCE_MS)
   }
@@ -189,7 +190,7 @@ function queuePostsForPersistence(posts: Message[]): void {
  */
 function removePostsFromPersistentCache(channelId: number, messageIds: number[]): void {
   const keysToRemove = new Set(messageIds.map(id => `${channelId}:${id}`))
-  
+
   // Also remove from pending queue
   for (let i = pendingPersistPosts.length - 1; i >= 0; i--) {
     const post = pendingPersistPosts[i]
@@ -197,14 +198,14 @@ function removePostsFromPersistentCache(channelId: number, messageIds: number[])
       pendingPersistPosts.splice(i, 1)
     }
   }
-  
+
   queryClient.setQueryData<SyncedPostsData>(queryKeys.timeline.syncedPosts, (old) => {
     if (!old) return old
-    
+
     const filteredPosts = old.posts.filter(
       post => !keysToRemove.has(`${post.channelId}:${post.id}`)
     )
-    
+
     if (filteredPosts.length === old.posts.length) return old
     return { posts: filteredPosts }
   })
@@ -231,10 +232,10 @@ export function addPostToCache(post: Message): void {
  */
 export function addPostsToCache(posts: Message[]): void {
   if (posts.length === 0) return
-  
+
   // Queue for persistent cache (debounced)
   queuePostsForPersistence(posts)
-  
+
   // Update channels' lastMessage in timeline data (immediate)
   queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
     if (!old) return old
@@ -275,7 +276,7 @@ export function addPostsToCache(posts: Message[]): void {
 export function removePostsFromCache(channelId: number, messageIds: number[]): void {
   // Remove from persistent cache
   removePostsFromPersistentCache(channelId, messageIds)
-  
+
   // Update timeline data
   queryClient.setQueryData<TimelineData>(queryKeys.timeline.all, (old) => {
     if (!old) return old
@@ -392,7 +393,7 @@ async function backgroundSyncRecentHistory(channels: ChannelWithLastMessage[]): 
     upsertPosts(allMessages)
     // Queue for persistent cache (survives page reload)
     queuePostsForPersistence(allMessages)
-    
+
     if (import.meta.env.DEV) {
       console.log(`[Timeline] Background sync complete: ${allMessages.length} posts`)
     }
@@ -423,9 +424,19 @@ export function useOptimizedTimeline() {
 
   // Infinite query for loading more
   const historyQuery = createInfiniteQuery(() => ({
-    queryKey: queryKeys.timeline.infinite(),
+    // Add folder ID to key so query resets when folder changes
+    queryKey: [...queryKeys.timeline.infinite(), folderStore.selectedFolderId],
     queryFn: async ({ pageParam }) => {
-      const ids = initialQuery.data?.channels.map((c) => c.id) ?? []
+      let ids: number[] = []
+
+      // If folder selected, fetch history ONLY for that folder's channels
+      if (folderStore.selectedFolderId !== null) {
+        ids = folderStore.channelIdsInFolder
+      } else {
+        // Otherwise, use the initial dialog list
+        ids = initialQuery.data?.channels.map((c) => c.id) ?? []
+      }
+
       if (ids.length === 0) return []
       return fetchTimelineHistory(ids, pageParam, 20)
     },
@@ -435,7 +446,8 @@ export function useOptimizedTimeline() {
       const oldest = lastPage.reduce((min, msg) => (msg.id < min.id ? msg : min), lastPage[0])
       return oldest.id
     },
-    enabled: !!initialQuery.data?.channels && initialQuery.data.channels.length > 0,
+    // Enable if we have channels to fetch from
+    enabled: !!initialQuery.data?.channels || (folderStore.selectedFolderId !== null && folderStore.channelIdsInFolder.length > 0),
     staleTime: 1000 * 60 * 5,
   }))
 
@@ -449,7 +461,7 @@ export function useOptimizedTimeline() {
 
         // Sync channels to global store
         setChannels(data.channels)
-        
+
         // Restore dynamically discovered channels from persistent cache
         restoreChannelsFromCache()
 
@@ -458,29 +470,29 @@ export function useOptimizedTimeline() {
         const lastMessages = data.channels
           .filter((c) => c.lastMessage)
           .map((c) => c.lastMessage!)
-        
+
         // Include grouped posts (complete albums) from initial fetch
         const groupedPosts = data.groupedPosts ?? []
-        
+
         // Also restore synced posts from persistent cache (survives page reload)
         const syncedPosts = getSyncedPostsFromCache()
         const allPosts = [...lastMessages, ...groupedPosts, ...syncedPosts]
-        
+
         if (import.meta.env.DEV) {
           console.log(`[Timeline] Restoring: ${lastMessages.length} from lastMessage, ${groupedPosts.length} from groups, ${syncedPosts.length} from persistent cache`)
         }
-        
+
         if (allPosts.length > 0) {
           upsertPosts(allPosts)
         }
-        
+
         // Only run initialization once
         if (!hasInitialized) {
           hasInitialized = true
           markStoreInitialized()
           // Process messages that arrived before timeline was ready
           onTimelineLoaded()
-          
+
           // Open top channels for real-time updates (MTProto requirement)
           // This is critical for receiving consistent updates
           updateOpenChannels(data.channels).catch((error) => {
@@ -492,7 +504,7 @@ export function useOptimizedTimeline() {
       }
     )
   )
-  
+
   // Cleanup: close all open channels when component unmounts
   onCleanup(() => {
     closeAllChannels().catch(() => {
@@ -510,7 +522,7 @@ export function useOptimizedTimeline() {
         if (!pages || pages.length === 0) return
         // Only process new pages
         if (pages.length <= lastProcessedPageCount) return
-        
+
         if (import.meta.env.DEV) {
           console.log(`[Timeline] History pages: ${lastProcessedPageCount} -> ${pages.length}, total posts: ${pages.flat().length}`)
         }
@@ -538,7 +550,7 @@ export function useOptimizedTimeline() {
         const timeoutId = setTimeout(() => {
           backgroundSyncRecentHistory(data.channels)
         }, 2000)
-        
+
         // Cleanup if component unmounts before timeout fires
         onCleanup(() => clearTimeout(timeoutId))
       }
@@ -547,19 +559,67 @@ export function useOptimizedTimeline() {
 
   // Reactive timeline from centralized store
   // Tracks both sortedKeys AND individual post changes (for edits, reactions)
+  // FOLDER FILTERING: Only show posts from channels in the selected folder
   const timeline = createMemo(() => {
     const keys = postsState.sortedKeys
-    const posts = keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
+    let posts = keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
+
+    const totalPosts = posts.length
+    const folderId = folderStore.selectedFolderId
+    const folderChannelIds = folderStore.channelIdsInFolder
+
+    // Filter by folder if one is selected
+    if (folderId !== null && folderChannelIds.length > 0) {
+      const allowedChannelIds = new Set(folderChannelIds)
+      const beforeFilter = posts.length
+      posts = posts.filter(post => allowedChannelIds.has(post.channelId))
+
+      if (import.meta.env.DEV) {
+        console.log(`[Timeline] Folder filter: ${beforeFilter} posts → ${posts.length} posts`)
+        console.log(`[Timeline] Folder ${folderId} has channels:`, Array.from(allowedChannelIds))
+        if (posts.length === 0 && beforeFilter > 0) {
+          const postChannels = new Set(keys.map(k => postsState.byId[k]?.channelId).filter(Boolean))
+          console.log(`[Timeline] Available post channels:`, Array.from(postChannels))
+        }
+      }
+    }
+
     // Group posts by groupedId for albums
     return groupPostsByMediaGroup(posts)
   })
 
   // Pending count - grouped by media group for accurate count
+  // FOLDER FILTERING: Only count pending posts from channels in the selected folder
   const pendingCount = createMemo(() => {
     const keys = postsState.pendingKeys
     if (keys.length === 0) return 0
-    const posts = keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
+    let posts = keys.map((key) => postsState.byId[key]).filter(Boolean) as Message[]
+
+    // Filter by folder if one is selected
+    if (folderStore.selectedFolderId !== null && folderStore.channelIdsInFolder.length > 0) {
+      const allowedChannelIds = new Set(folderStore.channelIdsInFolder)
+      posts = posts.filter(post => allowedChannelIds.has(post.channelId))
+    }
+
     return groupPostsByMediaGroup(posts).length
+  })
+
+  // Filtered channels based on selected folder
+  const filteredChannels = createMemo(() => {
+    const allChannels = getChannels()
+
+    // If no folder selected, return all channels
+    if (folderStore.selectedFolderId === null) {
+      return allChannels
+    }
+
+    // Filter channels by folder
+    if (folderStore.channelIdsInFolder.length === 0) {
+      return []
+    }
+
+    const allowedChannelIds = new Set(folderStore.channelIdsInFolder)
+    return allChannels.filter(channel => allowedChannelIds.has(channel.id))
   })
 
   return {
@@ -567,6 +627,10 @@ export function useOptimizedTimeline() {
       return timeline()
     },
     get channels() {
+      return filteredChannels()
+    },
+    /** Get all channels (unfiltered) - useful for folder calculations */
+    get allChannels() {
       return getChannels()
     },
     get channelMap() {

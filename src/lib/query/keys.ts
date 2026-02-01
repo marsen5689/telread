@@ -14,6 +14,13 @@ export const queryKeys = {
     resolve: (idOrUsername: string) => [...queryKeys.channels.all, 'resolve', idOrUsername] as const,
   },
 
+  // Folders (Dialog Filters)
+  folders: {
+    all: ['folders'] as const,
+    list: () => [...queryKeys.folders.all, 'list'] as const,
+    infoList: (channelIds: number[]) => [...queryKeys.folders.all, 'infoList', channelIds] as const,
+  },
+
   // Messages/Posts
   messages: {
     all: ['messages'] as const,
