@@ -28,7 +28,8 @@ interface TimelineProps {
 }
 
 /**
- * Helper component for single posts - avoids returning null directly
+ * Helper component for single posts
+ * Always renders - uses fallback title if channel unknown
  */
 function SinglePostItem(props: {
   item: { type: 'single'; post: any }
@@ -37,19 +38,18 @@ function SinglePostItem(props: {
   const channel = () => props.getChannel(props.item.post.channelId)
 
   return (
-    <Show when={channel()}>
-      <TimelinePost
-        post={props.item.post}
-        channelId={props.item.post.channelId}
-        channelTitle={channel()?.title ?? ''}
-        channelUsername={channel()?.username}
-      />
-    </Show>
+    <TimelinePost
+      post={props.item.post}
+      channelId={props.item.post.channelId}
+      channelTitle={channel()?.title ?? 'Channel'}
+      channelUsername={channel()?.username}
+    />
   )
 }
 
 /**
- * Helper component for grouped posts - avoids returning null directly
+ * Helper component for grouped posts
+ * Always renders - uses fallback title if channel unknown
  */
 function GroupPostItem(props: {
   item: { type: 'group'; posts: any[]; groupedId: bigint }
@@ -59,14 +59,12 @@ function GroupPostItem(props: {
   const channel = () => props.getChannel(primaryPost().channelId)
 
   return (
-    <Show when={channel()}>
-      <TimelineGroup
-        posts={props.item.posts}
-        channelId={primaryPost().channelId}
-        channelTitle={channel()?.title ?? ''}
-        channelUsername={channel()?.username}
-      />
-    </Show>
+    <TimelineGroup
+      posts={props.item.posts}
+      channelId={primaryPost().channelId}
+      channelTitle={channel()?.title ?? 'Channel'}
+      channelUsername={channel()?.username}
+    />
   )
 }
 

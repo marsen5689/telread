@@ -10,10 +10,10 @@
 
 /**
  * Maximum dialogs to iterate when fetching channels
- * Keep low for fast loading - most active channels are at the top
- * 200 dialogs = ~1 second, real-time updates handle the rest
+ * High limit to ensure all subscribed channels are loaded
+ * Most users have < 500 dialogs, real-time updates handle the rest
  */
-export const MAX_DIALOGS_TO_ITERATE = 200
+export const MAX_DIALOGS_TO_ITERATE = 1000
 
 /**
  * Maximum concurrent media downloads

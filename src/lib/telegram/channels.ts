@@ -397,7 +397,7 @@ function isGroupChat(chat: Chat): boolean {
 /**
  * Map mtcute Chat to our Channel interface
  */
-function mapChatToChannel(chat: Chat): Channel {
+export function mapChatToChannel(chat: Chat): Channel {
   // Access accessHash from raw TL object if available
   const raw = chat.raw
   const accessHash = 'accessHash' in raw && raw.accessHash

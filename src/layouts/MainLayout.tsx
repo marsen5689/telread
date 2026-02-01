@@ -2,7 +2,7 @@ import { type ParentProps, type JSX } from 'solid-js'
 import { A, useLocation } from '@solidjs/router'
 import { authStore } from '@/lib/store'
 import { UserAvatar } from '@/components/ui'
-import { Home, Search, Bookmark, User, Menu, MessageCircle } from 'lucide-solid'
+import { Home, Search, Bookmark, User, MessageCircle } from 'lucide-solid'
 
 /**
  * Main application layout - Threads-style design
@@ -13,6 +13,20 @@ import { Home, Search, Bookmark, User, Menu, MessageCircle } from 'lucide-solid'
  */
 export function MainLayout(props: ParentProps) {
   const location = useLocation()
+  let mainRef: HTMLElement | undefined
+
+  const handleHomeClick = (e: MouseEvent) => {
+    if (location.pathname === '/') {
+      e.preventDefault()
+      if (mainRef && mainRef.scrollTop > 0) {
+        // Scroll to top smoothly
+        mainRef.scrollTo({ top: 0, behavior: 'smooth' })
+      } else {
+        // Already at top - show new posts or refresh
+        window.dispatchEvent(new CustomEvent('home-tap-top'))
+      }
+    }
+  }
 
   const navItems: Array<{
     path: string
@@ -64,22 +78,19 @@ export function MainLayout(props: ParentProps) {
               href={item.path}
               class={`threads-nav-item ${isActive(item.path) ? 'threads-nav-item-active' : ''}`}
               title={item.label}
+              onClick={item.path === '/' ? handleHomeClick : undefined}
             >
               {item.icon(isActive(item.path))}
             </A>
           ))}
         </nav>
 
-        {/* Bottom: Menu */}
-        <div class="flex flex-col items-center pb-8 gap-2">
-          <A href="/settings" class="threads-nav-item" title="Settings">
-            <Menu size={28} stroke-width={1.5} />
-          </A>
-        </div>
+        {/* Bottom spacer */}
+        <div class="pb-8" />
       </aside>
 
       {/* Main content area */}
-      <main class="flex-1 h-screen overflow-y-auto custom-scrollbar">
+      <main ref={mainRef} class="flex-1 h-screen overflow-y-auto custom-scrollbar">
         {/* Centered content - wider feed like Threads */}
         <div class="max-w-2xl mx-auto w-full min-h-full lg:border-x border-[var(--nav-border)]">
           {props.children}
@@ -97,16 +108,21 @@ export function MainLayout(props: ParentProps) {
           />
         </A>
 
-        {/* Center: Nav items */}
+        {/* Center: Nav items (Home, Bookmarks) */}
         <nav class="floating-pill">
-          {navItems.slice(0, 3).map((item) => (
-            <A
-              href={item.path}
-              class={`nav-item ${isActive(item.path) ? 'nav-item-active' : ''}`}
-            >
-              {item.icon(isActive(item.path))}
-            </A>
-          ))}
+          <A
+            href="/"
+            class={`nav-item ${isActive('/') ? 'nav-item-active' : ''}`}
+            onClick={handleHomeClick}
+          >
+            <Home size={28} stroke-width={isActive('/') ? 2.5 : 1.5} />
+          </A>
+          <A
+            href="/bookmarks"
+            class={`nav-item ${isActive('/bookmarks') ? 'nav-item-active' : ''}`}
+          >
+            <Bookmark size={28} stroke-width={isActive('/bookmarks') ? 2.5 : 1.5} fill={isActive('/bookmarks') ? 'currentColor' : 'none'} />
+          </A>
         </nav>
 
         {/* Right: Search */}

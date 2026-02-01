@@ -1,6 +1,5 @@
 import { createQuery, createInfiniteQuery } from '@tanstack/solid-query'
 import { createEffect, on, createMemo, onCleanup } from 'solid-js'
-import { createStore, reconcile } from 'solid-js/store'
 import {
   fetchMessages,
   fetchChannelsWithLastMessages,
@@ -16,6 +15,10 @@ import {
   postsState,
   markStoreInitialized,
   revealPendingPosts,
+  setChannels,
+  getChannels,
+  createChannelMap,
+  restoreChannelsFromCache,
 } from '@/lib/store'
 import { getTime, groupPostsByMediaGroup } from '@/lib/utils'
 import { queryKeys } from '../keys'
@@ -404,15 +407,8 @@ async function backgroundSyncRecentHistory(channels: ChannelWithLastMessage[]): 
  * On app open: shows cached data instantly, then syncs fresh data in background.
  */
 export function useOptimizedTimeline() {
-  // Channels store (separate from posts)
-  const [channels, setChannels] = createStore<ChannelWithLastMessage[]>([])
-  
-  // Derive channelMap from channels array (no duplicate state)
-  const channelMap = createMemo(() => {
-    const map = new Map<number, ChannelWithLastMessage>()
-    for (const c of channels) map.set(c.id, c)
-    return map
-  })
+  // Use global channels store
+  const channelMap = createChannelMap()
 
   // Initial data query - fetches channels and populates posts store
   // Long staleTime because channels rarely change - real-time updates handle new posts
@@ -451,9 +447,11 @@ export function useOptimizedTimeline() {
       (data) => {
         if (!data) return
 
-        // Sync channels (always update - they might change)
-        // channelMap is derived via createMemo, no need to set separately
-        setChannels(reconcile(data.channels))
+        // Sync channels to global store
+        setChannels(data.channels)
+        
+        // Restore dynamically discovered channels from persistent cache
+        restoreChannelsFromCache()
 
         // Always extract and upsert posts from channels
         // upsertPosts handles duplicates (only updates if newer)
@@ -569,7 +567,7 @@ export function useOptimizedTimeline() {
       return timeline()
     },
     get channels() {
-      return channels
+      return getChannels()
     },
     get channelMap() {
       return channelMap()

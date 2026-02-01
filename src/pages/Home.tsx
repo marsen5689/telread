@@ -1,3 +1,4 @@
+import { onMount, onCleanup } from 'solid-js'
 import { Timeline } from '@/components/timeline'
 import { useOptimizedTimeline } from '@/lib/query'
 
@@ -8,6 +9,21 @@ import { useOptimizedTimeline } from '@/lib/query'
  */
 function Home() {
   const timeline = useOptimizedTimeline()
+
+  // Listen for home tap when already at top
+  onMount(() => {
+    const handleHomeTap = () => {
+      if (timeline.pendingCount > 0) {
+        // Show new posts first
+        timeline.showNewPosts()
+      } else {
+        // No pending posts - refresh feed
+        timeline.refresh()
+      }
+    }
+    window.addEventListener('home-tap-top', handleHomeTap)
+    onCleanup(() => window.removeEventListener('home-tap-top', handleHomeTap))
+  })
 
   return (
     <div class="h-full">

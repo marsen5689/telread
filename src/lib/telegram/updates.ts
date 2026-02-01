@@ -1,5 +1,6 @@
 import { getTelegramClient, getClientVersion } from './client'
 import { mapMessage, type MessageReaction, type Message } from './messages'
+import { mapChatToChannel } from './channels'
 import {
   handleCommentMessage,
   handleCommentEdit,
@@ -12,6 +13,8 @@ import {
   updatePostReactions,
   isStoreReady,
   getPost,
+  hasChannel,
+  upsertChannel,
 } from '@/lib/store'
 import { addPostsToCache, removePostsFromCache } from '@/lib/query/hooks'
 import type { Message as TgMessage, RawUpdateInfo, Chat } from '@mtcute/web'
@@ -92,9 +95,23 @@ function processBatch(): void {
       skippedNonChannel++
       continue
     }
-    if ((peer as Chat).chatType !== 'channel') {
+    const chat = peer as Chat
+    
+    // Accept both broadcast channels AND supergroups (channels with comments)
+    // chatType can be: 'channel' (broadcast), 'supergroup', 'gigagroup'
+    const isChannel = chat.chatType === 'channel' || chat.chatType === 'supergroup' || chat.chatType === 'gigagroup'
+    if (!isChannel) {
       skippedNonChannel++
       continue
+    }
+
+    // Ensure channel exists in store (dynamic discovery)
+    if (!hasChannel(peer.id)) {
+      const channel = mapChatToChannel(chat)
+      upsertChannel(channel)
+      if (import.meta.env.DEV) {
+        console.log(`[Updates] Discovered channel via update: ${peer.id} "${chat.title}" (${chat.chatType})`)
+      }
     }
 
     const post = mapMessage(msg, peer.id)

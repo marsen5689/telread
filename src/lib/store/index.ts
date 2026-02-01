@@ -16,3 +16,14 @@ export {
   postsState,
   clearPosts,
 } from './posts'
+export {
+  setChannels,
+  upsertChannel,
+  hasChannel,
+  getChannel,
+  getChannels,
+  createChannelMap,
+  channelsState,
+  restoreChannelsFromCache,
+  type ChannelWithLastMessage,
+} from './channels'

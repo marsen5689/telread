@@ -31,6 +31,8 @@ export const queryKeys = {
     infinite: () => [...queryKeys.timeline.all, 'infinite'] as const,
     /** Synced posts that should persist across page reloads */
     syncedPosts: ['timeline', 'syncedPosts'] as const,
+    /** Dynamically discovered channels that should persist */
+    syncedChannels: ['timeline', 'syncedChannels'] as const,
   },
 
   // Comments
