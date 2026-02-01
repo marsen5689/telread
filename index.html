@@ -25,6 +25,17 @@
     <title>TelRead — Telegram Reader</title>
   </head>
   <body>
+    <script>
+      // GitHub Pages SPA redirect handler
+      // Restores the correct route after 404.html redirect
+      (function() {
+        const redirect = sessionStorage.getItem('spa-redirect');
+        if (redirect) {
+          sessionStorage.removeItem('spa-redirect');
+          window.history.replaceState(null, '', redirect);
+        }
+      })();
+    </script>
     <div id="root">
       <!-- Loading screen (replaced when app loads) -->
       <div id="splash" style="
