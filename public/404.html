@@ -4,15 +4,24 @@
     <meta charset="utf-8" />
     <title>TelRead</title>
     <script>
-      // GitHub Pages SPA redirect
-      // Stores the current path and redirects to index.html
-      // index.html will restore the correct route
-      const path = window.location.pathname + window.location.search + window.location.hash;
-      sessionStorage.setItem('spa-redirect', path);
-      window.location.replace('/telread/');
+      // GitHub Pages SPA routing
+      // Redirects all routes to index.html while preserving the path
+      // Based on: https://github.com/rafgraph/spa-github-pages
+      (function() {
+        var segmentCount = 1; // Number of path segments to keep (repo name)
+        var location = window.location;
+        var pathSegmentsToKeep = location.pathname.split('/').slice(0, 1 + segmentCount).join('/');
+        var redirectPath = location.pathname.slice(pathSegmentsToKeep.length);
+        
+        // Store the route to restore after redirect
+        if (redirectPath) {
+          sessionStorage.setItem('spa-redirect', redirectPath + location.search + location.hash);
+        }
+        
+        // Redirect to base path
+        location.replace(pathSegmentsToKeep + '/');
+      })();
     </script>
   </head>
-  <body>
-    Redirecting...
-  </body>
+  <body></body>
 </html>

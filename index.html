@@ -26,13 +26,12 @@
   </head>
   <body>
     <script>
-      // GitHub Pages SPA redirect handler
-      // Restores the correct route after 404.html redirect
+      // GitHub Pages SPA routing - restore path after 404 redirect
       (function() {
-        const redirect = sessionStorage.getItem('spa-redirect');
+        var redirect = sessionStorage.getItem('spa-redirect');
         if (redirect) {
           sessionStorage.removeItem('spa-redirect');
-          window.history.replaceState(null, '', redirect);
+          history.replaceState(null, null, redirect);
         }
       })();
     </script>
